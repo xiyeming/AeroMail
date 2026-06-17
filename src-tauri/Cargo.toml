@@ -1,0 +1,38 @@
+[package]
+name = "aeromail"
+version = "0.1.0"
+description = "AeroMail - Modern cross-platform email client"
+authors = ["AeroMail Team"]
+edition = "2024"
+rust-version = "1.85"
+
+[build-dependencies]
+tauri-build = { version = "2.2", features = [] }
+
+[dependencies]
+tauri = { version = "2.5", features = ["tray-icon", "image-png"] }
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+tokio = { version = "1.44", features = ["full"] }
+thiserror = "2.0"
+anyhow = "1.0"
+rusqlite = { version = "0.34", features = ["bundled", "chrono", "uuid"] }
+uuid = { version = "1.16", features = ["v4", "serde"] }
+chrono = { version = "0.4", features = ["serde"] }
+tracing = "0.1"
+tracing-subscriber = "0.3"
+
+[lints.rust]
+unsafe_code = "forbid"
+
+[lints.clippy]
+all = "warn"
+pedantic = "warn"
+nursery = "warn"
+unwrap_used = "deny"
+expect_used = "warn"
+
+[profile.release]
+strip = true
+lto = true
+opt-level = "s"

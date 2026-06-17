@@ -1,0 +1,8 @@
+@font-face {
+  font-family: 'Inter';
+  src: local('Inter');
+}
+
+body {
+  font-family: 'Inter', system-ui, -apple-system, sans-serif;
+}

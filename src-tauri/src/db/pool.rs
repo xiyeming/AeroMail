@@ -20,7 +20,9 @@ impl Database {
         Ok(Self { conn: Mutex::new(conn) })
     }
 
-    pub fn get_conn(&self) -> std::sync::MutexGuard<'_, Connection> {
-        self.conn.lock().expect("database connection poisoned")
+    pub fn get_conn(&self) -> Result<std::sync::MutexGuard<'_, Connection>, crate::error::AeroError> {
+        self.conn
+            .lock()
+            .map_err(|e| crate::error::AeroError::Database(e.to_string()))
     }
 }

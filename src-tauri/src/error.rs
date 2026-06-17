@@ -1,19 +1,19 @@
 use serde::Serialize;
 use thiserror::Error;
 
-#[derive(Error, Debug, Serialize)]
+#[derive(Debug, Error, Serialize)]
 #[serde(tag = "type", content = "message")]
 pub enum AeroError {
-    #[error("Database error: {0}")]
+    #[error("database error: {0}")]
     Database(String),
-    #[error("Network error: {0}")]
-    Network(String),
-    #[error("Validation error: {0}")]
-    Validation(String),
-    #[error("Not found: {0}")]
-    NotFound(String),
-    #[error("Unknown error: {0}")]
-    Unknown(String),
+    #[error("account not found: {0}")]
+    AccountNotFound(String),
+    #[error("invalid account configuration: {0}")]
+    InvalidConfig(String),
+    #[error("connection test failed: {0}")]
+    ConnectionTestFailed(String),
+    #[error("internal error: {0}")]
+    Internal(String),
 }
 
 impl From<rusqlite::Error> for AeroError {
@@ -22,8 +22,14 @@ impl From<rusqlite::Error> for AeroError {
     }
 }
 
-impl From<std::io::Error> for AeroError {
-    fn from(err: std::io::Error) -> Self {
-        AeroError::Unknown(err.to_string())
+impl From<serde_json::Error> for AeroError {
+    fn from(err: serde_json::Error) -> Self {
+        AeroError::Internal(err.to_string())
+    }
+}
+
+impl From<AeroError> for String {
+    fn from(err: AeroError) -> Self {
+        serde_json::to_string(&err).unwrap_or_else(|_| err.to_string())
     }
 }

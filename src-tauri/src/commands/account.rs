@@ -1,35 +1,35 @@
-use tauri::command;
-use crate::error::AeroError;
-use crate::models::account::Account;
+use tauri::State;
+
+use crate::models::account::{AccountConfig, AccountSummary};
 use crate::AppState;
 
-#[command]
+#[tauri::command]
 pub async fn add_account(
-    _state: tauri::State<'_, AppState>,
-    _account: Account,
-) -> Result<String, AeroError> {
-    Ok("account added".to_string())
+    _config: AccountConfig,
+    _state: State<'_, AppState>,
+) -> Result<String, String> {
+    Ok("account-id".to_string())
 }
 
-#[command]
+#[tauri::command]
 pub async fn list_accounts(
-    _state: tauri::State<'_, AppState>,
-) -> Result<Vec<Account>, AeroError> {
+    _state: State<'_, AppState>,
+) -> Result<Vec<AccountSummary>, String> {
     Ok(vec![])
 }
 
-#[command]
+#[tauri::command]
 pub async fn delete_account(
-    _state: tauri::State<'_, AppState>,
-    _id: String,
-) -> Result<(), AeroError> {
+    _account_id: String,
+    _state: State<'_, AppState>,
+) -> Result<(), String> {
     Ok(())
 }
 
-#[command]
+#[tauri::command]
 pub async fn test_account_connection(
-    _state: tauri::State<'_, AppState>,
-    _account: Account,
-) -> Result<bool, AeroError> {
-    Ok(true)
+    _config: AccountConfig,
+    _state: State<'_, AppState>,
+) -> Result<String, String> {
+    Ok("ok".to_string())
 }

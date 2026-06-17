@@ -11,9 +11,9 @@ impl Database {
         let app_dir = app_handle
             .path()
             .app_data_dir()
-            .map_err(|e| crate::error::AeroError::Unknown(e.to_string()))?;
+            .map_err(|e| crate::error::AeroError::Internal(e.to_string()))?;
         std::fs::create_dir_all(&app_dir)
-            .map_err(|e| crate::error::AeroError::Unknown(e.to_string()))?;
+            .map_err(|e| crate::error::AeroError::Internal(e.to_string()))?;
         let db_path = app_dir.join("aeromail.db");
         let conn = Connection::open(&db_path)
             .map_err(|e| crate::error::AeroError::Database(e.to_string()))?;

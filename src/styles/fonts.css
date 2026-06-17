@@ -1,8 +1,11 @@
-@font-face {
-  font-family: 'Inter';
-  src: local('Inter');
+:root {
+  --font-sans: 'Inter', 'MiSans', 'HarmonyOS Sans', system-ui, -apple-system,
+    sans-serif;
+  --font-mono: 'JetBrains Mono', 'Fira Code', 'SF Mono', monospace;
 }
 
-body {
-  font-family: 'Inter', system-ui, -apple-system, sans-serif;
+@supports (-webkit-font-smoothing: antialiased) {
+  body {
+    -webkit-font-smoothing: antialiased;
+  }
 }

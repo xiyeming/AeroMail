@@ -37,8 +37,7 @@ impl Database {
         })
     }
 
-    pub fn connection(&self,
-    ) -> Result<std::sync::MutexGuard<'_, Connection>, AeroError> {
+    pub fn connection(&self) -> Result<std::sync::MutexGuard<'_, Connection>, AeroError> {
         self.connection
             .lock()
             .map_err(|e| AeroError::Database(e.to_string()))

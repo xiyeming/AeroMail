@@ -1,7 +1,7 @@
 use tauri::State;
 
-use crate::models::account::{AccountConfig, AccountSummary};
 use crate::AppState;
+use crate::models::account::{AccountConfig, AccountSummary};
 
 #[tauri::command]
 pub async fn add_account(
@@ -13,18 +13,13 @@ pub async fn add_account(
 }
 
 #[tauri::command]
-pub async fn list_accounts(
-    state: State<'_, AppState>,
-) -> Result<Vec<AccountSummary>, String> {
+pub async fn list_accounts(state: State<'_, AppState>) -> Result<Vec<AccountSummary>, String> {
     let manager = state.account_manager.read().await;
     manager.list_accounts().map_err(String::from)
 }
 
 #[tauri::command]
-pub async fn delete_account(
-    account_id: String,
-    state: State<'_, AppState>,
-) -> Result<(), String> {
+pub async fn delete_account(account_id: String, state: State<'_, AppState>) -> Result<(), String> {
     let manager = state.account_manager.read().await;
     manager.delete_account(&account_id).map_err(String::from)
 }

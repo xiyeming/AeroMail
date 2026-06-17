@@ -18,10 +18,7 @@ impl AccountManager {
         Self { db }
     }
 
-    pub fn add_account(
-        &self,
-        mut config: AccountConfig,
-    ) -> Result<String, AeroError> {
+    pub fn add_account(&self, mut config: AccountConfig) -> Result<String, AeroError> {
         let id = Uuid::new_v4().to_string();
         config.id.clone_from(&id);
 
@@ -67,9 +64,7 @@ impl AccountManager {
         Ok(id)
     }
 
-    pub fn list_accounts(
-        &self,
-    ) -> Result<Vec<AccountSummary>, AeroError> {
+    pub fn list_accounts(&self) -> Result<Vec<AccountSummary>, AeroError> {
         let conn = self.db.connection()?;
         let mut stmt = conn.prepare(
             r#"
@@ -97,14 +92,10 @@ impl AccountManager {
             })
         })?;
 
-        rows.collect::<Result<Vec<_>, _>>()
-            .map_err(AeroError::from)
+        rows.collect::<Result<Vec<_>, _>>().map_err(AeroError::from)
     }
 
-    pub fn delete_account(
-        &self,
-        account_id: &str,
-    ) -> Result<(), AeroError> {
+    pub fn delete_account(&self, account_id: &str) -> Result<(), AeroError> {
         let rows = self
             .db
             .connection()?
@@ -117,10 +108,7 @@ impl AccountManager {
         Ok(())
     }
 
-    pub async fn test_connection(
-        &self,
-        config: &AccountConfig,
-    ) -> Result<String, AeroError> {
+    pub async fn test_connection(&self, config: &AccountConfig) -> Result<String, AeroError> {
         // Phase 1 placeholder: validate config and simulate a connection test.
         if config.imap.host.is_empty() {
             return Err(AeroError::InvalidConfig(

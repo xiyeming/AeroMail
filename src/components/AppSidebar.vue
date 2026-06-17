@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { onMounted } from 'vue';
+import { RouterLink } from 'vue-router';
 import {
   Inbox,
   Star,
@@ -9,6 +10,7 @@ import {
   Trash2,
   Settings,
   Plus,
+  Users,
 } from 'lucide-vue-next';
 import { useAccountStore } from '@/stores/account';
 
@@ -84,6 +86,17 @@ const folders = [
       <div class="my-3 h-px bg-border" />
 
       <ul class="space-y-0.5">
+        <li
+          class="flex h-9 cursor-pointer items-center gap-3 rounded-md px-3 text-sm text-text-secondary transition-colors hover:bg-white/5"
+        >
+          <RouterLink
+            to="/accounts"
+            class="flex items-center gap-3"
+          >
+            <Users class="h-4 w-4" />
+            <span>Accounts</span>
+          </RouterLink>
+        </li>
         <li
           class="flex h-9 cursor-pointer items-center gap-3 rounded-md px-3 text-sm text-text-secondary transition-colors hover:bg-white/5"
         >

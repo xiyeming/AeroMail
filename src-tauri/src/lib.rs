@@ -17,8 +17,8 @@ pub struct AppState {
 }
 
 impl AppState {
-    pub async fn new(app_handle: &tauri::AppHandle) -> Result<Self, crate::error::AeroError> {
-        let db = Arc::new(Database::new(app_handle).await?);
+    pub fn new(app_handle: &tauri::AppHandle) -> Result<Self, crate::error::AeroError> {
+        let db = Arc::new(Database::new(app_handle)?);
         let account_manager = Arc::new(RwLock::new(AccountManager::new(Arc::clone(&db))));
         Ok(Self {
             account_manager,
@@ -37,10 +37,15 @@ pub fn run() {
         .setup(|app| {
             let handle = app.handle().clone();
             tauri::async_runtime::spawn(async move {
-                let state = AppState::new(&handle)
-                    .await
-                    .expect("failed to initialize app state");
-                handle.manage(state);
+                match AppState::new(&handle) {
+                    Ok(state) => {
+                        handle.manage(state);
+                    }
+                    Err(e) => {
+                        eprintln!("failed to initialize app state: {e}");
+                        handle.exit(1);
+                    }
+                }
             });
             Ok(())
         })

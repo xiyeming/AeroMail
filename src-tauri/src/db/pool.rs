@@ -16,7 +16,7 @@ pub struct Database {
 }
 
 impl Database {
-    pub async fn new(app_handle: &tauri::AppHandle) -> Result<Self, AeroError> {
+    pub fn new(app_handle: &tauri::AppHandle) -> Result<Self, AeroError> {
         let app_dir = app_handle
             .path()
             .app_data_dir()

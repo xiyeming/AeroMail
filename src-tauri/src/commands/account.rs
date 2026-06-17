@@ -5,31 +5,35 @@ use crate::AppState;
 
 #[tauri::command]
 pub async fn add_account(
-    _config: AccountConfig,
-    _state: State<'_, AppState>,
+    config: AccountConfig,
+    state: State<'_, AppState>,
 ) -> Result<String, String> {
-    Ok("account-id".to_string())
+    let manager = state.account_manager.read().await;
+    manager.add_account(config).map_err(String::from)
 }
 
 #[tauri::command]
 pub async fn list_accounts(
-    _state: State<'_, AppState>,
+    state: State<'_, AppState>,
 ) -> Result<Vec<AccountSummary>, String> {
-    Ok(vec![])
+    let manager = state.account_manager.read().await;
+    manager.list_accounts().map_err(String::from)
 }
 
 #[tauri::command]
 pub async fn delete_account(
-    _account_id: String,
-    _state: State<'_, AppState>,
+    account_id: String,
+    state: State<'_, AppState>,
 ) -> Result<(), String> {
-    Ok(())
+    let manager = state.account_manager.read().await;
+    manager.delete_account(&account_id).map_err(String::from)
 }
 
 #[tauri::command]
 pub async fn test_account_connection(
-    _config: AccountConfig,
-    _state: State<'_, AppState>,
+    config: AccountConfig,
+    state: State<'_, AppState>,
 ) -> Result<String, String> {
-    Ok("ok".to_string())
+    let manager = state.account_manager.read().await;
+    manager.test_connection(&config).await.map_err(String::from)
 }

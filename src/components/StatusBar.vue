@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, computed } from 'vue';
+import { ref, computed, onMounted, onUnmounted } from 'vue';
 import { useI18n } from 'vue-i18n';
 import { useStatusStore } from '@/stores/status';
 import { useLocale, type Locale } from '@/composables/useLocale';
@@ -27,6 +27,21 @@ function selectLanguage(lang: Locale) {
   setLocale(lang);
   showLangMenu.value = false;
 }
+
+function handleClickOutside(e: MouseEvent) {
+  const target = e.target as HTMLElement;
+  if (!target.closest('.lang-switcher')) {
+    showLangMenu.value = false;
+  }
+}
+
+onMounted(() => {
+  document.addEventListener('click', handleClickOutside);
+});
+
+onUnmounted(() => {
+  document.removeEventListener('click', handleClickOutside);
+});
 </script>
 
 <template>
@@ -50,7 +65,7 @@ function selectLanguage(lang: Locale) {
     <span :class="statusStore.isOnline ? 'text-success' : 'text-warning'">
       {{ statusStore.isOnline ? 'Online' : 'Offline' }}
     </span>
-    <div class="relative ml-auto">
+    <div class="relative ml-auto lang-switcher">
       <button
         class="text-xs text-muted hover:text-text"
         @click="showLangMenu = !showLangMenu"

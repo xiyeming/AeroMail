@@ -34,6 +34,16 @@ const allItems = computed(() => [...mockResults, ...languageCommands.value]);
 
 const results = ref(allItems.value);
 
+watch(allItems, (val) => {
+  if (!query.value) {
+    results.value = val;
+  } else {
+    results.value = val.filter((r) =>
+      r.title.toLowerCase().includes(query.value.toLowerCase())
+    );
+  }
+});
+
 watch(query, (val) => {
   if (!val) {
     results.value = allItems.value;

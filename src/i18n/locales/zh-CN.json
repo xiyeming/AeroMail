@@ -58,6 +58,13 @@
   "sidebar": {
     "accounts": "账户"
   },
+  "aiAssistant": {
+    "title": "AI 助手",
+    "selectProvider": "选择一个厂商开始",
+    "inputPlaceholder": "询问当前邮件...",
+    "thinking": "思考中...",
+    "send": "发送"
+  },
   "common": {
     "loading": "加载中..."
   },

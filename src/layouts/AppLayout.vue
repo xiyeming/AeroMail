@@ -1,9 +1,13 @@
 <script setup lang="ts">
 import { computed } from 'vue';
 import { useResponsive } from '@/composables/useResponsive';
+import { useAiStore } from '@/stores/ai';
 import AppSidebar from '@/components/AppSidebar.vue';
 import MailList from '@/components/MailList.vue';
 import StatusBar from '@/components/StatusBar.vue';
+import AiAssistantPanel from '@/components/AiAssistantPanel.vue';
+
+const aiStore = useAiStore();
 
 const { isWideScreen, isCollapsed, layoutMode } = useResponsive();
 
@@ -37,6 +41,8 @@ const mailListWidth = computed(() =>
       <main class="flex min-w-0 flex-1 flex-col overflow-hidden">
         <slot />
       </main>
+
+      <AiAssistantPanel v-if="aiStore.isPanelOpen" />
     </div>
     <StatusBar />
   </div>

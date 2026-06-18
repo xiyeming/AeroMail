@@ -12,8 +12,12 @@ import {
   Settings,
   Plus,
   Users,
+  Bot,
 } from 'lucide-vue-next';
 import { useAccountStore } from '@/stores/account';
+import { useAiStore } from '@/stores/ai';
+
+const aiStore = useAiStore();
 
 const { t } = useI18n();
 const accountStore = useAccountStore();
@@ -109,6 +113,13 @@ const folders = computed(() => [
             <Settings class="h-4 w-4" />
             <span>{{ $t('nav.settings') }}</span>
           </RouterLink>
+        </li>
+        <li
+          class="flex h-9 cursor-pointer items-center gap-3 rounded-md px-3 text-sm text-text-secondary transition-colors hover:bg-white/5"
+          @click="aiStore.togglePanel()"
+        >
+          <Bot class="h-4 w-4" />
+          <span>{{ $t('aiAssistant.title') }}</span>
         </li>
       </ul>
     </nav>

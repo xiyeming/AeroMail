@@ -58,6 +58,13 @@
   "sidebar": {
     "accounts": "ACCOUNTS"
   },
+  "aiAssistant": {
+    "title": "AI Assistant",
+    "selectProvider": "Select a provider to start",
+    "inputPlaceholder": "Ask about the current email...",
+    "thinking": "Thinking...",
+    "send": "Send"
+  },
   "common": {
     "loading": "Loading..."
   },

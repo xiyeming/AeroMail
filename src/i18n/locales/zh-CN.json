@@ -1,0 +1,43 @@
+{
+  "app": {
+    "name": "AeroMail"
+  },
+  "nav": {
+    "inbox": "收件箱",
+    "accounts": "账户",
+    "settings": "设置"
+  },
+  "account": {
+    "addAccount": "添加账户",
+    "accountName": "账户名称",
+    "provider": "厂商",
+    "testConnection": "测试连接",
+    "delete": "删除",
+    "noAccounts": "暂无账户"
+  },
+  "statusBar": {
+    "online": "在线",
+    "offline": "离线",
+    "lastSync": "最后同步：{time}",
+    "syncComplete": "同步完成",
+    "syncing": "同步中... {count}/{total} 账户"
+  },
+  "commandPalette": {
+    "placeholder": "搜索邮件...",
+    "switchLanguage": "切换语言"
+  },
+  "settings": {
+    "language": "语言",
+    "english": "English",
+    "simplifiedChinese": "简体中文"
+  },
+  "errors": {
+    "IMAP_AUTH_FAILED": "IMAP 认证失败：{0}",
+    "IMAP_CONNECTION_TIMEOUT": "IMAP 连接超时",
+    "SMTP_SEND_FAILED": "邮件发送失败：{0}",
+    "INVALID_ACCOUNT_CONFIG": "账户配置无效：{0}",
+    "DATABASE_ERROR": "数据库错误",
+    "INTERNAL_ERROR": "内部错误：{0}",
+    "UNKNOWN_ERROR": "发生未知错误"
+  }
+}

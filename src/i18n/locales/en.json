@@ -1,0 +1,43 @@
+{
+  "app": {
+    "name": "AeroMail"
+  },
+  "nav": {
+    "inbox": "Inbox",
+    "accounts": "Accounts",
+    "settings": "Settings"
+  },
+  "account": {
+    "addAccount": "Add Account",
+    "accountName": "Account Name",
+    "provider": "Provider",
+    "testConnection": "Test Connection",
+    "delete": "Delete",
+    "noAccounts": "No accounts yet"
+  },
+  "statusBar": {
+    "online": "Online",
+    "offline": "Offline",
+    "lastSync": "Last sync: {time}",
+    "syncComplete": "Sync complete",
+    "syncing": "Syncing... {count}/{total} accounts"
+  },
+  "commandPalette": {
+    "placeholder": "Search mail...",
+    "switchLanguage": "Switch Language"
+  },
+  "settings": {
+    "language": "Language",
+    "english": "English",
+    "simplifiedChinese": "简体中文"
+  },
+  "errors": {
+    "IMAP_AUTH_FAILED": "IMAP authentication failed for {0}",
+    "IMAP_CONNECTION_TIMEOUT": "IMAP connection timed out",
+    "SMTP_SEND_FAILED": "Failed to send email: {0}",
+    "INVALID_ACCOUNT_CONFIG": "Invalid account configuration: {0}",
+    "DATABASE_ERROR": "Database error",
+    "INTERNAL_ERROR": "Internal error: {0}",
+    "UNKNOWN_ERROR": "An unknown error occurred"
+  }
+}

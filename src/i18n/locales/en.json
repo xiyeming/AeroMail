@@ -50,7 +50,15 @@
     "apiKey": "API Key",
     "baseUrl": "Base URL (optional)",
     "model": "Model",
-    "saveProvider": "Save Provider"
+    "saveProvider": "Save Provider",
+    "translationProviders": "Translation Providers",
+    "addTranslationProvider": "Add Provider",
+    "noTranslationProviders": "No translation providers configured",
+    "traditionalProvider": "Traditional",
+    "aiTranslationProvider": "AI-based",
+    "selectAiProvider": "Select AI Provider",
+    "providerKind": "Provider",
+    "endpoint": "Endpoint (optional)"
   },
   "mail": {
     "selectEmail": "Select an email to read",

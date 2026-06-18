@@ -4,7 +4,9 @@ import { invoke } from '@tauri-apps/api/core';
 import LocaleSwitch from '@/components/LocaleSwitch.vue';
 import { useAiStore } from '@/stores/ai';
 import type { AiProviderKind } from '@/types/ai';
+import type { TranslationProviderSummary, TraditionalProviderKind } from '@/types/translation';
 
+// --- AI Providers ---
 const aiStore = useAiStore();
 const showAddForm = ref(false);
 const newName = ref('');
@@ -29,6 +31,7 @@ const providerKinds: AiProviderKind[] = [
 
 onMounted(() => {
   void aiStore.loadProviders();
+  void loadTranslationProviders();
 });
 
 function resetForm() {
@@ -59,6 +62,79 @@ async function addProvider() {
 async function removeProvider(id: string) {
   await invoke('delete_ai_provider', { providerId: id });
   await aiStore.loadProviders();
+}
+
+// --- Translation Providers ---
+const translationProviders = ref<TranslationProviderSummary[]>([]);
+const showTranslationForm = ref(false);
+const translationFormType = ref<'traditional' | 'ai'>('traditional');
+
+// Traditional form fields
+const tpName = ref('');
+const tpKind = ref<TraditionalProviderKind>('google_translate');
+const tpApiKey = ref('');
+const tpEndpoint = ref('');
+
+// AI form fields
+const tpAiName = ref('');
+const tpAiProviderId = ref('');
+
+const traditionalKinds: TraditionalProviderKind[] = [
+  'google_translate',
+  'deep_l',
+  'azure_translator',
+  'baidu',
+  'youdao',
+  'tencent_translator',
+  'aliyun_translator',
+  'custom',
+];
+
+async function loadTranslationProviders() {
+  translationProviders.value = await invoke<TranslationProviderSummary[]>('list_translation_providers');
+}
+
+function resetTranslationForm() {
+  tpName.value = '';
+  tpKind.value = 'google_translate';
+  tpApiKey.value = '';
+  tpEndpoint.value = '';
+  tpAiName.value = '';
+  tpAiProviderId.value = '';
+}
+
+async function addTranslationProvider() {
+  if (translationFormType.value === 'traditional') {
+    await invoke('upsert_translation_provider', {
+      provider: {
+        type: 'traditional',
+        id: crypto.randomUUID(),
+        name: tpName.value,
+        kind: tpKind.value,
+        api_key_encrypted: Array.from(new TextEncoder().encode(tpApiKey.value)),
+        endpoint: tpEndpoint.value || undefined,
+        extra: {},
+      },
+    });
+  } else {
+    await invoke('upsert_translation_provider', {
+      provider: {
+        type: 'ai',
+        id: crypto.randomUUID(),
+        name: tpAiName.value,
+        ai_provider_id: tpAiProviderId.value,
+        prompt_template: undefined,
+      },
+    });
+  }
+  await loadTranslationProviders();
+  resetTranslationForm();
+  showTranslationForm.value = false;
+}
+
+async function removeTranslationProvider(id: string) {
+  await invoke('delete_translation_provider', { providerId: id });
+  await loadTranslationProviders();
 }
 </script>
 
@@ -153,6 +229,132 @@ async function removeProvider(id: string) {
           class="mt-2 flex h-8 w-full items-center justify-center rounded-md bg-primary text-sm font-medium text-white hover:bg-primary-hover disabled:opacity-50"
           :disabled="!newName || !newApiKey || !newModel"
           @click="addProvider"
+        >
+          {{ $t('settings.saveProvider') }}
+        </button>
+      </div>
+    </section>
+
+    <!-- Translation Providers -->
+    <section class="mt-6 rounded-lg border border-border bg-card p-4">
+      <div class="mb-4 flex items-center justify-between">
+        <h2 class="text-lg font-medium text-text">{{ $t('settings.translationProviders') }}</h2>
+        <button
+          class="text-sm text-primary hover:text-primary-hover"
+          @click="showTranslationForm = !showTranslationForm; resetTranslationForm()"
+        >
+          {{ showTranslationForm ? $t('common.cancel') : $t('settings.addTranslationProvider') }}
+        </button>
+      </div>
+
+      <div v-if="translationProviders.length === 0 && !showTranslationForm" class="py-4 text-center text-sm text-muted">
+        {{ $t('settings.noTranslationProviders') }}
+      </div>
+
+      <div
+        v-for="tp in translationProviders"
+        :key="tp.id"
+        class="flex items-center justify-between border-b border-border py-2 last:border-0"
+      >
+        <div class="flex items-center gap-2">
+          <span class="text-sm text-text">{{ tp.name }}</span>
+          <span class="rounded bg-panel px-1.5 py-0.5 text-xs text-muted">{{ tp.providerType }}</span>
+        </div>
+        <button
+          class="text-xs text-danger hover:text-danger-hover"
+          @click="removeTranslationProvider(tp.id)"
+        >
+          {{ $t('account.delete') }}
+        </button>
+      </div>
+
+      <div v-if="showTranslationForm" class="mt-4 space-y-3 rounded-md border border-border bg-panel p-4">
+        <!-- Type selector -->
+        <div class="flex gap-2">
+          <button
+            class="rounded-md px-3 py-1.5 text-sm"
+            :class="translationFormType === 'traditional' ? 'bg-primary text-white' : 'bg-card text-text border border-border'"
+            @click="translationFormType = 'traditional'; resetTranslationForm()"
+          >
+            {{ $t('settings.traditionalProvider') }}
+          </button>
+          <button
+            class="rounded-md px-3 py-1.5 text-sm"
+            :class="translationFormType === 'ai' ? 'bg-primary text-white' : 'bg-card text-text border border-border'"
+            @click="translationFormType = 'ai'; resetTranslationForm()"
+          >
+            {{ $t('settings.aiTranslationProvider') }}
+          </button>
+        </div>
+
+        <!-- Traditional provider form -->
+        <template v-if="translationFormType === 'traditional'">
+          <div>
+            <label class="mb-1 block text-xs text-muted">{{ $t('account.accountName') }}</label>
+            <input
+              v-model="tpName"
+              class="w-full rounded-md border border-border bg-card px-3 py-1.5 text-sm text-text outline-none focus:border-primary"
+              :placeholder="$t('account.namePlaceholder')"
+            />
+          </div>
+          <div>
+            <label class="mb-1 block text-xs text-muted">{{ $t('settings.providerKind') }}</label>
+            <select
+              v-model="tpKind"
+              class="w-full rounded-md border border-border bg-card px-3 py-1.5 text-sm text-text outline-none focus:border-primary"
+            >
+              <option v-for="kind in traditionalKinds" :key="kind" :value="kind">
+                {{ kind }}
+              </option>
+            </select>
+          </div>
+          <div>
+            <label class="mb-1 block text-xs text-muted">{{ $t('settings.apiKey') }}</label>
+            <input
+              v-model="tpApiKey"
+              type="password"
+              class="w-full rounded-md border border-border bg-card px-3 py-1.5 text-sm text-text outline-none focus:border-primary"
+              placeholder="sk-..."
+            />
+          </div>
+          <div>
+            <label class="mb-1 block text-xs text-muted">{{ $t('settings.endpoint') }}</label>
+            <input
+              v-model="tpEndpoint"
+              class="w-full rounded-md border border-border bg-card px-3 py-1.5 text-sm text-text outline-none focus:border-primary"
+              placeholder="https://api.example.com/translate"
+            />
+          </div>
+        </template>
+
+        <!-- AI provider form -->
+        <template v-else>
+          <div>
+            <label class="mb-1 block text-xs text-muted">{{ $t('account.accountName') }}</label>
+            <input
+              v-model="tpAiName"
+              class="w-full rounded-md border border-border bg-card px-3 py-1.5 text-sm text-text outline-none focus:border-primary"
+              :placeholder="$t('account.namePlaceholder')"
+            />
+          </div>
+          <div>
+            <label class="mb-1 block text-xs text-muted">{{ $t('settings.selectAiProvider') }}</label>
+            <select
+              v-model="tpAiProviderId"
+              class="w-full rounded-md border border-border bg-card px-3 py-1.5 text-sm text-text outline-none focus:border-primary"
+            >
+              <option value="" disabled>{{ $t('settings.selectAiProvider') }}</option>
+              <option v-for="ap in aiStore.providers" :key="ap.id" :value="ap.id">
+                {{ ap.name }} ({{ ap.kind }})
+              </option>
+            </select>
+          </div>
+        </template>
+
+        <button
+          class="mt-2 flex h-8 w-full items-center justify-center rounded-md bg-primary text-sm font-medium text-white hover:bg-primary-hover disabled:opacity-50"
+          :disabled="translationFormType === 'traditional' ? (!tpName || !tpApiKey) : (!tpAiName || !tpAiProviderId)"
+          @click="addTranslationProvider"
         >
           {{ $t('settings.saveProvider') }}
         </button>

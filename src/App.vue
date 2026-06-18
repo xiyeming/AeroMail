@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { onMounted } from 'vue';
 import { RouterView } from 'vue-router';
+import AppLayout from '@/layouts/AppLayout.vue';
 import CommandPalette from '@/components/CommandPalette.vue';
 import ToastContainer from '@/components/ToastContainer.vue';
 import { useLocale } from '@/composables/useLocale';
@@ -13,7 +14,9 @@ onMounted(() => {
 </script>
 
 <template>
-  <RouterView />
+  <AppLayout>
+    <RouterView />
+  </AppLayout>
   <CommandPalette />
   <ToastContainer />
 </template>

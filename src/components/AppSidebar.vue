@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed, onMounted } from 'vue';
 import { useI18n } from 'vue-i18n';
-import { RouterLink } from 'vue-router';
+import { RouterLink, useRoute } from 'vue-router';
 import {
   Inbox,
   Star,
@@ -18,6 +18,7 @@ import { useAccountStore } from '@/stores/account';
 import { useAiStore } from '@/stores/ai';
 
 const aiStore = useAiStore();
+const route = useRoute();
 
 const { t } = useI18n();
 const accountStore = useAccountStore();
@@ -27,24 +28,26 @@ onMounted(() => {
 });
 
 const folders = computed(() => [
-  { name: t('folders.inbox'), icon: Inbox, count: 128 },
-  { name: t('folders.starred'), icon: Star, count: 12 },
-  { name: t('folders.sent'), icon: Send, count: null },
-  { name: t('folders.drafts'), icon: FileText, count: 3 },
-  { name: t('folders.archived'), icon: Archive, count: null },
-  { name: t('folders.spam'), icon: Trash2, count: null },
+  { name: t('folders.inbox'), icon: Inbox, count: 128, active: route.path === '/' },
+  { name: t('folders.starred'), icon: Star, count: 12, active: false },
+  { name: t('folders.sent'), icon: Send, count: null, active: false },
+  { name: t('folders.drafts'), icon: FileText, count: 3, active: false },
+  { name: t('folders.archived'), icon: Archive, count: null, active: false },
+  { name: t('folders.spam'), icon: Trash2, count: null, active: false },
 ]);
+
+const isActive = (path: string) => route.path === path;
 </script>
 
 <template>
-  <aside class="flex h-full flex-col bg-panel">
+  <aside class="flex h-full flex-col border-r border-border bg-panel">
     <div class="flex h-12 items-center px-4 text-lg font-semibold">
       {{ $t('app.name') }}
     </div>
 
     <div class="px-3 pb-2">
       <button
-        class="flex h-10 w-full items-center justify-center gap-2 rounded-lg bg-primary text-sm font-medium text-white transition-colors hover:bg-primary-hover"
+        class="flex h-10 w-full items-center justify-center gap-2 rounded-lg bg-primary text-sm font-medium text-white transition-colors hover:bg-primary-hover active:bg-primary-active"
       >
         <Plus class="h-4 w-4" />
         {{ $t('mail.newMail') }}
@@ -56,7 +59,8 @@ const folders = computed(() => [
         <li
           v-for="folder in folders"
           :key="folder.name"
-          class="flex h-9 cursor-pointer items-center justify-between rounded-md px-3 text-sm text-text-secondary transition-colors hover:bg-white/5"
+          class="flex h-9 cursor-pointer items-center justify-between rounded-md px-3 text-sm transition-colors"
+          :class="folder.active ? 'bg-card text-text' : 'text-text-secondary hover:bg-card/50'"
         >
           <div class="flex items-center gap-3">
             <component :is="folder.icon" class="h-4 w-4" />
@@ -78,7 +82,7 @@ const folders = computed(() => [
         <li
           v-for="account in accountStore.accounts"
           :key="account.id"
-          class="flex h-9 cursor-pointer items-center gap-3 rounded-md px-3 text-sm text-text-secondary transition-colors hover:bg-white/5"
+          class="flex h-9 cursor-pointer items-center gap-3 rounded-md px-3 text-sm text-text-secondary transition-colors hover:bg-card/50"
         >
           <div
             class="flex h-6 w-6 items-center justify-center rounded-full bg-card text-xs font-medium"
@@ -92,30 +96,28 @@ const folders = computed(() => [
       <div class="my-3 h-px bg-border" />
 
       <ul class="space-y-0.5">
-        <li
-          class="flex h-9 cursor-pointer items-center gap-3 rounded-md px-3 text-sm text-text-secondary transition-colors hover:bg-white/5"
-        >
+        <li>
           <RouterLink
             to="/accounts"
-            class="flex items-center gap-3"
+            class="flex h-9 items-center gap-3 rounded-md px-3 text-sm transition-colors"
+            :class="isActive('/accounts') ? 'bg-card text-text' : 'text-text-secondary hover:bg-card/50'"
           >
             <Users class="h-4 w-4" />
             <span>{{ $t('nav.accounts') }}</span>
           </RouterLink>
         </li>
-        <li
-          class="flex h-9 cursor-pointer items-center gap-3 rounded-md px-3 text-sm text-text-secondary transition-colors hover:bg-white/5"
-        >
+        <li>
           <RouterLink
             to="/settings"
-            class="flex items-center gap-3"
+            class="flex h-9 items-center gap-3 rounded-md px-3 text-sm transition-colors"
+            :class="isActive('/settings') ? 'bg-card text-text' : 'text-text-secondary hover:bg-card/50'"
           >
             <Settings class="h-4 w-4" />
             <span>{{ $t('nav.settings') }}</span>
           </RouterLink>
         </li>
         <li
-          class="flex h-9 cursor-pointer items-center gap-3 rounded-md px-3 text-sm text-text-secondary transition-colors hover:bg-white/5"
+          class="flex h-9 cursor-pointer items-center gap-3 rounded-md px-3 text-sm text-text-secondary transition-colors hover:bg-card/50"
           @click="aiStore.togglePanel()"
         >
           <Bot class="h-4 w-4" />

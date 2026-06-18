@@ -4,8 +4,10 @@ import AccountList from '@/components/AccountList.vue';
 </script>
 
 <template>
-  <div class="flex h-full flex-col overflow-y-auto bg-panel">
+  <div class="flex h-full flex-col overflow-y-auto bg-background p-6">
     <AccountForm />
-    <AccountList />
+    <div class="mt-6">
+      <AccountList />
+    </div>
   </div>
 </template>

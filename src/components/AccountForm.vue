@@ -58,14 +58,14 @@ async function handleSubmit() {
 </script>
 
 <template>
-  <form class="space-y-4 p-4" @submit.prevent="handleSubmit">
-    <h2 class="text-lg font-semibold">{{ $t('account.addAccount') }}</h2>
+  <form class="space-y-4 rounded-lg border border-border bg-card p-5" @submit.prevent="handleSubmit">
+    <h2 class="text-h1 font-semibold text-text">{{ $t('account.addAccount') }}</h2>
 
     <div>
-      <label class="mb-1 block text-sm text-muted">{{ $t('account.provider') }}</label>
+      <label class="mb-1.5 block text-xs font-medium text-muted">{{ $t('account.provider') }}</label>
       <select
         v-model="config.provider"
-        class="h-10 w-full rounded-md border border-border bg-card px-3 text-sm outline-none focus:border-primary"
+        class="h-10 w-full rounded-md border border-border bg-panel px-3 text-sm text-text outline-none transition-colors focus:border-primary focus:ring-1 focus:ring-primary/20"
         @change="updateProvider(config.provider)"
       >
         <option v-for="p in providers" :key="p" :value="p">{{ p }}</option>
@@ -73,65 +73,65 @@ async function handleSubmit() {
     </div>
 
     <div>
-      <label class="mb-1 block text-sm text-muted">{{ $t('account.accountName') }}</label>
+      <label class="mb-1.5 block text-xs font-medium text-muted">{{ $t('account.accountName') }}</label>
       <input
         v-model="config.name"
         type="text"
-        class="h-10 w-full rounded-md border border-border bg-card px-3 text-sm outline-none focus:border-primary"
+        class="h-10 w-full rounded-md border border-border bg-panel px-3 text-sm text-text outline-none transition-colors placeholder:text-disabled focus:border-primary focus:ring-1 focus:ring-primary/20"
         :placeholder="t('account.namePlaceholder')"
       />
     </div>
 
     <div class="grid grid-cols-2 gap-3">
       <div>
-        <label class="mb-1 block text-sm text-muted">{{ $t('account.imapHost') }}</label>
+        <label class="mb-1.5 block text-xs font-medium text-muted">{{ $t('account.imapHost') }}</label>
         <input
           v-model="config.imap.host"
           type="text"
-          class="h-10 w-full rounded-md border border-border bg-card px-3 text-sm outline-none focus:border-primary"
+          class="h-10 w-full rounded-md border border-border bg-panel px-3 text-sm text-text outline-none transition-colors focus:border-primary focus:ring-1 focus:ring-primary/20"
         />
       </div>
       <div>
-        <label class="mb-1 block text-sm text-muted">{{ $t('account.imapPort') }}</label>
+        <label class="mb-1.5 block text-xs font-medium text-muted">{{ $t('account.imapPort') }}</label>
         <input
           v-model.number="config.imap.port"
           type="number"
-          class="h-10 w-full rounded-md border border-border bg-card px-3 text-sm outline-none focus:border-primary"
+          class="h-10 w-full rounded-md border border-border bg-panel px-3 text-sm text-text outline-none transition-colors focus:border-primary focus:ring-1 focus:ring-primary/20"
         />
       </div>
     </div>
 
     <div class="grid grid-cols-2 gap-3">
       <div>
-        <label class="mb-1 block text-sm text-muted">{{ $t('account.smtpHost') }}</label>
+        <label class="mb-1.5 block text-xs font-medium text-muted">{{ $t('account.smtpHost') }}</label>
         <input
           v-model="config.smtp.host"
           type="text"
-          class="h-10 w-full rounded-md border border-border bg-card px-3 text-sm outline-none focus:border-primary"
+          class="h-10 w-full rounded-md border border-border bg-panel px-3 text-sm text-text outline-none transition-colors focus:border-primary focus:ring-1 focus:ring-primary/20"
         />
       </div>
       <div>
-        <label class="mb-1 block text-sm text-muted">{{ $t('account.smtpPort') }}</label>
+        <label class="mb-1.5 block text-xs font-medium text-muted">{{ $t('account.smtpPort') }}</label>
         <input
           v-model.number="config.smtp.port"
           type="number"
-          class="h-10 w-full rounded-md border border-border bg-card px-3 text-sm outline-none focus:border-primary"
+          class="h-10 w-full rounded-md border border-border bg-panel px-3 text-sm text-text outline-none transition-colors focus:border-primary focus:ring-1 focus:ring-primary/20"
         />
       </div>
     </div>
 
     <div>
-      <label class="mb-1 block text-sm text-muted">{{ $t('account.password') }}</label>
+      <label class="mb-1.5 block text-xs font-medium text-muted">{{ $t('account.password') }}</label>
       <input
         type="password"
-        class="h-10 w-full rounded-md border border-border bg-card px-3 text-sm outline-none focus:border-primary"
+        class="h-10 w-full rounded-md border border-border bg-panel px-3 text-sm text-text outline-none transition-colors placeholder:text-disabled focus:border-primary focus:ring-1 focus:ring-primary/20"
         :placeholder="t('account.passwordPlaceholder')"
       />
     </div>
 
     <button
       type="submit"
-      class="h-10 w-full rounded-md bg-primary text-sm font-medium text-white transition-colors hover:bg-primary-hover"
+      class="h-10 w-full rounded-md bg-primary text-sm font-medium text-white transition-colors hover:bg-primary-hover active:bg-primary-active"
     >
       {{ $t('account.addAccount') }}
     </button>

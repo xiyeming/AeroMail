@@ -139,19 +139,19 @@ async function removeTranslationProvider(id: string) {
 </script>
 
 <template>
-  <div class="flex h-full flex-col overflow-y-auto bg-panel p-6">
-    <h1 class="text-h1 mb-6 font-semibold text-text">{{ $t('nav.settings') }}</h1>
+  <div class="flex h-full flex-col overflow-y-auto bg-background p-6">
+    <h1 class="mb-6 text-h1 font-semibold text-text">{{ $t('nav.settings') }}</h1>
 
-    <section class="rounded-lg border border-border bg-card p-4">
+    <section class="rounded-lg border border-border bg-card p-5">
       <h2 class="mb-4 text-lg font-medium text-text">{{ $t('settings.language') }}</h2>
       <LocaleSwitch />
     </section>
 
-    <section class="mt-6 rounded-lg border border-border bg-card p-4">
+    <section class="mt-6 rounded-lg border border-border bg-card p-5">
       <div class="mb-4 flex items-center justify-between">
         <h2 class="text-lg font-medium text-text">{{ $t('settings.aiProviders') }}</h2>
         <button
-          class="text-sm text-primary hover:text-primary-hover"
+          class="rounded-md px-3 py-1.5 text-sm text-primary transition-colors hover:bg-primary/10"
           @click="showAddForm = !showAddForm"
         >
           {{ showAddForm ? $t('common.cancel') : $t('settings.addProvider') }}
@@ -236,11 +236,11 @@ async function removeTranslationProvider(id: string) {
     </section>
 
     <!-- Translation Providers -->
-    <section class="mt-6 rounded-lg border border-border bg-card p-4">
+    <section class="mt-6 rounded-lg border border-border bg-card p-5">
       <div class="mb-4 flex items-center justify-between">
         <h2 class="text-lg font-medium text-text">{{ $t('settings.translationProviders') }}</h2>
         <button
-          class="text-sm text-primary hover:text-primary-hover"
+          class="rounded-md px-3 py-1.5 text-sm text-primary transition-colors hover:bg-primary/10"
           @click="showTranslationForm = !showTranslationForm; resetTranslationForm()"
         >
           {{ showTranslationForm ? $t('common.cancel') : $t('settings.addTranslationProvider') }}

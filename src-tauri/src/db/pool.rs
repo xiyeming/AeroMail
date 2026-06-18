@@ -46,4 +46,28 @@ impl Database {
     pub fn path(&self) -> &PathBuf {
         &self.path
     }
+
+    pub fn set_setting(&self, key: &str, value: &str) -> Result<(), AeroError> {
+        let conn = self.connection()?;
+        conn.execute(
+            "INSERT INTO settings (key, value, updated_at)
+             VALUES (?1, ?2, ?3)
+             ON CONFLICT(key) DO UPDATE SET
+               value = excluded.value,
+               updated_at = excluded.updated_at",
+            (key, value, chrono::Utc::now().timestamp()),
+        )?;
+        Ok(())
+    }
+
+    pub fn get_setting(&self, key: &str) -> Result<Option<String>, AeroError> {
+        let conn = self.connection()?;
+        let mut stmt = conn.prepare("SELECT value FROM settings WHERE key = ?1")?;
+        let mut rows = stmt.query([key])?;
+        if let Some(row) = rows.next()? {
+            Ok(Some(row.get(0)?))
+        } else {
+            Ok(None)
+        }
+    }
 }

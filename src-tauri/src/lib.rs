@@ -5,6 +5,7 @@ pub mod models;
 pub mod services;
 
 use commands::account::{add_account, delete_account, list_accounts, test_account_connection};
+use commands::settings::{get_setting, set_setting};
 use db::pool::Database;
 use services::account_manager::AccountManager;
 use std::sync::Arc;
@@ -54,7 +55,9 @@ pub fn run() {
             add_account,
             list_accounts,
             delete_account,
-            test_account_connection
+            test_account_connection,
+            set_setting,
+            get_setting,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

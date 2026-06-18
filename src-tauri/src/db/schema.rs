@@ -97,6 +97,18 @@ CREATE TABLE IF NOT EXISTS settings (
 )
 ";
 
+pub const AI_PROVIDERS_TABLE: &str = r"
+CREATE TABLE IF NOT EXISTS ai_providers (
+    id TEXT PRIMARY KEY,
+    name TEXT NOT NULL,
+    kind TEXT NOT NULL,
+    api_key_encrypted BLOB NOT NULL,
+    base_url TEXT,
+    model TEXT NOT NULL,
+    max_tokens INTEGER
+)
+";
+
 pub const AI_CHAT_SESSIONS_TABLE: &str = r"
 CREATE TABLE IF NOT EXISTS ai_chat_sessions (
     id TEXT PRIMARY KEY,
@@ -131,6 +143,7 @@ pub const ALL_SCHEMAS: &[&str] = &[
     ATTACHMENTS_TABLE,
     DRAFTS_TABLE,
     SETTINGS_TABLE,
+    AI_PROVIDERS_TABLE,
     AI_CHAT_SESSIONS_TABLE,
     AI_CHAT_MESSAGES_TABLE,
     AI_CHAT_MESSAGES_INDEX,

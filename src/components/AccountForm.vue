@@ -1,8 +1,10 @@
 <script setup lang="ts">
 import { ref } from 'vue';
+import { useI18n } from 'vue-i18n';
 import { useAccountStore } from '@/stores/account';
 import type { AccountConfig, MailProvider } from '@/types/account';
 
+const { t } = useI18n();
 const accountStore = useAccountStore();
 
 const providers: MailProvider[] = [
@@ -57,10 +59,10 @@ async function handleSubmit() {
 
 <template>
   <form class="space-y-4 p-4" @submit.prevent="handleSubmit">
-    <h2 class="text-lg font-semibold">Add Account</h2>
+    <h2 class="text-lg font-semibold">{{ $t('account.addAccount') }}</h2>
 
     <div>
-      <label class="mb-1 block text-sm text-muted">Provider</label>
+      <label class="mb-1 block text-sm text-muted">{{ $t('account.provider') }}</label>
       <select
         v-model="config.provider"
         class="h-10 w-full rounded-md border border-border bg-card px-3 text-sm outline-none focus:border-primary"
@@ -71,18 +73,18 @@ async function handleSubmit() {
     </div>
 
     <div>
-      <label class="mb-1 block text-sm text-muted">Account Name</label>
+      <label class="mb-1 block text-sm text-muted">{{ $t('account.accountName') }}</label>
       <input
         v-model="config.name"
         type="text"
         class="h-10 w-full rounded-md border border-border bg-card px-3 text-sm outline-none focus:border-primary"
-        placeholder="Work Gmail"
+        :placeholder="t('account.namePlaceholder')"
       />
     </div>
 
     <div class="grid grid-cols-2 gap-3">
       <div>
-        <label class="mb-1 block text-sm text-muted">IMAP Host</label>
+        <label class="mb-1 block text-sm text-muted">{{ $t('account.imapHost') }}</label>
         <input
           v-model="config.imap.host"
           type="text"
@@ -90,7 +92,7 @@ async function handleSubmit() {
         />
       </div>
       <div>
-        <label class="mb-1 block text-sm text-muted">IMAP Port</label>
+        <label class="mb-1 block text-sm text-muted">{{ $t('account.imapPort') }}</label>
         <input
           v-model.number="config.imap.port"
           type="number"
@@ -101,7 +103,7 @@ async function handleSubmit() {
 
     <div class="grid grid-cols-2 gap-3">
       <div>
-        <label class="mb-1 block text-sm text-muted">SMTP Host</label>
+        <label class="mb-1 block text-sm text-muted">{{ $t('account.smtpHost') }}</label>
         <input
           v-model="config.smtp.host"
           type="text"
@@ -109,7 +111,7 @@ async function handleSubmit() {
         />
       </div>
       <div>
-        <label class="mb-1 block text-sm text-muted">SMTP Port</label>
+        <label class="mb-1 block text-sm text-muted">{{ $t('account.smtpPort') }}</label>
         <input
           v-model.number="config.smtp.port"
           type="number"
@@ -119,11 +121,11 @@ async function handleSubmit() {
     </div>
 
     <div>
-      <label class="mb-1 block text-sm text-muted">Password</label>
+      <label class="mb-1 block text-sm text-muted">{{ $t('account.password') }}</label>
       <input
         type="password"
         class="h-10 w-full rounded-md border border-border bg-card px-3 text-sm outline-none focus:border-primary"
-        placeholder="App password"
+        :placeholder="t('account.passwordPlaceholder')"
       />
     </div>
 
@@ -131,7 +133,7 @@ async function handleSubmit() {
       type="submit"
       class="h-10 w-full rounded-md bg-primary text-sm font-medium text-white transition-colors hover:bg-primary-hover"
     >
-      Add Account
+      {{ $t('account.addAccount') }}
     </button>
 
     <p v-if="accountStore.error" class="text-sm text-danger">{{ accountStore.error }}</p>

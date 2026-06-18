@@ -26,7 +26,7 @@ const mockMails = [
 <template>
   <div class="flex h-full flex-col bg-panel">
     <div class="flex h-12 items-center border-b border-border px-4 font-medium">
-      Inbox
+      {{ $t('nav.inbox') }}
     </div>
     <div class="flex-1 overflow-y-auto">
       <div

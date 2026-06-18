@@ -1,5 +1,6 @@
 <script setup lang="ts">
-import { onMounted } from 'vue';
+import { computed, onMounted } from 'vue';
+import { useI18n } from 'vue-i18n';
 import { RouterLink } from 'vue-router';
 import {
   Inbox,
@@ -14,26 +15,27 @@ import {
 } from 'lucide-vue-next';
 import { useAccountStore } from '@/stores/account';
 
+const { t } = useI18n();
 const accountStore = useAccountStore();
 
 onMounted(() => {
   void accountStore.loadAccounts();
 });
 
-const folders = [
-  { name: 'Inbox', icon: Inbox, count: 128 },
-  { name: 'Starred', icon: Star, count: 12 },
-  { name: 'Sent', icon: Send, count: null },
-  { name: 'Drafts', icon: FileText, count: 3 },
-  { name: 'Archived', icon: Archive, count: null },
-  { name: 'Spam', icon: Trash2, count: null },
-];
+const folders = computed(() => [
+  { name: t('folders.inbox'), icon: Inbox, count: 128 },
+  { name: t('folders.starred'), icon: Star, count: 12 },
+  { name: t('folders.sent'), icon: Send, count: null },
+  { name: t('folders.drafts'), icon: FileText, count: 3 },
+  { name: t('folders.archived'), icon: Archive, count: null },
+  { name: t('folders.spam'), icon: Trash2, count: null },
+]);
 </script>
 
 <template>
   <aside class="flex h-full flex-col bg-panel">
     <div class="flex h-12 items-center px-4 text-lg font-semibold">
-      AeroMail
+      {{ $t('app.name') }}
     </div>
 
     <div class="px-3 pb-2">
@@ -41,7 +43,7 @@ const folders = [
         class="flex h-10 w-full items-center justify-center gap-2 rounded-lg bg-primary text-sm font-medium text-white transition-colors hover:bg-primary-hover"
       >
         <Plus class="h-4 w-4" />
-        New Mail
+        {{ $t('mail.newMail') }}
       </button>
     </div>
 
@@ -67,7 +69,7 @@ const folders = [
 
       <div class="my-3 h-px bg-border" />
 
-      <div class="px-3 pb-2 text-xs font-medium text-muted">ACCOUNTS</div>
+      <div class="px-3 pb-2 text-xs font-medium text-muted">{{ $t('sidebar.accounts') }}</div>
       <ul class="space-y-0.5">
         <li
           v-for="account in accountStore.accounts"
@@ -94,7 +96,7 @@ const folders = [
             class="flex items-center gap-3"
           >
             <Users class="h-4 w-4" />
-            <span>Accounts</span>
+            <span>{{ $t('nav.accounts') }}</span>
           </RouterLink>
         </li>
         <li

@@ -16,8 +16,8 @@ async function remove(id: string) {
 
 <template>
   <div class="p-4">
-    <h2 class="mb-3 text-lg font-semibold">Accounts</h2>
-    <div v-if="accountStore.loading">Loading...</div>
+    <h2 class="mb-3 text-lg font-semibold">{{ $t('nav.accounts') }}</h2>
+    <div v-if="accountStore.loading">{{ $t('common.loading') }}</div>
     <ul v-else class="space-y-2">
       <li
         v-for="account in accountStore.accounts"

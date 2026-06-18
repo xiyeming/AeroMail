@@ -17,6 +17,7 @@ pub enum AiProviderKind {
     OpenAI,
     Anthropic,
     Gemini,
+    #[serde(rename = "azure_openai")]
     AzureOpenAI,
     DeepSeek,
     Moonshot,
@@ -24,6 +25,7 @@ pub enum AiProviderKind {
     Zhipu,
     MiniMax,
     Baichuan,
+    #[serde(rename = "custom_openai_compatible")]
     CustomOpenAICompatible,
 }
 

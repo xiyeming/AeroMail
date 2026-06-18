@@ -97,7 +97,7 @@ CREATE TABLE IF NOT EXISTS settings (
 )
 ";
 
-pub const AI_CHAT_SESSIONS_TABLE: &str = r#"
+pub const AI_CHAT_SESSIONS_TABLE: &str = r"
 CREATE TABLE IF NOT EXISTS ai_chat_sessions (
     id TEXT PRIMARY KEY,
     title TEXT,
@@ -107,9 +107,9 @@ CREATE TABLE IF NOT EXISTS ai_chat_sessions (
     created_at INTEGER NOT NULL,
     updated_at INTEGER NOT NULL
 )
-"#;
+";
 
-pub const AI_CHAT_MESSAGES_TABLE: &str = r#"
+pub const AI_CHAT_MESSAGES_TABLE: &str = r"
 CREATE TABLE IF NOT EXISTS ai_chat_messages (
     id TEXT PRIMARY KEY,
     session_id TEXT NOT NULL,
@@ -117,12 +117,12 @@ CREATE TABLE IF NOT EXISTS ai_chat_messages (
     content TEXT NOT NULL,
     created_at INTEGER NOT NULL
 )
-"#;
+";
 
-pub const AI_CHAT_MESSAGES_INDEX: &str = r#"
+pub const AI_CHAT_MESSAGES_INDEX: &str = r"
 CREATE INDEX IF NOT EXISTS idx_ai_messages_session
 ON ai_chat_messages(session_id, created_at)
-"#;
+";
 
 pub const ALL_SCHEMAS: &[&str] = &[
     ACCOUNTS_TABLE,

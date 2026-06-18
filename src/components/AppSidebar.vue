@@ -100,8 +100,13 @@ const folders = [
         <li
           class="flex h-9 cursor-pointer items-center gap-3 rounded-md px-3 text-sm text-text-secondary transition-colors hover:bg-white/5"
         >
-          <Settings class="h-4 w-4" />
-          <span>Settings</span>
+          <RouterLink
+            to="/settings"
+            class="flex items-center gap-3"
+          >
+            <Settings class="h-4 w-4" />
+            <span>{{ $t('nav.settings') }}</span>
+          </RouterLink>
         </li>
       </ul>
     </nav>

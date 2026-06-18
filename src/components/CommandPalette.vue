@@ -1,6 +1,11 @@
 <script setup lang="ts">
-import { ref, watch, onMounted, onUnmounted } from 'vue';
+import { ref, computed, watch, onMounted, onUnmounted } from 'vue';
+import { useI18n } from 'vue-i18n';
 import { Search } from 'lucide-vue-next';
+import { useLocale } from '@/composables/useLocale';
+
+const { t } = useI18n();
+const { setLocale } = useLocale();
 
 const isOpen = ref(false);
 const query = ref('');
@@ -12,14 +17,29 @@ const mockResults = [
   { id: '3', title: 'Meeting Notes' },
 ];
 
-const results = ref(mockResults);
+const languageCommands = computed(() => [
+  {
+    id: 'switch-lang-en',
+    title: t('commandPalette.switchToEnglish'),
+    action: () => setLocale('en'),
+  },
+  {
+    id: 'switch-lang-zh',
+    title: t('commandPalette.switchToChinese'),
+    action: () => setLocale('zh-CN'),
+  },
+]);
+
+const allItems = computed(() => [...mockResults, ...languageCommands.value]);
+
+const results = ref(allItems.value);
 
 watch(query, (val) => {
   if (!val) {
-    results.value = mockResults;
+    results.value = allItems.value;
     return;
   }
-  results.value = mockResults.filter((r) =>
+  results.value = allItems.value.filter((r) =>
     r.title.toLowerCase().includes(val.toLowerCase())
   );
 });
@@ -65,6 +85,10 @@ function handleKeydown(e: KeyboardEvent) {
     highlightNext();
   }
   if (e.key === 'Enter' && results.value[highlightedIndex.value]) {
+    const item = results.value[highlightedIndex.value];
+    if ('action' in item && typeof item.action === 'function') {
+      item.action();
+    }
     close();
   }
 }
@@ -104,7 +128,7 @@ defineExpose({ open, close });
               v-model="query"
               type="text"
               class="flex-1 bg-transparent text-base text-text placeholder-muted outline-none"
-              placeholder="Search mail..."
+              :placeholder="t('commandPalette.placeholder')"
             />
           </div>
           <div class="max-h-[340px] overflow-y-auto">
@@ -118,7 +142,7 @@ defineExpose({ open, close });
                   : 'border-l-[3px] border-transparent',
               ]"
               @mouseenter="highlightedIndex = index"
-              @click="close"
+              @click="() => { if ('action' in item && typeof item.action === 'function') item.action(); close(); }"
             >
               {{ item.title }}
             </div>

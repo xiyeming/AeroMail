@@ -1,8 +1,19 @@
 <script setup lang="ts">
-import { computed } from 'vue';
+import { ref, computed } from 'vue';
+import { useI18n } from 'vue-i18n';
 import { useStatusStore } from '@/stores/status';
+import { useLocale, type Locale } from '@/composables/useLocale';
 
+const { t } = useI18n();
+const { locale, setLocale, supportedLocales } = useLocale();
 const statusStore = useStatusStore();
+
+const showLangMenu = ref(false);
+
+const labels: Record<Locale, string> = {
+  en: 'English',
+  'zh-CN': '简体中文',
+};
 
 const syncText = computed(() => {
   const syncing = statusStore.syncingAccounts;
@@ -11,6 +22,11 @@ const syncText = computed(() => {
   }
   return 'Sync complete';
 });
+
+function selectLanguage(lang: Locale) {
+  setLocale(lang);
+  showLangMenu.value = false;
+}
 </script>
 
 <template>
@@ -34,6 +50,27 @@ const syncText = computed(() => {
     <span :class="statusStore.isOnline ? 'text-success' : 'text-warning'">
       {{ statusStore.isOnline ? 'Online' : 'Offline' }}
     </span>
-    <span class="ml-auto">v0.1.0</span>
+    <div class="relative ml-auto">
+      <button
+        class="text-xs text-muted hover:text-text"
+        @click="showLangMenu = !showLangMenu"
+      >
+        {{ t('statusBar.language', { lang: labels[locale as Locale] }) }}
+      </button>
+      <div
+        v-if="showLangMenu"
+        class="absolute bottom-full right-0 mb-1 rounded-lg border border-border bg-card py-1 shadow-modal"
+      >
+        <button
+          v-for="loc in supportedLocales"
+          :key="loc"
+          class="block w-full px-4 py-1 text-left text-sm text-text hover:bg-panel"
+          @click="selectLanguage(loc)"
+        >
+          {{ labels[loc] }}
+        </button>
+      </div>
+    </div>
+    <span>v0.1.0</span>
   </div>
 </template>

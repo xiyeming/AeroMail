@@ -20,11 +20,14 @@
     "offline": "Offline",
     "lastSync": "Last sync: {time}",
     "syncComplete": "Sync complete",
-    "syncing": "Syncing... {count}/{total} accounts"
+    "syncing": "Syncing... {count}/{total} accounts",
+    "language": "Language: {lang}"
   },
   "commandPalette": {
     "placeholder": "Search mail...",
-    "switchLanguage": "Switch Language"
+    "switchLanguage": "Switch Language",
+    "switchToEnglish": "Switch to English",
+    "switchToChinese": "Switch to 简体中文"
   },
   "settings": {
     "language": "Language",

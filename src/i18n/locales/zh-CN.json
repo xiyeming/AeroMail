@@ -28,7 +28,9 @@
     "lastSync": "最后同步：{time}",
     "syncComplete": "同步完成",
     "syncing": "同步中... {count}/{total} 账户",
-    "language": "语言：{lang}"
+    "language": "语言：{lang}",
+    "unread": "{count} 封未读",
+    "never": "从未"
   },
   "commandPalette": {
     "placeholder": "搜索邮件...",
@@ -66,6 +68,8 @@
     "INVALID_ACCOUNT_CONFIG": "账户配置无效：{0}",
     "DATABASE_ERROR": "数据库错误",
     "INTERNAL_ERROR": "内部错误：{0}",
-    "UNKNOWN_ERROR": "发生未知错误"
+    "UNKNOWN_ERROR": "发生未知错误",
+    "ACCOUNT_NOT_FOUND": "账户不存在：{0}",
+    "CONNECTION_TEST_FAILED": "连接测试失败：{0}"
   }
 }

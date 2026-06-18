@@ -18,9 +18,9 @@ const labels: Record<Locale, string> = {
 const syncText = computed(() => {
   const syncing = statusStore.syncingAccounts;
   if (syncing > 0) {
-    return `Syncing... ${syncing}/${statusStore.syncStatus.length} accounts`;
+    return t('statusBar.syncing', { count: syncing, total: statusStore.syncStatus.length });
   }
-  return 'Sync complete';
+  return t('statusBar.syncComplete');
 });
 
 function selectLanguage(lang: Locale) {
@@ -58,12 +58,12 @@ onUnmounted(() => {
       <span>{{ syncText }}</span>
     </div>
     <div class="mx-3 h-3 w-px bg-border" />
-    <span>{{ statusStore.unreadCount }} unread</span>
+    <span>{{ t('statusBar.unread', { count: statusStore.unreadCount }) }}</span>
     <div class="mx-3 h-3 w-px bg-border" />
-    <span>Last sync: {{ statusStore.lastSyncTime ?? 'Never' }}</span>
+    <span>{{ t('statusBar.lastSync', { time: statusStore.lastSyncTime ?? t('statusBar.never') }) }}</span>
     <div class="mx-3 h-3 w-px bg-border" />
     <span :class="statusStore.isOnline ? 'text-success' : 'text-warning'">
-      {{ statusStore.isOnline ? 'Online' : 'Offline' }}
+      {{ statusStore.isOnline ? t('statusBar.online') : t('statusBar.offline') }}
     </span>
     <div class="relative ml-auto lang-switcher">
       <button

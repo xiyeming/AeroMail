@@ -28,7 +28,9 @@
     "lastSync": "Last sync: {time}",
     "syncComplete": "Sync complete",
     "syncing": "Syncing... {count}/{total} accounts",
-    "language": "Language: {lang}"
+    "language": "Language: {lang}",
+    "unread": "{count} unread",
+    "never": "Never"
   },
   "commandPalette": {
     "placeholder": "Search mail...",
@@ -66,6 +68,8 @@
     "INVALID_ACCOUNT_CONFIG": "Invalid account configuration: {0}",
     "DATABASE_ERROR": "Database error",
     "INTERNAL_ERROR": "Internal error: {0}",
-    "UNKNOWN_ERROR": "An unknown error occurred"
+    "UNKNOWN_ERROR": "An unknown error occurred",
+    "ACCOUNT_NOT_FOUND": "Account not found: {0}",
+    "CONNECTION_TEST_FAILED": "Connection test failed: {0}"
   }
 }

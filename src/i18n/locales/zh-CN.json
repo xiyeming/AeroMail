@@ -100,5 +100,12 @@
     "TRANSLATION_PROVIDER_NOT_FOUND": "翻译提供商不存在",
     "TRANSLATION_API_ERROR": "翻译失败：{0}",
     "TRANSLATION_NO_TEXT": "没有可翻译的文本"
+  },
+  "translation": {
+    "translate": "翻译",
+    "translating": "翻译中...",
+    "showOriginal": "显示原文",
+    "translatedTo": "已翻译为 {lang}",
+    "noProviders": "未配置翻译提供商"
   }
 }

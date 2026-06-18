@@ -100,5 +100,12 @@
     "TRANSLATION_PROVIDER_NOT_FOUND": "Translation provider not found",
     "TRANSLATION_API_ERROR": "Translation failed: {0}",
     "TRANSLATION_NO_TEXT": "No text to translate"
+  },
+  "translation": {
+    "translate": "Translate",
+    "translating": "Translating...",
+    "showOriginal": "Show Original",
+    "translatedTo": "Translated to {lang}",
+    "noProviders": "No translation providers configured"
   }
 }

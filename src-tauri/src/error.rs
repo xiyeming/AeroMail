@@ -19,25 +19,27 @@ pub enum AeroError {
 }
 
 impl AeroError {
+    /// Converts this error into an [`ErrorPayload`] suitable for the frontend.
+    #[must_use]
     pub fn to_payload(&self) -> ErrorPayload {
         match self {
-            AeroError::Database(_) => ErrorPayload {
+            Self::Database(_) => ErrorPayload {
                 code: "DATABASE_ERROR".to_string(),
                 args: vec![],
             },
-            AeroError::AccountNotFound(id) => ErrorPayload {
+            Self::AccountNotFound(id) => ErrorPayload {
                 code: "ACCOUNT_NOT_FOUND".to_string(),
                 args: vec![id.clone()],
             },
-            AeroError::InvalidConfig(reason) => ErrorPayload {
+            Self::InvalidConfig(reason) => ErrorPayload {
                 code: "INVALID_ACCOUNT_CONFIG".to_string(),
                 args: vec![reason.clone()],
             },
-            AeroError::ConnectionTestFailed(reason) => ErrorPayload {
+            Self::ConnectionTestFailed(reason) => ErrorPayload {
                 code: "CONNECTION_TEST_FAILED".to_string(),
                 args: vec![reason.clone()],
             },
-            AeroError::Internal(reason) => ErrorPayload {
+            Self::Internal(reason) => ErrorPayload {
                 code: "INTERNAL_ERROR".to_string(),
                 args: vec![reason.clone()],
             },
@@ -47,13 +49,13 @@ impl AeroError {
 
 impl From<rusqlite::Error> for AeroError {
     fn from(err: rusqlite::Error) -> Self {
-        AeroError::Database(err.to_string())
+        Self::Database(err.to_string())
     }
 }
 
 impl From<serde_json::Error> for AeroError {
     fn from(err: serde_json::Error) -> Self {
-        AeroError::Internal(err.to_string())
+        Self::Internal(err.to_string())
     }
 }
 

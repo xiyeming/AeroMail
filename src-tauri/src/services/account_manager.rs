@@ -18,6 +18,11 @@ impl AccountManager {
         Self { db }
     }
 
+    /// Adds a new email account with the given configuration.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the configuration is invalid or the database write fails.
     pub fn add_account(&self, mut config: AccountConfig) -> Result<String, AeroError> {
         let id = Uuid::new_v4().to_string();
         config.id.clone_from(&id);
@@ -27,14 +32,14 @@ impl AccountManager {
         let now = Utc::now().timestamp();
 
         self.db.connection()?.execute(
-            r#"
+            r"
             INSERT INTO accounts (
                 id, name, provider, imap_host, imap_port, smtp_host, smtp_port,
                 tls_mode, auth_type, auth_credentials_encrypted, ca_cert_path,
                 verify_certificate, connect_timeout, read_timeout, keepalive,
                 sync_interval, excluded_folders, created_at, updated_at
             ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16, ?17, ?18, ?19)
-            "#,
+            ",
             params![
                 &config.id,
                 &config.name,
@@ -64,14 +69,20 @@ impl AccountManager {
         Ok(id)
     }
 
+    /// Lists all configured email accounts.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the database read fails.
+    #[allow(clippy::significant_drop_tightening)]
     pub fn list_accounts(&self) -> Result<Vec<AccountSummary>, AeroError> {
         let conn = self.db.connection()?;
         let mut stmt = conn.prepare(
-            r#"
+            r"
             SELECT id, name, provider, imap_host, smtp_host
             FROM accounts
             ORDER BY created_at ASC
-            "#,
+            ",
         )?;
 
         let rows = stmt.query_map([], |row| {
@@ -95,6 +106,11 @@ impl AccountManager {
         rows.collect::<Result<Vec<_>, _>>().map_err(AeroError::from)
     }
 
+    /// Deletes an email account by its ID.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`AeroError::AccountNotFound`] if no account with the given ID exists.
     pub fn delete_account(&self, account_id: &str) -> Result<(), AeroError> {
         let rows = self
             .db
@@ -108,6 +124,11 @@ impl AccountManager {
         Ok(())
     }
 
+    /// Tests the connection to an email server using the provided configuration.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the configuration is invalid.
     pub async fn test_connection(&self, config: &AccountConfig) -> Result<String, AeroError> {
         // Phase 1 placeholder: validate config and simulate a connection test.
         if config.imap.host.is_empty() {

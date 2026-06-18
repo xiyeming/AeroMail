@@ -1,4 +1,4 @@
-pub const ACCOUNTS_TABLE: &str = r#"
+pub const ACCOUNTS_TABLE: &str = r"
 CREATE TABLE IF NOT EXISTS accounts (
     id TEXT PRIMARY KEY,
     name TEXT NOT NULL,
@@ -20,9 +20,9 @@ CREATE TABLE IF NOT EXISTS accounts (
     created_at INTEGER,
     updated_at INTEGER
 )
-"#;
+";
 
-pub const FOLDERS_TABLE: &str = r#"
+pub const FOLDERS_TABLE: &str = r"
 CREATE TABLE IF NOT EXISTS folders (
     id TEXT PRIMARY KEY,
     account_id TEXT NOT NULL,
@@ -34,9 +34,9 @@ CREATE TABLE IF NOT EXISTS folders (
     last_sync_at INTEGER,
     FOREIGN KEY (account_id) REFERENCES accounts(id) ON DELETE CASCADE
 )
-"#;
+";
 
-pub const MAILS_TABLE: &str = r#"
+pub const MAILS_TABLE: &str = r"
 CREATE TABLE IF NOT EXISTS mails (
     id TEXT PRIMARY KEY,
     account_id TEXT NOT NULL,
@@ -58,9 +58,9 @@ CREATE TABLE IF NOT EXISTS mails (
     FOREIGN KEY (account_id) REFERENCES accounts(id) ON DELETE CASCADE,
     FOREIGN KEY (folder_id) REFERENCES folders(id) ON DELETE CASCADE
 )
-"#;
+";
 
-pub const ATTACHMENTS_TABLE: &str = r#"
+pub const ATTACHMENTS_TABLE: &str = r"
 CREATE TABLE IF NOT EXISTS attachments (
     id TEXT PRIMARY KEY,
     mail_id TEXT NOT NULL,
@@ -72,9 +72,9 @@ CREATE TABLE IF NOT EXISTS attachments (
     is_inline INTEGER DEFAULT 0,
     FOREIGN KEY (mail_id) REFERENCES mails(id) ON DELETE CASCADE
 )
-"#;
+";
 
-pub const DRAFTS_TABLE: &str = r#"
+pub const DRAFTS_TABLE: &str = r"
 CREATE TABLE IF NOT EXISTS drafts (
     id TEXT PRIMARY KEY,
     account_id TEXT,
@@ -87,15 +87,15 @@ CREATE TABLE IF NOT EXISTS drafts (
     saved_at INTEGER,
     FOREIGN KEY (account_id) REFERENCES accounts(id) ON DELETE SET NULL
 )
-"#;
+";
 
-pub const SETTINGS_TABLE: &str = r#"
+pub const SETTINGS_TABLE: &str = r"
 CREATE TABLE IF NOT EXISTS settings (
     key TEXT PRIMARY KEY,
     value TEXT,
     updated_at INTEGER
 )
-"#;
+";
 
 pub const ALL_SCHEMAS: &[&str] = &[
     ACCOUNTS_TABLE,

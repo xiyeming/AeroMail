@@ -18,6 +18,11 @@ pub struct AppState {
 }
 
 impl AppState {
+    /// Creates a new [`AppState`] by initializing the database and account manager.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the database cannot be opened or initialized.
     pub fn new(app_handle: &tauri::AppHandle) -> Result<Self, crate::error::AeroError> {
         let db = Arc::new(Database::new(app_handle)?);
         let account_manager = Arc::new(RwLock::new(AccountManager::new(Arc::clone(&db))));
@@ -33,6 +38,7 @@ fn greet(name: &str) -> String {
     format!("Hello, {name}! You've been greeted from Rust.")
 }
 
+#[allow(clippy::expect_used, clippy::missing_panics_doc)]
 pub fn run() {
     tauri::Builder::default()
         .setup(|app| {

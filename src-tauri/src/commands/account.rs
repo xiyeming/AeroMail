@@ -4,6 +4,11 @@ use crate::AppState;
 use crate::models::account::{AccountConfig, AccountSummary};
 use crate::models::error::ErrorPayload;
 
+/// Adds a new email account.
+///
+/// # Errors
+///
+/// Returns an error if the account configuration is invalid or the database write fails.
 #[tauri::command]
 pub async fn add_account(
     config: AccountConfig,
@@ -13,6 +18,11 @@ pub async fn add_account(
     manager.add_account(config).map_err(|e| e.to_payload())
 }
 
+/// Lists all configured email accounts.
+///
+/// # Errors
+///
+/// Returns an error if the database read fails.
 #[tauri::command]
 pub async fn list_accounts(
     state: State<'_, AppState>,
@@ -21,6 +31,11 @@ pub async fn list_accounts(
     manager.list_accounts().map_err(|e| e.to_payload())
 }
 
+/// Deletes an email account by ID.
+///
+/// # Errors
+///
+/// Returns an error if the account is not found or the database write fails.
 #[tauri::command]
 pub async fn delete_account(
     account_id: String,
@@ -30,6 +45,11 @@ pub async fn delete_account(
     manager.delete_account(&account_id).map_err(|e| e.to_payload())
 }
 
+/// Tests the connection to an email account.
+///
+/// # Errors
+///
+/// Returns an error if the connection test fails.
 #[tauri::command]
 pub async fn test_account_connection(
     config: AccountConfig,

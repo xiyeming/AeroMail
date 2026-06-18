@@ -113,6 +113,25 @@ body {
   overflow: hidden;
 }
 
+/* Dark theme select/option styling */
+select {
+  color-scheme: dark;
+}
+
+select option {
+  background-color: var(--card);
+  color: var(--text);
+}
+
+[data-theme="light"] select {
+  color-scheme: light;
+}
+
+[data-theme="light"] select option {
+  background-color: var(--panel);
+  color: var(--text);
+}
+
 @media (prefers-color-scheme: light) {
   :root:not([data-theme="dark"]) {
     --background: #f8fafc;

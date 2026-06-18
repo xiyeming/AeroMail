@@ -12,6 +12,11 @@ const router = createRouter({
       component: InboxView,
     },
     {
+      path: '/folder/:folderId',
+      name: 'folder',
+      component: InboxView,
+    },
+    {
       path: '/accounts',
       name: 'accounts',
       component: AccountsView,

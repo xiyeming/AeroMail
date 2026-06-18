@@ -28,15 +28,22 @@ onMounted(() => {
 });
 
 const folders = computed(() => [
-  { name: t('folders.inbox'), icon: Inbox, count: 128, active: route.path === '/' },
-  { name: t('folders.starred'), icon: Star, count: 12, active: false },
-  { name: t('folders.sent'), icon: Send, count: null, active: false },
-  { name: t('folders.drafts'), icon: FileText, count: 3, active: false },
-  { name: t('folders.archived'), icon: Archive, count: null, active: false },
-  { name: t('folders.spam'), icon: Trash2, count: null, active: false },
+  { id: 'inbox', name: t('folders.inbox'), icon: Inbox, count: 128, path: '/' },
+  { id: 'starred', name: t('folders.starred'), icon: Star, count: 12, path: '/folder/starred' },
+  { id: 'sent', name: t('folders.sent'), icon: Send, count: null, path: '/folder/sent' },
+  { id: 'drafts', name: t('folders.drafts'), icon: FileText, count: 3, path: '/folder/drafts' },
+  { id: 'archived', name: t('folders.archived'), icon: Archive, count: null, path: '/folder/archived' },
+  { id: 'spam', name: t('folders.spam'), icon: Trash2, count: null, path: '/folder/spam' },
 ]);
 
-const isActive = (path: string) => route.path === path;
+function isActiveFolder(path: string) {
+  if (path === '/') return route.path === '/';
+  return route.path === path;
+}
+
+function isActivePage(path: string) {
+  return route.path === path;
+}
 </script>
 
 <template>
@@ -56,22 +63,23 @@ const isActive = (path: string) => route.path === path;
 
     <nav class="flex-1 overflow-y-auto px-2">
       <ul class="space-y-0.5">
-        <li
-          v-for="folder in folders"
-          :key="folder.name"
-          class="flex h-9 cursor-pointer items-center justify-between rounded-md px-3 text-sm transition-colors"
-          :class="folder.active ? 'bg-card text-text' : 'text-text-secondary hover:bg-card/50'"
-        >
-          <div class="flex items-center gap-3">
-            <component :is="folder.icon" class="h-4 w-4" />
-            <span>{{ folder.name }}</span>
-          </div>
-          <span
-            v-if="folder.count"
-            class="flex h-5 min-w-5 items-center justify-center rounded-full bg-primary px-1.5 text-xs font-medium text-white"
+        <li v-for="folder in folders" :key="folder.id">
+          <RouterLink
+            :to="folder.path"
+            class="flex h-9 items-center justify-between rounded-md px-3 text-sm transition-colors"
+            :class="isActiveFolder(folder.path) ? 'bg-card text-text' : 'text-text-secondary hover:bg-card/50'"
           >
-            {{ folder.count }}
-          </span>
+            <div class="flex items-center gap-3">
+              <component :is="folder.icon" class="h-4 w-4" />
+              <span>{{ folder.name }}</span>
+            </div>
+            <span
+              v-if="folder.count"
+              class="flex h-5 min-w-5 items-center justify-center rounded-full bg-primary px-1.5 text-xs font-medium text-white"
+            >
+              {{ folder.count }}
+            </span>
+          </RouterLink>
         </li>
       </ul>
 
@@ -100,7 +108,7 @@ const isActive = (path: string) => route.path === path;
           <RouterLink
             to="/accounts"
             class="flex h-9 items-center gap-3 rounded-md px-3 text-sm transition-colors"
-            :class="isActive('/accounts') ? 'bg-card text-text' : 'text-text-secondary hover:bg-card/50'"
+            :class="isActivePage('/accounts') ? 'bg-card text-text' : 'text-text-secondary hover:bg-card/50'"
           >
             <Users class="h-4 w-4" />
             <span>{{ $t('nav.accounts') }}</span>
@@ -110,7 +118,7 @@ const isActive = (path: string) => route.path === path;
           <RouterLink
             to="/settings"
             class="flex h-9 items-center gap-3 rounded-md px-3 text-sm transition-colors"
-            :class="isActive('/settings') ? 'bg-card text-text' : 'text-text-secondary hover:bg-card/50'"
+            :class="isActivePage('/settings') ? 'bg-card text-text' : 'text-text-secondary hover:bg-card/50'"
           >
             <Settings class="h-4 w-4" />
             <span>{{ $t('nav.settings') }}</span>

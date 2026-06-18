@@ -96,6 +96,9 @@
     "AI_PROVIDER_NOT_FOUND": "AI 提供商不存在",
     "AI_API_ERROR": "AI 请求失败：{0}",
     "AI_RATE_LIMITED": "请求过于频繁，请稍后再试",
-    "AI_CONTEXT_MAIL_NOT_FOUND": "上下文邮件不存在"
+    "AI_CONTEXT_MAIL_NOT_FOUND": "上下文邮件不存在",
+    "TRANSLATION_PROVIDER_NOT_FOUND": "翻译提供商不存在",
+    "TRANSLATION_API_ERROR": "翻译失败：{0}",
+    "TRANSLATION_NO_TEXT": "没有可翻译的文本"
   }
 }

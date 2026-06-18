@@ -24,6 +24,12 @@ pub enum AeroError {
     AiRateLimited,
     #[error("AI context mail not found")]
     AiContextMailNotFound,
+    #[error("translation provider not found")]
+    TranslationProviderNotFound,
+    #[error("translation API error: {0}")]
+    TranslationApiError(String),
+    #[error("no text to translate")]
+    TranslationNoText,
 }
 
 impl AeroError {
@@ -65,6 +71,18 @@ impl AeroError {
             },
             Self::AiContextMailNotFound => ErrorPayload {
                 code: "AI_CONTEXT_MAIL_NOT_FOUND".to_string(),
+                args: vec![],
+            },
+            Self::TranslationProviderNotFound => ErrorPayload {
+                code: "TRANSLATION_PROVIDER_NOT_FOUND".to_string(),
+                args: vec![],
+            },
+            Self::TranslationApiError(msg) => ErrorPayload {
+                code: "TRANSLATION_API_ERROR".to_string(),
+                args: vec![msg.clone()],
+            },
+            Self::TranslationNoText => ErrorPayload {
+                code: "TRANSLATION_NO_TEXT".to_string(),
                 args: vec![],
             },
         }

@@ -36,7 +36,8 @@
     "placeholder": "搜索邮件...",
     "switchLanguage": "切换语言",
     "switchToEnglish": "切换到 English",
-    "switchToChinese": "切换到 简体中文"
+    "switchToChinese": "切换到 简体中文",
+    "openAiAssistant": "打开 AI 助手"
   },
   "settings": {
     "language": "语言",

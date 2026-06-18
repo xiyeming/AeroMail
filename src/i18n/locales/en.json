@@ -36,7 +36,8 @@
     "placeholder": "Search mail...",
     "switchLanguage": "Switch Language",
     "switchToEnglish": "Switch to English",
-    "switchToChinese": "Switch to 简体中文"
+    "switchToChinese": "Switch to 简体中文",
+    "openAiAssistant": "Open AI Assistant"
   },
   "settings": {
     "language": "Language",

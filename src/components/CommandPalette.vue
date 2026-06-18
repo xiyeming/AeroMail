@@ -3,9 +3,11 @@ import { ref, computed, watch, onMounted, onUnmounted } from 'vue';
 import { useI18n } from 'vue-i18n';
 import { Search } from 'lucide-vue-next';
 import { useLocale } from '@/composables/useLocale';
+import { useAiStore } from '@/stores/ai';
 
 const { t } = useI18n();
 const { setLocale } = useLocale();
+const aiStore = useAiStore();
 
 const isOpen = ref(false);
 const query = ref('');
@@ -30,7 +32,15 @@ const languageCommands = computed(() => [
   },
 ]);
 
-const allItems = computed(() => [...mockResults, ...languageCommands.value]);
+const aiCommands = computed(() => [
+  {
+    id: 'open-ai-assistant',
+    title: t('commandPalette.openAiAssistant'),
+    action: () => aiStore.togglePanel(),
+  },
+]);
+
+const allItems = computed(() => [...mockResults, ...languageCommands.value, ...aiCommands.value]);
 
 const results = ref(allItems.value);
 

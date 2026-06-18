@@ -1,6 +1,8 @@
 use serde::Serialize;
 use thiserror::Error;
 
+use crate::models::error::ErrorPayload;
+
 #[derive(Debug, Error, Serialize)]
 #[serde(tag = "type", content = "message")]
 pub enum AeroError {
@@ -16,6 +18,33 @@ pub enum AeroError {
     Internal(String),
 }
 
+impl AeroError {
+    pub fn to_payload(&self) -> ErrorPayload {
+        match self {
+            AeroError::Database(_) => ErrorPayload {
+                code: "DATABASE_ERROR".to_string(),
+                args: vec![],
+            },
+            AeroError::AccountNotFound(id) => ErrorPayload {
+                code: "ACCOUNT_NOT_FOUND".to_string(),
+                args: vec![id.clone()],
+            },
+            AeroError::InvalidConfig(reason) => ErrorPayload {
+                code: "INVALID_ACCOUNT_CONFIG".to_string(),
+                args: vec![reason.clone()],
+            },
+            AeroError::ConnectionTestFailed(reason) => ErrorPayload {
+                code: "CONNECTION_TEST_FAILED".to_string(),
+                args: vec![reason.clone()],
+            },
+            AeroError::Internal(reason) => ErrorPayload {
+                code: "INTERNAL_ERROR".to_string(),
+                args: vec![reason.clone()],
+            },
+        }
+    }
+}
+
 impl From<rusqlite::Error> for AeroError {
     fn from(err: rusqlite::Error) -> Self {
         AeroError::Database(err.to_string())
@@ -28,8 +57,8 @@ impl From<serde_json::Error> for AeroError {
     }
 }
 
-impl From<AeroError> for String {
+impl From<AeroError> for ErrorPayload {
     fn from(err: AeroError) -> Self {
-        serde_json::to_string(&err).unwrap_or_else(|_| err.to_string())
+        err.to_payload()
     }
 }

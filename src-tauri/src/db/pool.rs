@@ -331,6 +331,59 @@ impl Database {
             .map_err(|e| AeroError::Database(e.to_string()))
     }
 
+    // ---- Mail Context Helpers ----
+
+    /// Returns the subject of a mail by ID.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the database query fails.
+    #[allow(clippy::significant_drop_tightening)]
+    pub fn get_mail_subject(&self, mail_id: &str) -> Result<Option<String>, AeroError> {
+        let conn = self.connection()?;
+        let mut stmt = conn.prepare("SELECT subject FROM mails WHERE id = ?1")?;
+        let mut rows = stmt.query([mail_id])?;
+        if let Some(row) = rows.next()? {
+            Ok(row.get(0)?)
+        } else {
+            Ok(None)
+        }
+    }
+
+    /// Returns the `from_address` of a mail by ID.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the database query fails.
+    #[allow(clippy::significant_drop_tightening)]
+    pub fn get_mail_from_address(&self, mail_id: &str) -> Result<Option<String>, AeroError> {
+        let conn = self.connection()?;
+        let mut stmt = conn.prepare("SELECT from_address FROM mails WHERE id = ?1")?;
+        let mut rows = stmt.query([mail_id])?;
+        if let Some(row) = rows.next()? {
+            Ok(row.get(0)?)
+        } else {
+            Ok(None)
+        }
+    }
+
+    /// Returns the `body_text` of a mail by ID.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the database query fails.
+    #[allow(clippy::significant_drop_tightening)]
+    pub fn get_mail_body_text(&self, mail_id: &str) -> Result<Option<String>, AeroError> {
+        let conn = self.connection()?;
+        let mut stmt = conn.prepare("SELECT body_text FROM mails WHERE id = ?1")?;
+        let mut rows = stmt.query([mail_id])?;
+        if let Some(row) = rows.next()? {
+            Ok(row.get(0)?)
+        } else {
+            Ok(None)
+        }
+    }
+
     /// Inserts a new chat message and returns it.
     ///
     /// # Errors

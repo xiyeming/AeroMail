@@ -70,6 +70,10 @@
     "INTERNAL_ERROR": "内部错误：{0}",
     "UNKNOWN_ERROR": "发生未知错误",
     "ACCOUNT_NOT_FOUND": "账户不存在：{0}",
-    "CONNECTION_TEST_FAILED": "连接测试失败：{0}"
+    "CONNECTION_TEST_FAILED": "连接测试失败：{0}",
+    "AI_PROVIDER_NOT_FOUND": "AI 提供商不存在",
+    "AI_API_ERROR": "AI 请求失败：{0}",
+    "AI_RATE_LIMITED": "请求过于频繁，请稍后再试",
+    "AI_CONTEXT_MAIL_NOT_FOUND": "上下文邮件不存在"
   }
 }

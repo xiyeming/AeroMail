@@ -1,0 +1,70 @@
+use crate::db::pool::Database;
+use crate::error::AeroError;
+use crate::models::ai::{AiChatMessage, AiChatSession};
+use crate::services::ai::{AiService, ChatMessage};
+
+/// Builds the full message list for a chat completion request, including
+/// system prompt, optional email context, conversation history, and the new user message.
+///
+/// # Errors
+///
+/// Returns an error if the database query for mail context fails.
+pub fn build_messages(
+    db: &Database,
+    session: &AiChatSession,
+    history: &[AiChatMessage],
+    user_content: &str,
+) -> Result<Vec<ChatMessage>, AeroError> {
+    let mut messages = vec![ChatMessage {
+        role: "system".to_string(),
+        content: "You are a helpful email assistant. Be concise.".to_string(),
+    }];
+
+    if let Some(ref mail_id) = session.context_mail_id {
+        let subject = db.get_mail_subject(mail_id)?.unwrap_or_default();
+        let from = db.get_mail_from_address(mail_id)?.unwrap_or_default();
+        let body = db.get_mail_body_text(mail_id)?.unwrap_or_default();
+        messages.push(ChatMessage {
+            role: "system".to_string(),
+            content: format!(
+                "[Current Email Context]\nSubject: {subject}\nFrom: {from}\n\n{body}"
+            ),
+        });
+    }
+
+    for msg in history {
+        messages.push(ChatMessage {
+            role: msg.role.clone(),
+            content: msg.content.clone(),
+        });
+    }
+
+    messages.push(ChatMessage {
+        role: "user".to_string(),
+        content: user_content.to_string(),
+    });
+
+    Ok(messages)
+}
+
+/// Sends a user message in a chat session, builds context, calls the AI provider,
+/// and persists both the user message and the assistant reply.
+///
+/// # Errors
+///
+/// Returns an error if the session is not found, the database operations fail,
+/// or the AI API request fails.
+pub async fn send_message(
+    ai: &AiService,
+    session_id: &str,
+    user_content: &str,
+) -> Result<AiChatMessage, AeroError> {
+    let session = ai.db.get_chat_session(session_id)?;
+    let history = ai.db.get_chat_messages(session_id)?;
+    let messages = build_messages(&ai.db, &session, &history, user_content)?;
+    let reply = ai.complete(&session.provider_id, messages).await?;
+    let saved = ai.db.insert_chat_message(session_id, "user", user_content)?;
+    ai.db.insert_chat_message(session_id, "assistant", &reply)?;
+    ai.db.update_chat_session_timestamp(session_id)?;
+    Ok(saved)
+}

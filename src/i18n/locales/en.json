@@ -70,6 +70,10 @@
     "INTERNAL_ERROR": "Internal error: {0}",
     "UNKNOWN_ERROR": "An unknown error occurred",
     "ACCOUNT_NOT_FOUND": "Account not found: {0}",
-    "CONNECTION_TEST_FAILED": "Connection test failed: {0}"
+    "CONNECTION_TEST_FAILED": "Connection test failed: {0}",
+    "AI_PROVIDER_NOT_FOUND": "AI provider not found",
+    "AI_API_ERROR": "AI request failed: {0}",
+    "AI_RATE_LIMITED": "Rate limited, please try again later",
+    "AI_CONTEXT_MAIL_NOT_FOUND": "Context mail not found"
   }
 }

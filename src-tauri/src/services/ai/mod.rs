@@ -1,3 +1,5 @@
+pub mod chat;
+pub mod client;
 pub mod providers;
 
 use crate::db::pool::Database;
@@ -63,5 +65,20 @@ impl AiService {
     /// Returns an error if the database query fails.
     pub fn get_messages(&self, session_id: &str) -> Result<Vec<AiChatMessage>, AeroError> {
         self.db.get_chat_messages(session_id)
+    }
+
+    /// Sends a chat completion request to the specified provider.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the provider is not found or the API request fails.
+    pub async fn complete(
+        &self,
+        provider_id: &str,
+        messages: Vec<ChatMessage>,
+    ) -> Result<String, AeroError> {
+        let provider = self.db.get_ai_provider(provider_id)?;
+        let max_tokens = provider.max_tokens.unwrap_or(4096);
+        client::chat_completion(&provider, messages, max_tokens).await
     }
 }

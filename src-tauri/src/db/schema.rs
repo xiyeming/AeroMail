@@ -97,6 +97,45 @@ CREATE TABLE IF NOT EXISTS settings (
 )
 ";
 
+pub const AI_PROVIDERS_TABLE: &str = r"
+CREATE TABLE IF NOT EXISTS ai_providers (
+    id TEXT PRIMARY KEY,
+    name TEXT NOT NULL,
+    kind TEXT NOT NULL,
+    api_key_encrypted BLOB NOT NULL,
+    base_url TEXT,
+    model TEXT NOT NULL,
+    max_tokens INTEGER
+)
+";
+
+pub const AI_CHAT_SESSIONS_TABLE: &str = r"
+CREATE TABLE IF NOT EXISTS ai_chat_sessions (
+    id TEXT PRIMARY KEY,
+    title TEXT,
+    provider_id TEXT NOT NULL,
+    model TEXT NOT NULL,
+    context_mail_id TEXT,
+    created_at INTEGER NOT NULL,
+    updated_at INTEGER NOT NULL
+)
+";
+
+pub const AI_CHAT_MESSAGES_TABLE: &str = r"
+CREATE TABLE IF NOT EXISTS ai_chat_messages (
+    id TEXT PRIMARY KEY,
+    session_id TEXT NOT NULL,
+    role TEXT NOT NULL,
+    content TEXT NOT NULL,
+    created_at INTEGER NOT NULL
+)
+";
+
+pub const AI_CHAT_MESSAGES_INDEX: &str = r"
+CREATE INDEX IF NOT EXISTS idx_ai_messages_session
+ON ai_chat_messages(session_id, created_at)
+";
+
 pub const ALL_SCHEMAS: &[&str] = &[
     ACCOUNTS_TABLE,
     FOLDERS_TABLE,
@@ -104,4 +143,8 @@ pub const ALL_SCHEMAS: &[&str] = &[
     ATTACHMENTS_TABLE,
     DRAFTS_TABLE,
     SETTINGS_TABLE,
+    AI_PROVIDERS_TABLE,
+    AI_CHAT_SESSIONS_TABLE,
+    AI_CHAT_MESSAGES_TABLE,
+    AI_CHAT_MESSAGES_INDEX,
 ];

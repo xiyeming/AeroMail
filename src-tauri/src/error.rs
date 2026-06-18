@@ -16,6 +16,14 @@ pub enum AeroError {
     ConnectionTestFailed(String),
     #[error("internal error: {0}")]
     Internal(String),
+    #[error("AI provider not found")]
+    AiProviderNotFound,
+    #[error("AI API error: {0}")]
+    AiApiError(String),
+    #[error("AI rate limited")]
+    AiRateLimited,
+    #[error("AI context mail not found")]
+    AiContextMailNotFound,
 }
 
 impl AeroError {
@@ -42,6 +50,22 @@ impl AeroError {
             Self::Internal(reason) => ErrorPayload {
                 code: "INTERNAL_ERROR".to_string(),
                 args: vec![reason.clone()],
+            },
+            Self::AiProviderNotFound => ErrorPayload {
+                code: "AI_PROVIDER_NOT_FOUND".to_string(),
+                args: vec![],
+            },
+            Self::AiApiError(msg) => ErrorPayload {
+                code: "AI_API_ERROR".to_string(),
+                args: vec![msg.clone()],
+            },
+            Self::AiRateLimited => ErrorPayload {
+                code: "AI_RATE_LIMITED".to_string(),
+                args: vec![],
+            },
+            Self::AiContextMailNotFound => ErrorPayload {
+                code: "AI_CONTEXT_MAIL_NOT_FOUND".to_string(),
+                args: vec![],
             },
         }
     }

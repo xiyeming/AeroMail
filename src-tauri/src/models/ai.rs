@@ -1,0 +1,62 @@
+use serde::{Deserialize, Serialize};
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct AiProvider {
+    pub id: String,
+    pub name: String,
+    pub kind: AiProviderKind,
+    pub api_key_encrypted: Vec<u8>,
+    pub base_url: Option<String>,
+    pub model: String,
+    pub max_tokens: Option<u32>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum AiProviderKind {
+    OpenAI,
+    Anthropic,
+    Gemini,
+    #[serde(rename = "azure_openai")]
+    AzureOpenAI,
+    DeepSeek,
+    Moonshot,
+    Qwen,
+    Zhipu,
+    MiniMax,
+    Baichuan,
+    #[serde(rename = "custom_openai_compatible")]
+    CustomOpenAICompatible,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct AiProviderSummary {
+    pub id: String,
+    pub name: String,
+    pub kind: String,
+    pub model: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct AiChatSession {
+    pub id: String,
+    pub title: Option<String>,
+    pub provider_id: String,
+    pub model: String,
+    pub context_mail_id: Option<String>,
+    pub created_at: i64,
+    pub updated_at: i64,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct AiChatMessage {
+    pub id: String,
+    pub session_id: String,
+    pub role: String,
+    pub content: String,
+    pub created_at: i64,
+}

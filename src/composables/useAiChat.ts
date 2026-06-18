@@ -25,25 +25,12 @@ export function useAiChat() {
   async function sendMessage(sessionId: string, content: string) {
     isLoading.value = true;
     try {
-      const userMsg = await invoke<AiChatMessage>('send_chat_message', {
+      await invoke('send_chat_message', {
         sessionId,
         content,
       });
-      messages.value.push(userMsg);
 
-      const assistantMsg: AiChatMessage = {
-        id: crypto.randomUUID(),
-        sessionId,
-        role: 'assistant',
-        content: '',
-        createdAt: Date.now(),
-      };
-      messages.value.push(assistantMsg);
-
-      const fullContent = await invoke<string>('get_ai_completion', {
-        sessionId,
-      });
-      assistantMsg.content = fullContent;
+      await loadMessages(sessionId);
     } finally {
       isLoading.value = false;
     }

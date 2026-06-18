@@ -1,6 +1,7 @@
 use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct AiProvider {
     pub id: String,
     pub name: String,
@@ -30,6 +31,7 @@ pub enum AiProviderKind {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct AiProviderSummary {
     pub id: String,
     pub name: String,
@@ -38,6 +40,7 @@ pub struct AiProviderSummary {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct AiChatSession {
     pub id: String,
     pub title: Option<String>,
@@ -49,6 +52,7 @@ pub struct AiChatSession {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct AiChatMessage {
     pub id: String,
     pub session_id: String,

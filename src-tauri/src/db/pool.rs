@@ -459,6 +459,39 @@ impl Database {
         }
     }
 
+    /// Retrieves any cached translation by source hash and target language,
+    /// regardless of which provider produced it.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the database query fails.
+    #[allow(clippy::significant_drop_tightening)]
+    pub fn get_any_translation(
+        &self,
+        source_hash: &str,
+        target_lang: &str,
+    ) -> Result<Option<crate::models::translation::CachedTranslation>, AeroError> {
+        let conn = self.connection()?;
+        let mut stmt = conn.prepare(
+            "SELECT id, source_hash, target_lang, provider_id, translated_text, created_at
+             FROM translations WHERE source_hash = ?1 AND target_lang = ?2
+             ORDER BY created_at DESC LIMIT 1",
+        )?;
+        let mut rows = stmt.query(rusqlite::params![source_hash, target_lang])?;
+        if let Some(row) = rows.next()? {
+            Ok(Some(crate::models::translation::CachedTranslation {
+                id: row.get(0)?,
+                source_hash: row.get(1)?,
+                target_lang: row.get(2)?,
+                provider_id: row.get(3)?,
+                translated_text: row.get(4)?,
+                created_at: row.get(5)?,
+            }))
+        } else {
+            Ok(None)
+        }
+    }
+
     /// Saves a translation to the cache.
     ///
     /// # Errors

@@ -10,9 +10,14 @@ use commands::ai::{
     list_ai_providers, list_chat_sessions, send_chat_message, test_ai_provider, upsert_ai_provider,
 };
 use commands::settings::{get_setting, set_setting};
+use commands::translation::{
+    delete_translation_provider, get_cached_translation, list_translation_providers,
+    translate_mail_text, upsert_translation_provider,
+};
 use db::pool::Database;
 use services::account_manager::AccountManager;
 use services::ai::AiService;
+use services::translation::TranslationService;
 use std::sync::Arc;
 use tauri::Manager;
 use tokio::sync::RwLock;
@@ -20,6 +25,7 @@ use tokio::sync::RwLock;
 pub struct AppState {
     pub account_manager: Arc<RwLock<AccountManager>>,
     pub ai_service: Arc<RwLock<AiService>>,
+    pub translation_service: TranslationService,
     pub db: Arc<Database>,
 }
 
@@ -34,9 +40,11 @@ impl AppState {
         let db = Arc::new(Database::new(app_handle)?);
         let account_manager = Arc::new(RwLock::new(AccountManager::new(Arc::clone(&db))));
         let ai_service = Arc::new(RwLock::new(AiService::new(Arc::clone(&db))));
+        let translation_service = TranslationService::new(Arc::clone(&db));
         Ok(Self {
             account_manager,
             ai_service,
+            translation_service,
             db,
         })
     }
@@ -82,6 +90,11 @@ pub fn run() {
             list_chat_sessions,
             get_chat_messages,
             delete_chat_session,
+            list_translation_providers,
+            upsert_translation_provider,
+            delete_translation_provider,
+            translate_mail_text,
+            get_cached_translation,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

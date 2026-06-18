@@ -15,11 +15,15 @@ pub struct ChatMessage {
 
 pub struct AiService {
     pub db: Arc<Database>,
+    pub client: reqwest::Client,
 }
 
 impl AiService {
-    pub const fn new(db: Arc<Database>) -> Self {
-        Self { db }
+    pub fn new(db: Arc<Database>) -> Self {
+        Self {
+            db,
+            client: reqwest::Client::new(),
+        }
     }
 
     /// Lists all configured AI providers as summaries.
@@ -79,6 +83,6 @@ impl AiService {
     ) -> Result<String, AeroError> {
         let provider = self.db.get_ai_provider(provider_id)?;
         let max_tokens = provider.max_tokens.unwrap_or(4096);
-        client::chat_completion(&provider, messages, max_tokens).await
+        client::chat_completion(&self.client, &provider, messages, max_tokens).await
     }
 }

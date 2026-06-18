@@ -21,9 +21,15 @@ pub fn build_messages(
     }];
 
     if let Some(ref mail_id) = session.context_mail_id {
-        let subject = db.get_mail_subject(mail_id)?.unwrap_or_default();
-        let from = db.get_mail_from_address(mail_id)?.unwrap_or_default();
-        let body = db.get_mail_body_text(mail_id)?.unwrap_or_default();
+        let subject = db
+            .get_mail_subject(mail_id)?
+            .ok_or(AeroError::AiContextMailNotFound)?;
+        let from = db
+            .get_mail_from_address(mail_id)?
+            .ok_or(AeroError::AiContextMailNotFound)?;
+        let body = db
+            .get_mail_body_text(mail_id)?
+            .ok_or(AeroError::AiContextMailNotFound)?;
         messages.push(ChatMessage {
             role: "system".to_string(),
             content: format!(
@@ -63,8 +69,33 @@ pub async fn send_message(
     let history = ai.db.get_chat_messages(session_id)?;
     let messages = build_messages(&ai.db, &session, &history, user_content)?;
     let reply = ai.complete(&session.provider_id, messages).await?;
-    let saved = ai.db.insert_chat_message(session_id, "user", user_content)?;
-    ai.db.insert_chat_message(session_id, "assistant", &reply)?;
-    ai.db.update_chat_session_timestamp(session_id)?;
-    Ok(saved)
+
+    let mut conn = ai.db.connection()?;
+    let tx = conn.transaction()?;
+    let user_id = uuid::Uuid::new_v4().to_string();
+    let assistant_id = uuid::Uuid::new_v4().to_string();
+    let now = chrono::Utc::now().timestamp();
+
+    tx.execute(
+        "INSERT INTO ai_chat_messages (id, session_id, role, content, created_at) VALUES (?1, ?2, ?3, ?4, ?5)",
+        (&user_id, session_id, "user", user_content, now),
+    )?;
+    tx.execute(
+        "INSERT INTO ai_chat_messages (id, session_id, role, content, created_at) VALUES (?1, ?2, ?3, ?4, ?5)",
+        (&assistant_id, session_id, "assistant", &reply, now),
+    )?;
+    tx.execute(
+        "UPDATE ai_chat_sessions SET updated_at = ?1 WHERE id = ?2",
+        (now, session_id),
+    )?;
+    tx.commit()?;
+    drop(conn);
+
+    Ok(AiChatMessage {
+        id: user_id,
+        session_id: session_id.to_string(),
+        role: "user".to_string(),
+        content: user_content.to_string(),
+        created_at: now,
+    })
 }

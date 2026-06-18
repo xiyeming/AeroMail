@@ -35,13 +35,20 @@ struct Choice {
 /// Returns an error if the API key is invalid, the HTTP request fails,
 /// or the response cannot be parsed.
 pub async fn chat_completion(
+    client: &Client,
     provider: &AiProvider,
     messages: Vec<ChatMessage>,
     max_tokens: u32,
 ) -> Result<String, AeroError> {
     let api_key = String::from_utf8(provider.api_key_encrypted.clone())
         .map_err(|e| AeroError::AiApiError(format!("invalid api key: {e}")))?;
-    let base_url = provider.base_url.as_deref().unwrap_or("");
+    let base_url = provider
+        .base_url
+        .as_deref()
+        .filter(|s| !s.trim().is_empty())
+        .ok_or_else(|| {
+            AeroError::AiApiError("AI provider base_url is not configured".to_string())
+        })?;
     let url = format!("{}/chat/completions", base_url.trim_end_matches('/'));
 
     let payload_messages: Vec<ChatMessagePayload> = messages
@@ -58,7 +65,6 @@ pub async fn chat_completion(
         max_tokens,
     };
 
-    let client = Client::new();
     let res = client
         .post(&url)
         .header("Authorization", format!("Bearer {api_key}"))

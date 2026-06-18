@@ -136,6 +136,15 @@ CREATE INDEX IF NOT EXISTS idx_ai_messages_session
 ON ai_chat_messages(session_id, created_at)
 ";
 
+pub const TRANSLATION_PROVIDERS_TABLE: &str = r"
+CREATE TABLE IF NOT EXISTS translation_providers (
+    id TEXT PRIMARY KEY,
+    name TEXT NOT NULL,
+    provider_type TEXT NOT NULL,
+    config_json TEXT NOT NULL
+)
+";
+
 pub const TRANSLATIONS_TABLE: &str = r"
 CREATE TABLE IF NOT EXISTS translations (
     id TEXT PRIMARY KEY,
@@ -163,6 +172,7 @@ pub const ALL_SCHEMAS: &[&str] = &[
     AI_CHAT_SESSIONS_TABLE,
     AI_CHAT_MESSAGES_TABLE,
     AI_CHAT_MESSAGES_INDEX,
+    TRANSLATION_PROVIDERS_TABLE,
     TRANSLATIONS_TABLE,
     TRANSLATIONS_INDEX,
 ];

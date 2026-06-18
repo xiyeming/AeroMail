@@ -331,6 +331,158 @@ impl Database {
             .map_err(|e| AeroError::Database(e.to_string()))
     }
 
+    // ---- Translation Provider CRUD ----
+
+    /// Lists all translation providers.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the database query fails.
+    #[allow(clippy::significant_drop_tightening)]
+    pub fn list_translation_providers(
+        &self,
+    ) -> Result<Vec<crate::models::translation::TranslationProvider>, AeroError> {
+        let conn = self.connection()?;
+        let mut stmt = conn.prepare(
+            "SELECT config_json FROM translation_providers",
+        )?;
+        let rows = stmt.query_map([], |row| {
+            let config_json: String = row.get(0)?;
+            let provider: crate::models::translation::TranslationProvider =
+                serde_json::from_str(&config_json)
+                    .map_err(|e| rusqlite::Error::InvalidParameterName(e.to_string()))?;
+            Ok(provider)
+        })?;
+        rows.collect::<Result<Vec<_>, _>>()
+            .map_err(|e| AeroError::Database(e.to_string()))
+    }
+
+    /// Retrieves a single translation provider by ID.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the provider is not found or the query fails.
+    pub fn get_translation_provider(
+        &self,
+        id: &str,
+    ) -> Result<crate::models::translation::TranslationProvider, AeroError> {
+        let conn = self.connection()?;
+        conn.query_row(
+            "SELECT config_json FROM translation_providers WHERE id = ?1",
+            [id],
+            |row| {
+                let config_json: String = row.get(0)?;
+                serde_json::from_str(&config_json)
+                    .map_err(|e| rusqlite::Error::InvalidParameterName(e.to_string()))
+            },
+        )
+        .map_err(|e| AeroError::Database(e.to_string()))
+    }
+
+    /// Inserts or updates a translation provider.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the database write fails.
+    pub fn upsert_translation_provider(
+        &self,
+        p: &crate::models::translation::TranslationProvider,
+    ) -> Result<(), AeroError> {
+        let conn = self.connection()?;
+        let (id, name, provider_type) = match p {
+            crate::models::translation::TranslationProvider::Traditional {
+                id, name, ..
+            } => (id, name, "traditional"),
+            crate::models::translation::TranslationProvider::Ai { id, name, .. } => {
+                (id, name, "ai")
+            }
+        };
+        let config_json = serde_json::to_string(p)?;
+        conn.execute(
+            "INSERT INTO translation_providers (id, name, provider_type, config_json)
+             VALUES (?1, ?2, ?3, ?4)
+             ON CONFLICT(id) DO UPDATE SET name=excluded.name, provider_type=excluded.provider_type, config_json=excluded.config_json",
+            (id, name, provider_type, config_json),
+        )?;
+        drop(conn);
+        Ok(())
+    }
+
+    /// Deletes a translation provider by ID.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the database write fails.
+    pub fn delete_translation_provider(&self, id: &str) -> Result<(), AeroError> {
+        let conn = self.connection()?;
+        conn.execute(
+            "DELETE FROM translation_providers WHERE id = ?1",
+            [id],
+        )?;
+        drop(conn);
+        Ok(())
+    }
+
+    /// Retrieves a cached translation by source hash, target language, and provider.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the database query fails.
+    #[allow(clippy::significant_drop_tightening)]
+    pub fn get_translation(
+        &self,
+        source_hash: &str,
+        target_lang: &str,
+        provider_id: &str,
+    ) -> Result<Option<crate::models::translation::CachedTranslation>, AeroError> {
+        let conn = self.connection()?;
+        let mut stmt = conn.prepare(
+            "SELECT id, source_hash, target_lang, provider_id, translated_text, created_at
+             FROM translations WHERE source_hash = ?1 AND target_lang = ?2 AND provider_id = ?3",
+        )?;
+        let mut rows = stmt.query(rusqlite::params![
+            source_hash,
+            target_lang,
+            provider_id
+        ])?;
+        if let Some(row) = rows.next()? {
+            Ok(Some(crate::models::translation::CachedTranslation {
+                id: row.get(0)?,
+                source_hash: row.get(1)?,
+                target_lang: row.get(2)?,
+                provider_id: row.get(3)?,
+                translated_text: row.get(4)?,
+                created_at: row.get(5)?,
+            }))
+        } else {
+            Ok(None)
+        }
+    }
+
+    /// Saves a translation to the cache.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the database write fails.
+    pub fn save_translation(
+        &self,
+        source_hash: &str,
+        target_lang: &str,
+        provider_id: &str,
+        translated_text: &str,
+    ) -> Result<(), AeroError> {
+        let conn = self.connection()?;
+        let id = uuid::Uuid::new_v4().to_string();
+        let now = chrono::Utc::now().timestamp();
+        conn.execute(
+            "INSERT INTO translations (id, source_hash, target_lang, provider_id, translated_text, created_at)
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6)",
+            (&id, source_hash, target_lang, provider_id, translated_text, now),
+        )?;
+        drop(conn);
+        Ok(())
+    }
+
     // ---- Mail Context Helpers ----
 
     /// Returns the subject of a mail by ID.

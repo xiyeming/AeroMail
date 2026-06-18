@@ -41,7 +41,15 @@
   "settings": {
     "language": "语言",
     "english": "English",
-    "simplifiedChinese": "简体中文"
+    "simplifiedChinese": "简体中文",
+    "aiProviders": "AI 提供商",
+    "addProvider": "添加提供商",
+    "noProviders": "暂未配置 AI 提供商",
+    "providerType": "提供商类型",
+    "apiKey": "API 密钥",
+    "baseUrl": "基础 URL（可选）",
+    "model": "模型",
+    "saveProvider": "保存提供商"
   },
   "mail": {
     "selectEmail": "选择一封邮件阅读",
@@ -65,8 +73,14 @@
     "thinking": "思考中...",
     "send": "发送"
   },
+  "aiActions": {
+    "summarize": "总结",
+    "generateReply": "回复",
+    "extractTodos": "待办"
+  },
   "common": {
-    "loading": "加载中..."
+    "loading": "加载中...",
+    "cancel": "取消"
   },
   "errors": {
     "IMAP_AUTH_FAILED": "IMAP 认证失败：{0}",

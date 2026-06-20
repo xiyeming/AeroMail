@@ -13,6 +13,32 @@ pub fn run_migrations(conn: &mut Connection) -> Result<(), AeroError> {
     for schema in ALL_SCHEMAS {
         tx.execute_batch(schema)?;
     }
+    run_draft_migrations(&tx)?;
     tx.commit()?;
+    Ok(())
+}
+
+fn column_exists(tx: &rusqlite::Transaction, table: &str, column: &str) -> Result<bool, AeroError> {
+    let mut stmt = tx.prepare("SELECT 1 FROM pragma_table_info(?1) WHERE name = ?2")?;
+    let mut rows = stmt.query([table, column])?;
+    Ok(rows.next()?.is_some())
+}
+
+fn run_draft_migrations(tx: &rusqlite::Transaction) -> Result<(), AeroError> {
+    let columns = [
+        "bcc_addresses TEXT",
+        "reply_context_json TEXT",
+        "synced_at INTEGER",
+        "remote_uid INTEGER",
+    ];
+    for column_def in &columns {
+        let column_name = column_def.split_whitespace().next().unwrap_or(column_def);
+        if !column_exists(tx, "drafts", column_name)? {
+            tx.execute(
+                &format!("ALTER TABLE drafts ADD COLUMN {}", column_def),
+                [],
+            )?;
+        }
+    }
     Ok(())
 }

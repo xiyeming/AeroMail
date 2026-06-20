@@ -81,10 +81,14 @@ CREATE TABLE IF NOT EXISTS drafts (
     subject TEXT,
     to_addresses TEXT,
     cc_addresses TEXT,
+    bcc_addresses TEXT,
+    reply_context_json TEXT,
     body_html TEXT,
     body_text TEXT,
     attachments_json TEXT,
     saved_at INTEGER,
+    synced_at INTEGER,
+    remote_uid INTEGER,
     FOREIGN KEY (account_id) REFERENCES accounts(id) ON DELETE SET NULL
 )
 ";

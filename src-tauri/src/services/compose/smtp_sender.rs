@@ -18,7 +18,7 @@ pub async fn send_message(
 
     let mailer = match config.smtp.tls_mode {
         TlsMode::Required => {
-            AsyncSmtpTransport::<Tokio1Executor>::starttls_relay(&config.smtp.host)
+            AsyncSmtpTransport::<Tokio1Executor>::relay(&config.smtp.host)
                 .map_err(|e| AeroError::SmtpConnectionFailed(e.to_string()))?
                 .port(config.smtp.port)
                 .tls(Tls::Required(tls_parameters))
@@ -115,7 +115,11 @@ fn parse_envelope_from_mime(message_bytes: &[u8]) -> Result<Envelope, AeroError>
         ));
     }
 
-    Envelope::new(from_addr, to_addrs)
+    let from_addr = from_addr.ok_or_else(|| {
+        AeroError::InvalidRecipient("missing From header in message".to_string())
+    })?;
+
+    Envelope::new(Some(from_addr), to_addrs)
         .map_err(|e| AeroError::MailBuilderFailed(format!("invalid envelope: {e}")))
 }
 

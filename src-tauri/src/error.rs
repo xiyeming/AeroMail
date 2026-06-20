@@ -30,6 +30,36 @@ pub enum AeroError {
     TranslationApiError(String),
     #[error("no text to translate")]
     TranslationNoText,
+    #[error("IMAP connection failed: {0}")]
+    ImapConnectionFailed(String),
+    #[error("IMAP authentication failed: {0}")]
+    ImapAuthFailed(String),
+    #[error("mail not found: {0}")]
+    MailNotFound(String),
+    #[error("folder not found: {0}")]
+    FolderNotFound(String),
+    #[error("SMTP connection failed: {0}")]
+    SmtpConnectionFailed(String),
+    #[error("SMTP authentication failed: {0}")]
+    SmtpAuthFailed(String),
+    #[error("invalid recipient: {0}")]
+    InvalidRecipient(String),
+    #[error("draft not found: {0}")]
+    DraftNotFound(String),
+    #[error("attachment not found: {0}")]
+    AttachmentNotFound(String),
+    #[error("invalid attachment: {0}")]
+    InvalidAttachment(String),
+    #[error("mail builder failed: {0}")]
+    MailBuilderFailed(String),
+    #[error("IMAP append failed: {0}")]
+    ImapAppendFailed(String),
+    #[error("sync error: {0}")]
+    SyncError(String),
+    #[error("search index error: {0}")]
+    SearchIndexError(String),
+    #[error("search query error: {0}")]
+    SearchQueryError(String),
 }
 
 impl AeroError {
@@ -84,6 +114,66 @@ impl AeroError {
             Self::TranslationNoText => ErrorPayload {
                 code: "TRANSLATION_NO_TEXT".to_string(),
                 args: vec![],
+            },
+            Self::ImapConnectionFailed(msg) => ErrorPayload {
+                code: "IMAP_CONNECTION_FAILED".to_string(),
+                args: vec![msg.clone()],
+            },
+            Self::ImapAuthFailed(msg) => ErrorPayload {
+                code: "IMAP_AUTH_FAILED".to_string(),
+                args: vec![msg.clone()],
+            },
+            Self::MailNotFound(id) => ErrorPayload {
+                code: "MAIL_NOT_FOUND".to_string(),
+                args: vec![id.clone()],
+            },
+            Self::FolderNotFound(id) => ErrorPayload {
+                code: "FOLDER_NOT_FOUND".to_string(),
+                args: vec![id.clone()],
+            },
+            Self::SmtpConnectionFailed(msg) => ErrorPayload {
+                code: "SMTP_CONNECTION_FAILED".to_string(),
+                args: vec![msg.clone()],
+            },
+            Self::SmtpAuthFailed(msg) => ErrorPayload {
+                code: "SMTP_AUTH_FAILED".to_string(),
+                args: vec![msg.clone()],
+            },
+            Self::InvalidRecipient(msg) => ErrorPayload {
+                code: "INVALID_RECIPIENT".to_string(),
+                args: vec![msg.clone()],
+            },
+            Self::DraftNotFound(id) => ErrorPayload {
+                code: "DRAFT_NOT_FOUND".to_string(),
+                args: vec![id.clone()],
+            },
+            Self::AttachmentNotFound(id) => ErrorPayload {
+                code: "ATTACHMENT_NOT_FOUND".to_string(),
+                args: vec![id.clone()],
+            },
+            Self::InvalidAttachment(msg) => ErrorPayload {
+                code: "INVALID_ATTACHMENT".to_string(),
+                args: vec![msg.clone()],
+            },
+            Self::MailBuilderFailed(msg) => ErrorPayload {
+                code: "MAIL_BUILDER_FAILED".to_string(),
+                args: vec![msg.clone()],
+            },
+            Self::ImapAppendFailed(msg) => ErrorPayload {
+                code: "IMAP_APPEND_FAILED".to_string(),
+                args: vec![msg.clone()],
+            },
+            Self::SyncError(msg) => ErrorPayload {
+                code: "SYNC_ERROR".to_string(),
+                args: vec![msg.clone()],
+            },
+            Self::SearchIndexError(msg) => ErrorPayload {
+                code: "SEARCH_INDEX_ERROR".to_string(),
+                args: vec![msg.clone()],
+            },
+            Self::SearchQueryError(msg) => ErrorPayload {
+                code: "SEARCH_QUERY_ERROR".to_string(),
+                args: vec![msg.clone()],
             },
         }
     }

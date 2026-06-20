@@ -21,19 +21,37 @@ impl DraftService {
         Self { db, drafts_dir }
     }
 
+    /// Validates that the given ID is a UUID and returns it.
+    fn validate_id(id: &str, name: &str) -> Result<&str, AeroError> {
+        if Uuid::parse_str(id).is_ok() {
+            Ok(id)
+        } else {
+            Err(AeroError::InvalidAttachment(format!(
+                "invalid {name} id: {id}"
+            )))
+        }
+    }
+
     /// Returns the directory for a draft's attachments.
-    pub fn draft_dir(&self, draft_id: &str) -> PathBuf {
-        self.drafts_dir.join(draft_id)
+    pub fn draft_dir(&self, draft_id: &str) -> Result<PathBuf, AeroError> {
+        let id = Self::validate_id(draft_id, "draft")?;
+        Ok(self.drafts_dir.join(id))
     }
 
     /// Returns the directory for a specific attachment.
-    pub fn attachment_dir(&self, draft_id: &str, attachment_id: &str) -> PathBuf {
-        self.draft_dir(draft_id).join(attachment_id)
+    pub fn attachment_dir(
+        &self,
+        draft_id: &str,
+        attachment_id: &str,
+    ) -> Result<PathBuf, AeroError> {
+        let draft_dir = self.draft_dir(draft_id)?;
+        let id = Self::validate_id(attachment_id, "attachment")?;
+        Ok(draft_dir.join(id))
     }
 
     /// Ensures the draft directory exists.
     fn ensure_draft_dir(&self, draft_id: &str) -> Result<PathBuf, AeroError> {
-        let dir = self.draft_dir(draft_id);
+        let dir = self.draft_dir(draft_id)?;
         std::fs::create_dir_all(&dir)
             .map_err(|e| AeroError::Internal(format!("failed to create draft dir: {e}")))?;
         Ok(dir)
@@ -75,9 +93,10 @@ impl DraftService {
         draft_id: &str,
     ) -> Result<(), AeroError> {
         self.db.delete_draft(draft_id)?;
-        let dir = self.draft_dir(draft_id);
+        let dir = self.draft_dir(draft_id)?;
         if dir.exists() {
-            let _ = std::fs::remove_dir_all(&dir);
+            std::fs::remove_dir_all(&dir)
+                .map_err(|e| AeroError::Internal(format!("failed to remove draft dir: {e}")))?;
         }
         Ok(())
     }
@@ -90,7 +109,7 @@ impl DraftService {
         data: &[u8],
     ) -> Result<PathBuf, AeroError> {
         self.ensure_draft_dir(draft_id)?;
-        let dir = self.attachment_dir(draft_id, &attachment.id);
+        let dir = self.attachment_dir(draft_id, &attachment.id)?;
         std::fs::create_dir_all(&dir)
             .map_err(|e| AeroError::InvalidAttachment(format!("failed to create attachment dir: {e}")))?;
         let path = dir.join(&attachment.filename);
@@ -106,7 +125,7 @@ impl DraftService {
         attachment_id: &str,
         filename: &str,
     ) -> Result<Vec<u8>, AeroError> {
-        let path = self.attachment_dir(draft_id, attachment_id).join(filename);
+        let path = self.attachment_dir(draft_id, attachment_id)?.join(filename);
         std::fs::read(&path).map_err(|e| AeroError::AttachmentNotFound(format!("{path:?}: {e}")))
     }
 

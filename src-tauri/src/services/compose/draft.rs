@@ -22,7 +22,7 @@ impl DraftService {
     }
 
     /// Validates that the given ID is a UUID and returns it.
-    fn validate_id(id: &str, name: &str) -> Result<&str, AeroError> {
+    fn validate_id<'a>(id: &'a str, name: &str) -> Result<&'a str, AeroError> {
         if Uuid::parse_str(id).is_ok() {
             Ok(id)
         } else {

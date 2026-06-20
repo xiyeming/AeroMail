@@ -1074,17 +1074,12 @@ impl Database {
         account_id: Option<&str>,
     ) -> Result<Vec<crate::models::compose::ComposeDraftSummary>, AeroError> {
         let conn = self.connection()?;
-        let sql = match account_id {
-            Some(_) => "SELECT id, account_id, subject, to_addresses, saved_at, attachments_json
-             FROM drafts WHERE account_id = ?1 ORDER BY saved_at DESC",
-            None => "SELECT id, account_id, subject, to_addresses, saved_at, attachments_json
-             FROM drafts ORDER BY saved_at DESC",
-        };
-        let mut stmt = conn.prepare(sql)?;
-        let mut rows = match account_id {
-            Some(id) => stmt.query([id])?,
-            None => stmt.query([])?,
-        };
+        let mut stmt = conn.prepare(
+            "SELECT id, account_id, subject, to_addresses, saved_at, attachments_json
+             FROM drafts WHERE (?1 IS NULL OR account_id = ?1)
+             ORDER BY saved_at DESC",
+        )?;
+        let mut rows = stmt.query([account_id])?;
         let mut result = Vec::new();
         while let Some(row) = rows.next()? {
             let to: Vec<String> = serde_json::from_str(&row.get::<_, String>(3)?)

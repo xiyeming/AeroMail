@@ -3,6 +3,7 @@ use std::sync::Arc;
 
 use imap::Session;
 use native_tls::TlsStream;
+use tracing::warn;
 
 use crate::db::pool::Database;
 use crate::error::AeroError;
@@ -23,18 +24,21 @@ pub fn sync_draft_to_imap(
 
     let drafts_folder = find_drafts_folder(&mut session)?;
 
-    // Delete old draft if exists
+    // Delete old draft if exists; best-effort — continue even if deletion fails
+    // (e.g., the old draft may have already been removed server-side).
     if let Some(uid) = draft.remote_uid {
-        let _ = delete_uid(&mut session, &drafts_folder, uid);
+        if let Err(e) = delete_uid(&mut session, &drafts_folder, uid) {
+            warn!("Failed to delete old IMAP draft {} in {}: {}", uid, drafts_folder, e);
+        }
     }
 
     // APPEND new draft with \Draft flag
     session
         .select(&drafts_folder)
-        .map_err(|e| AeroError::ImapAppendFailed(e.to_string()))?;
+        .map_err(|e| AeroError::ImapConnectionFailed(e.to_string()))?;
 
     let flags = [imap::types::Flag::Draft];
-    let result = session
+    session
         .append_with_flags(&drafts_folder, message_bytes, &flags)
         .map_err(|e| AeroError::ImapAppendFailed(e.to_string()))?;
 
@@ -42,7 +46,6 @@ pub fn sync_draft_to_imap(
 
     // The imap crate append returns (), so we cannot extract a UID.
     // Return 0 to indicate the UID is unknown.
-    let _ = result;
     Ok(0)
 }
 
@@ -124,12 +127,12 @@ fn delete_uid(
 ) -> Result<(), AeroError> {
     session
         .select(folder)
-        .map_err(|e| AeroError::ImapAppendFailed(e.to_string()))?;
+        .map_err(|e| AeroError::ImapConnectionFailed(e.to_string()))?;
     session
         .uid_store(format!("{uid}"), "+FLAGS (\\Deleted)")
-        .map_err(|e| AeroError::ImapAppendFailed(e.to_string()))?;
+        .map_err(|e| AeroError::ImapConnectionFailed(e.to_string()))?;
     session
         .expunge()
-        .map_err(|e| AeroError::ImapAppendFailed(e.to_string()))?;
+        .map_err(|e| AeroError::ImapConnectionFailed(e.to_string()))?;
     Ok(())
 }

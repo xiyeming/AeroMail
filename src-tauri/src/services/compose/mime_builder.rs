@@ -51,6 +51,13 @@ pub fn build_message(
     Ok(message.formatted())
 }
 
+fn content_type(mime: &str) -> ContentType {
+    ContentType::parse(mime).unwrap_or_else(|_| {
+        ContentType::parse("application/octet-stream")
+            .unwrap_or_else(|_| unreachable!("static fallback content type"))
+    })
+}
+
 fn build_body_and_attachments(
     draft: &ComposeDraft,
     attachment_bytes: &[(String, Vec<u8>)],
@@ -59,18 +66,12 @@ fn build_body_and_attachments(
     let body_part = MultiPart::alternative()
         .singlepart(
             SinglePart::builder()
-                .header(
-                    ContentType::parse("text/plain; charset=utf-8")
-                        .unwrap_or_else(|_| ContentType::parse("text/plain").unwrap()),
-                )
+                .header(content_type("text/plain; charset=utf-8"))
                 .body(draft.body_text.clone()),
         )
         .singlepart(
             SinglePart::builder()
-                .header(
-                    ContentType::parse("text/html; charset=utf-8")
-                        .unwrap_or_else(|_| ContentType::parse("text/html").unwrap()),
-                )
+                .header(content_type("text/html; charset=utf-8"))
                 .body(draft.body_html.clone()),
         );
 
@@ -88,10 +89,7 @@ fn build_body_and_attachments(
             .map(|(_, bytes)| bytes.clone())
             .ok_or_else(|| AeroError::AttachmentNotFound(attachment.id.clone()))?;
 
-        let content_type = attachment
-            .mime_type
-            .parse::<ContentType>()
-            .unwrap_or_else(|_| ContentType::parse("application/octet-stream").unwrap());
+        let content_type = content_type(&attachment.mime_type);
 
         if attachment.is_inline {
             let content_id = attachment

@@ -236,7 +236,9 @@
     "settings": "Settings",
     "close": "Close",
     "delete": "Delete",
-    "confirm": "Confirm"
+    "confirm": "Confirm",
+    "minimize": "Minimize",
+    "maximize": "Maximize"
   },
   "errors": {
     "SMTP_CONNECTION_FAILED": "Could not connect to the outgoing mail server.",

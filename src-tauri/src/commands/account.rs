@@ -10,6 +10,7 @@ use crate::models::error::ErrorPayload;
 ///
 /// Returns an error if the account configuration is invalid or the database write fails.
 #[tauri::command]
+#[tracing::instrument(skip(state), err(Debug))]
 pub async fn add_account(
     config: AccountConfig,
     state: State<'_, AppState>,
@@ -24,6 +25,7 @@ pub async fn add_account(
 ///
 /// Returns an error if the database read fails.
 #[tauri::command]
+#[tracing::instrument(skip(state), err(Debug))]
 pub async fn list_accounts(
     state: State<'_, AppState>,
 ) -> Result<Vec<AccountSummary>, ErrorPayload> {
@@ -37,6 +39,7 @@ pub async fn list_accounts(
 ///
 /// Returns an error if the account is not found or the database write fails.
 #[tauri::command]
+#[tracing::instrument(skip(state), err(Debug))]
 pub async fn delete_account(
     account_id: String,
     state: State<'_, AppState>,
@@ -53,6 +56,7 @@ pub async fn delete_account(
 ///
 /// Returns an error if the connection test fails.
 #[tauri::command]
+#[tracing::instrument(skip(state), err(Debug))]
 pub async fn test_account_connection(
     config: AccountConfig,
     state: State<'_, AppState>,

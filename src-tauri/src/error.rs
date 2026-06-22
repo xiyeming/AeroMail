@@ -71,6 +71,8 @@ impl AeroError {
     #[must_use]
     #[allow(clippy::too_many_lines)]
     pub fn to_payload(&self) -> ErrorPayload {
+        tracing::error!(error = %self, "backend error");
+
         match self {
             Self::Database(_) => ErrorPayload {
                 code: "DATABASE_ERROR".to_string(),

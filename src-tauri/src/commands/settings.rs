@@ -13,6 +13,7 @@ use crate::services::logging::{LogConfig, LogService};
 /// Returns an error if the database write fails.
 #[allow(clippy::needless_pass_by_value)]
 #[tauri::command]
+#[tracing::instrument(skip(state), err(Debug))]
 pub fn set_setting(
     key: String,
     value: String,
@@ -31,6 +32,7 @@ pub fn set_setting(
 /// Returns an error if the database read fails.
 #[allow(clippy::needless_pass_by_value)]
 #[tauri::command]
+#[tracing::instrument(skip(state), err(Debug))]
 pub fn get_setting(
     key: String,
     state: State<'_, AppState>,
@@ -45,6 +47,7 @@ pub fn get_setting(
 /// Returns an error if the database cannot be queried.
 #[allow(clippy::needless_pass_by_value)]
 #[tauri::command]
+#[tracing::instrument(skip(state), err(Debug))]
 pub fn get_log_config(state: State<'_, AppState>) -> Result<LogConfig, ErrorPayload> {
     let default_dir = default_log_dir(&state);
     LogService::get_config(&state.db, &default_dir).map_err(|e| e.to_payload())

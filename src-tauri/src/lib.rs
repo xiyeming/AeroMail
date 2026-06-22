@@ -120,14 +120,20 @@ pub fn run() {
                     Ok(state) => {
                         handle.manage(state);
 
+                        std::panic::set_hook(Box::new(|info| {
+                            tracing::error!(panic = %info, "application panic");
+                        }));
+
+                        tracing::info!("AeroMail application state initialized");
+
                         // Start automatic sync for all configured accounts.
                         let sync_service = handle.state::<AppState>().sync_service.clone();
                         if let Err(e) = sync_service.read().await.start_all(handle.clone()).await {
-                            eprintln!("failed to start automatic sync: {e}");
+                            tracing::error!(error = %e, "failed to start automatic sync");
                         }
                     }
                     Err(e) => {
-                        eprintln!("failed to initialize app state: {e}");
+                        tracing::error!(error = %e, "failed to initialize app state");
                         handle.exit(1);
                     }
                 }

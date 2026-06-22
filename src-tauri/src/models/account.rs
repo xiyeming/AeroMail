@@ -1,6 +1,7 @@
 use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct AccountConfig {
     pub id: String,
     pub name: String,
@@ -27,6 +28,7 @@ pub enum MailProvider {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct ServerConfig {
     pub host: String,
     pub port: u16,
@@ -53,11 +55,13 @@ pub enum AuthConfig {
         client_secret: Option<String>,
     },
     Password {
+        #[serde(rename = "passwordEncrypted")]
         password_encrypted: Vec<u8>,
     },
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct AdvancedConfig {
     pub ca_cert_path: Option<String>,
     pub verify_certificate: bool,
@@ -67,6 +71,7 @@ pub struct AdvancedConfig {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct AccountSummary {
     pub id: String,
     pub name: String,

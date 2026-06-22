@@ -236,7 +236,9 @@
     "settings": "设置",
     "close": "关闭",
     "delete": "删除",
-    "confirm": "确认"
+    "confirm": "确认",
+    "minimize": "最小化",
+    "maximize": "最大化"
   },
   "errors": {
     "SMTP_CONNECTION_FAILED": "无法连接到发件服务器。",

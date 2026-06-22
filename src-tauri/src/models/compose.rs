@@ -20,6 +20,7 @@ pub struct ComposeDraft {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ReplyContext {
     pub original_mail_id: String,
+    pub original_message_id: Option<String>,
     pub kind: ReplyKind,
 }
 

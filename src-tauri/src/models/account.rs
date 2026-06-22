@@ -4,6 +4,7 @@ use serde::{Deserialize, Serialize};
 pub struct AccountConfig {
     pub id: String,
     pub name: String,
+    pub email: Option<String>,
     pub provider: MailProvider,
     pub imap: ServerConfig,
     pub smtp: ServerConfig,
@@ -66,6 +67,7 @@ pub struct AdvancedConfig {
 pub struct AccountSummary {
     pub id: String,
     pub name: String,
+    pub email: Option<String>,
     pub provider: MailProvider,
     pub imap_host: String,
     pub smtp_host: String,

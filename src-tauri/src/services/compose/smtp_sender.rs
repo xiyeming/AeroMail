@@ -1,5 +1,5 @@
 use lettre::address::{Address, Envelope};
-use lettre::transport::smtp::authentication::Credentials;
+use lettre::transport::smtp::authentication::{Credentials, Mechanism};
 use lettre::transport::smtp::client::{Tls, TlsParameters};
 use lettre::{AsyncSmtpTransport, AsyncTransport, Tokio1Executor};
 
@@ -7,36 +7,34 @@ use crate::error::AeroError;
 use crate::models::account::{AccountConfig, AuthConfig, TlsMode};
 
 /// Sends a pre-built MIME message via SMTP.
-pub async fn send_message(
-    config: &AccountConfig,
-    message_bytes: Vec<u8>,
-) -> Result<(), AeroError> {
+pub async fn send_message(config: &AccountConfig, message_bytes: Vec<u8>) -> Result<(), AeroError> {
     let creds = build_credentials(config);
 
     let tls_parameters = TlsParameters::new(config.smtp.host.clone())
         .map_err(|e| AeroError::SmtpConnectionFailed(e.to_string()))?;
 
     let mailer = match config.smtp.tls_mode {
-        TlsMode::Required => {
-            AsyncSmtpTransport::<Tokio1Executor>::relay(&config.smtp.host)
-                .map_err(|e| AeroError::SmtpConnectionFailed(e.to_string()))?
-                .port(config.smtp.port)
-                .tls(Tls::Required(tls_parameters))
-                .credentials(creds)
-                .build()
-        }
+        TlsMode::Required => AsyncSmtpTransport::<Tokio1Executor>::relay(&config.smtp.host)
+            .map_err(|e| AeroError::SmtpConnectionFailed(e.to_string()))?
+            .port(config.smtp.port)
+            .tls(Tls::Required(tls_parameters))
+            .credentials(creds)
+            .authentication(auth_mechanisms(config))
+            .build(),
         TlsMode::StartTls => {
             AsyncSmtpTransport::<Tokio1Executor>::starttls_relay(&config.smtp.host)
                 .map_err(|e| AeroError::SmtpConnectionFailed(e.to_string()))?
                 .port(config.smtp.port)
                 .tls(Tls::Required(tls_parameters))
                 .credentials(creds)
+                .authentication(auth_mechanisms(config))
                 .build()
         }
         TlsMode::None => {
             AsyncSmtpTransport::<Tokio1Executor>::builder_dangerous(config.smtp.host.clone())
                 .port(config.smtp.port)
                 .credentials(creds)
+                .authentication(auth_mechanisms(config))
                 .build()
         }
     };
@@ -63,19 +61,28 @@ pub async fn send_message(
 }
 
 fn build_credentials(config: &AccountConfig) -> Credentials {
+    let username = config
+        .email
+        .as_deref()
+        .unwrap_or(&config.name)
+        .to_string();
     match &config.auth {
         AuthConfig::Password { password_encrypted } => {
             let password = String::from_utf8_lossy(password_encrypted);
-            Credentials::new(config.name.clone(), password.to_string())
+            Credentials::new(username, password.to_string())
         }
         AuthConfig::OAuth2 { access_token, .. } => {
-            // XOAUTH2 format: base64("user={user}\x01auth=Bearer {token}\x01\x01")
-            let xoauth2 = format!(
-                "user={}\x01auth=Bearer {}\x01\x01",
-                config.name, access_token
-            );
-            Credentials::new(config.name.clone(), xoauth2)
+            // XOAUTH2 SASL initial response: base64("user={user}\x01auth=Bearer {token}\x01\x01")
+            let xoauth2 = format!("user={}\x01auth=Bearer {}\x01\x01", username, access_token);
+            Credentials::new(username, xoauth2)
         }
+    }
+}
+
+fn auth_mechanisms(config: &AccountConfig) -> Vec<Mechanism> {
+    match config.auth {
+        AuthConfig::OAuth2 { .. } => vec![Mechanism::Xoauth2],
+        AuthConfig::Password { .. } => vec![Mechanism::Plain],
     }
 }
 
@@ -94,18 +101,15 @@ fn parse_envelope_from_mime(message_bytes: &[u8]) -> Result<Envelope, AeroError>
         }
 
         let lower = line.to_lowercase();
+        let Some(content) = line.split_once(':').map(|x| x.1.trim()) else {
+            continue;
+        };
+
         if lower.starts_with("from:") {
-            let addr = extract_address(line)?;
-            from_addr = Some(addr);
-        } else if lower.starts_with("to:") {
-            let addrs = extract_addresses(line)?;
-            to_addrs.extend(addrs);
-        } else if lower.starts_with("cc:") {
-            let addrs = extract_addresses(line)?;
-            to_addrs.extend(addrs);
-        } else if lower.starts_with("bcc:") {
-            let addrs = extract_addresses(line)?;
-            to_addrs.extend(addrs);
+            from_addr = Some(parse_address(content)?);
+        } else if lower.starts_with("to:") || lower.starts_with("cc:") || lower.starts_with("bcc:")
+        {
+            to_addrs.extend(parse_addresses(content)?);
         }
     }
 
@@ -115,70 +119,39 @@ fn parse_envelope_from_mime(message_bytes: &[u8]) -> Result<Envelope, AeroError>
         ));
     }
 
-    let from_addr = from_addr.ok_or_else(|| {
-        AeroError::InvalidRecipient("missing From header in message".to_string())
-    })?;
+    let from_addr = from_addr
+        .ok_or_else(|| AeroError::InvalidRecipient("missing From header in message".to_string()))?;
 
     Envelope::new(Some(from_addr), to_addrs)
         .map_err(|e| AeroError::MailBuilderFailed(format!("invalid envelope: {e}")))
 }
 
-/// Extracts a single email address from a header line like "From: Name <email@example.com>".
-fn extract_address(line: &str) -> Result<Address, AeroError> {
-    let content = line
-        .splitn(2, ':')
-        .nth(1)
-        .unwrap_or("")
-        .trim();
-
-    // Try to extract email between angle brackets
-    if let Some(start) = content.find('<') {
-        if let Some(end) = content.find('>') {
-            let email = content[start + 1..end].trim();
-            return email.parse().map_err(|_| {
-                AeroError::InvalidRecipient(format!("invalid address in: {content}"))
-            });
-        }
-    }
-
-    // Fallback: try parsing the whole content as an address
-    content.parse().map_err(|_| {
-        AeroError::InvalidRecipient(format!("invalid address in: {content}"))
-    })
+/// Extracts a single email address from a header content value.
+fn parse_address(content: &str) -> Result<Address, AeroError> {
+    extract_email(content)
+        .parse()
+        .map_err(|_| AeroError::InvalidRecipient(format!("invalid address in: {content}")))
 }
 
-/// Extracts multiple comma-separated email addresses from a header line.
-fn extract_addresses(line: &str) -> Result<Vec<Address>, AeroError> {
-    let content = line
-        .splitn(2, ':')
-        .nth(1)
-        .unwrap_or("")
-        .trim();
+/// Extracts multiple comma-separated email addresses from a header content value.
+fn parse_addresses(content: &str) -> Result<Vec<Address>, AeroError> {
+    content
+        .split(',')
+        .map(str::trim)
+        .filter(|part| !part.is_empty())
+        .map(|part| {
+            extract_email(part)
+                .parse()
+                .map_err(|_| AeroError::InvalidRecipient(format!("invalid address in: {part}")))
+        })
+        .collect()
+}
 
-    let mut addresses = Vec::new();
-
-    for part in content.split(',') {
-        let part = part.trim();
-        if part.is_empty() {
-            continue;
-        }
-
-        // Try to extract email between angle brackets
-        let email = if let Some(start) = part.find('<') {
-            if let Some(end) = part.find('>') {
-                part[start + 1..end].trim()
-            } else {
-                part
-            }
-        } else {
-            part
-        };
-
-        let addr: Address = email.parse().map_err(|_| {
-            AeroError::InvalidRecipient(format!("invalid address in: {part}"))
-        })?;
-        addresses.push(addr);
-    }
-
-    Ok(addresses)
+/// Extracts the bare email address from a value like `"Name" <email@example.com>`.
+fn extract_email(part: &str) -> &str {
+    part.find('<').map_or(part, |start| {
+        part[start + 1..]
+            .find('>')
+            .map_or(part, |end| part[start + 1..start + 1 + end].trim())
+    })
 }

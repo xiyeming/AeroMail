@@ -1,3 +1,5 @@
+#![allow(clippy::missing_errors_doc)]
+
 mod draft;
 mod imap_draft_sync;
 mod mime_builder;
@@ -11,9 +13,7 @@ use tokio::sync::RwLock;
 use crate::db::pool::Database;
 use crate::error::AeroError;
 use crate::models::account::AccountConfig;
-use crate::models::compose::{
-    ComposeDraft, ComposeDraftSummary, ReplyKind, SendMailRequest,
-};
+use crate::models::compose::{ComposeDraft, ComposeDraftSummary, ReplyKind, SendMailRequest};
 use crate::models::mail::MailDetail;
 use crate::services::account_manager::AccountManager;
 
@@ -38,18 +38,12 @@ impl ComposeService {
         }
     }
 
-    pub fn save_draft(
-        &self,
-        mut draft: ComposeDraft,
-    ) -> Result<ComposeDraft, AeroError> {
+    pub fn save_draft(&self, mut draft: ComposeDraft) -> Result<ComposeDraft, AeroError> {
         self.draft_service.save_draft(&mut draft)?;
         Ok(draft)
     }
 
-    pub fn get_draft(
-        &self,
-        draft_id: &str,
-    ) -> Result<Option<ComposeDraft>, AeroError> {
+    pub fn get_draft(&self, draft_id: &str) -> Result<Option<ComposeDraft>, AeroError> {
         self.draft_service.get_draft(draft_id)
     }
 
@@ -60,10 +54,7 @@ impl ComposeService {
         self.draft_service.list_drafts(account_id)
     }
 
-    pub fn delete_draft(
-        &self,
-        draft_id: &str,
-    ) -> Result<(), AeroError> {
+    pub fn delete_draft(&self, draft_id: &str) -> Result<(), AeroError> {
         self.draft_service.delete_draft(draft_id)
     }
 
@@ -76,10 +67,7 @@ impl ComposeService {
         self.draft_service.prepare_reply(account_id, original, kind)
     }
 
-    pub async fn send_mail(
-        &self,
-        req: SendMailRequest,
-    ) -> Result<(), AeroError> {
+    pub async fn send_mail(&self, req: SendMailRequest) -> Result<(), AeroError> {
         let draft = self
             .draft_service
             .get_draft(&req.draft_id)?
@@ -91,14 +79,19 @@ impl ComposeService {
         // Collect attachment bytes
         let mut attachment_bytes = Vec::new();
         for att in &draft.attachments {
-            let bytes = self.draft_service.read_attachment(
-                &draft.id, &att.id, &att.filename)?;
+            let bytes = self
+                .draft_service
+                .read_attachment(&draft.id, &att.id, &att.filename)?;
             attachment_bytes.push((att.id.clone(), bytes));
         }
 
+        let from_address = account_config
+            .email
+            .as_deref()
+            .unwrap_or(&account_config.name);
         let message_bytes = mime_builder::build_message(
             &draft,
-            &account_config.name,
+            from_address,
             &account_config.name,
             &attachment_bytes,
         )?;
@@ -111,10 +104,7 @@ impl ComposeService {
         Ok(())
     }
 
-    pub async fn sync_draft_to_imap(
-        &self,
-        draft_id: &str,
-    ) -> Result<(), AeroError> {
+    pub async fn sync_draft_to_imap(&self, draft_id: &str) -> Result<(), AeroError> {
         let draft = self
             .draft_service
             .get_draft(draft_id)?
@@ -124,24 +114,25 @@ impl ComposeService {
 
         let mut attachment_bytes = Vec::new();
         for att in &draft.attachments {
-            let bytes = self.draft_service.read_attachment(
-                &draft.id, &att.id, &att.filename)?;
+            let bytes = self
+                .draft_service
+                .read_attachment(&draft.id, &att.id, &att.filename)?;
             attachment_bytes.push((att.id.clone(), bytes));
         }
 
+        let from_address = account_config
+            .email
+            .as_deref()
+            .unwrap_or(&account_config.name);
         let message_bytes = mime_builder::build_message(
             &draft,
-            &account_config.name,
+            from_address,
             &account_config.name,
             &attachment_bytes,
         )?;
 
-        let new_uid = imap_draft_sync::sync_draft_to_imap(
-            &account_config,
-            &draft,
-            &message_bytes,
-            &self.db,
-        )?;
+        let new_uid =
+            imap_draft_sync::sync_draft_to_imap(&account_config, &draft, &message_bytes, &self.db)?;
 
         // Update synced_at and remote_uid
         let mut updated = draft;
@@ -152,10 +143,7 @@ impl ComposeService {
         Ok(())
     }
 
-    async fn load_account_config(
-        &self,
-        account_id: &str,
-    ) -> Result<AccountConfig, AeroError> {
+    async fn load_account_config(&self, account_id: &str) -> Result<AccountConfig, AeroError> {
         let am = self.account_manager.read().await;
         am.get_account_config(account_id)
     }

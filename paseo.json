@@ -1,0 +1,18 @@
+{
+  "worktree": {
+    "setup": "pnpm install\ncd src-tauri && cargo fetch",
+    "teardown": "rm -rf src-tauri/target node_modules",
+    "terminals": [
+      {
+        "name": "shell",
+        "command": "zsh"
+      }
+    ]
+  },
+  "scripts": {
+    "desktop": {
+      "type": "service",
+      "command": "GDK_BACKEND=wayland WEBKIT_DISABLE_COMPOSITING_MODE=0 WEBKIT_DISABLE_DMABUF_RENDERER=1 cargo tauri dev"
+    }
+  }
+}

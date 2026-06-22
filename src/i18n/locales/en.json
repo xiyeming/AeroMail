@@ -123,6 +123,7 @@
   "settings": {
     "title": "Settings",
     "general": "General",
+    "accounts": "Accounts",
     "language": "Language",
     "english": "English",
     "simplifiedChinese": "简体中文",

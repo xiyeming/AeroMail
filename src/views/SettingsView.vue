@@ -1,9 +1,12 @@
 <script setup lang="ts">
 import { computed, ref, onMounted } from 'vue';
 import { invoke } from '@tauri-apps/api/core';
+import { Trash2 } from 'lucide-vue-next';
 import { useLocale, type Locale } from '@/composables/useLocale';
 import { useTheme, type Theme } from '@/composables/useTheme';
+import { useAccountStore } from '@/stores/account';
 import { useAiStore } from '@/stores/ai';
+import AccountForm from '@/components/AccountForm.vue';
 import type { AiProviderKind } from '@/types/ai';
 import type { TranslationProviderSummary, TraditionalProviderKind } from '@/types/translation';
 
@@ -27,6 +30,7 @@ const localeLabels: Record<Locale, string> = {
 
 // --- AI Providers ---
 const aiStore = useAiStore();
+const accountStore = useAccountStore();
 const showAddForm = ref(false);
 const newName = ref('');
 const newApiKey = ref('');
@@ -49,6 +53,7 @@ const providerKinds: AiProviderKind[] = [
 ];
 
 onMounted(() => {
+  void accountStore.loadAccounts();
   void aiStore.loadProviders();
   void loadTranslationProviders();
 });
@@ -195,12 +200,57 @@ async function removeTranslationProvider(id: string) {
       </div>
     </section>
 
+    <section aria-labelledby="accounts-heading" class="mt-6 rounded-lg border border-border bg-elevated p-5">
+      <h2 id="accounts-heading" class="mb-4 text-lg font-medium">{{ $t('settings.accounts') }}</h2>
+
+      <div v-if="accountStore.loading" class="py-6 text-center text-sm text-secondary">
+        {{ $t('common.loading') }}
+      </div>
+      <div
+        v-else-if="accountStore.accounts.length === 0"
+        class="py-6 text-center text-sm text-secondary"
+      >
+        {{ $t('account.noAccounts') }}
+      </div>
+      <ul v-else class="mb-5 divide-y divide-border">
+        <li
+          v-for="account in accountStore.accounts"
+          :key="account.id"
+          class="flex items-center justify-between py-2.5"
+        >
+          <div class="flex items-center gap-3">
+            <div
+              class="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-raised text-sm font-medium text-primary"
+            >
+              {{ account.name.charAt(0).toUpperCase() }}
+            </div>
+            <div class="min-w-0">
+              <div class="truncate text-sm text-primary">{{ account.name }}</div>
+              <div class="truncate text-xs text-secondary">
+                {{ account.email || account.imapHost }}
+              </div>
+            </div>
+          </div>
+          <button
+            type="button"
+            class="rounded-md p-1.5 text-secondary transition-colors hover:bg-danger-subtle hover:text-danger"
+            :aria-label="$t('common.delete')"
+            @click="accountStore.deleteAccount(account.id)"
+          >
+            <Trash2 class="h-4 w-4" />
+          </button>
+        </li>
+      </ul>
+
+      <AccountForm />
+    </section>
+
     <section class="mt-6 rounded-lg border border-border bg-elevated p-5">
       <div class="mb-4 flex items-center justify-between">
         <h2 class="text-lg font-medium">{{ $t('settings.aiProviders') }}</h2>
         <button
           type="button"
-          class="rounded-md border border-border bg-base px-3 py-1.5 text-sm text-primary transition-colors hover:bg-raised"
+          class="flex h-9 items-center justify-center rounded-md border border-border bg-base px-3 text-sm text-primary transition-colors hover:bg-raised"
           @click="showAddForm = !showAddForm"
         >
           {{ showAddForm ? $t('common.cancel') : $t('settings.addProvider') }}
@@ -222,7 +272,7 @@ async function removeTranslationProvider(id: string) {
         >
           <div class="flex items-center gap-2">
             <span class="text-sm text-primary">{{ p.name }}</span>
-            <span class="rounded bg-raised px-1.5 py-0.5 text-xs text-secondary">{{ p.kind }}</span>
+            <span class="rounded bg-raised px-2 py-0.5 text-xs text-secondary">{{ p.kind }}</span>
             <span class="text-xs text-tertiary">{{ p.model }}</span>
           </div>
           <button
@@ -299,7 +349,7 @@ async function removeTranslationProvider(id: string) {
         <h2 class="text-lg font-medium">{{ $t('settings.translationProviders') }}</h2>
         <button
           type="button"
-          class="rounded-md border border-border bg-base px-3 py-1.5 text-sm text-primary transition-colors hover:bg-raised"
+          class="flex h-9 items-center justify-center rounded-md border border-border bg-base px-3 text-sm text-primary transition-colors hover:bg-raised"
           @click="showTranslationForm = !showTranslationForm; resetTranslationForm();"
         >
           {{ showTranslationForm ? $t('common.cancel') : $t('settings.addTranslationProvider') }}
@@ -321,7 +371,7 @@ async function removeTranslationProvider(id: string) {
         >
           <div class="flex items-center gap-2">
             <span class="text-sm text-primary">{{ tp.name }}</span>
-            <span class="rounded bg-raised px-1.5 py-0.5 text-xs text-secondary">{{ tp.providerType }}</span>
+            <span class="rounded bg-raised px-2 py-0.5 text-xs text-secondary">{{ tp.providerType }}</span>
           </div>
           <button
             type="button"
@@ -337,7 +387,7 @@ async function removeTranslationProvider(id: string) {
         <div class="flex gap-2">
           <button
             type="button"
-            class="rounded-md px-3 py-1.5 text-sm transition-colors"
+            class="flex h-9 items-center justify-center rounded-md px-3 text-sm transition-colors"
             :class="
               translationFormType === 'traditional'
                 ? 'bg-accent text-white'
@@ -349,7 +399,7 @@ async function removeTranslationProvider(id: string) {
           </button>
           <button
             type="button"
-            class="rounded-md px-3 py-1.5 text-sm transition-colors"
+            class="flex h-9 items-center justify-center rounded-md px-3 text-sm transition-colors"
             :class="
               translationFormType === 'ai'
                 ? 'bg-accent text-white'

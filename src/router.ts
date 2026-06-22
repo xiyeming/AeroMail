@@ -1,6 +1,5 @@
 import { createRouter, createWebHistory } from 'vue-router';
 import InboxView from './views/InboxView.vue';
-import AccountsView from './views/AccountsView.vue';
 import SettingsView from './views/SettingsView.vue';
 import ComposeView from './views/ComposeView.vue';
 import DraftsView from './views/DraftsView.vue';
@@ -17,11 +16,6 @@ const router = createRouter({
       path: '/folder/:folderId',
       name: 'folder',
       component: InboxView,
-    },
-    {
-      path: '/accounts',
-      name: 'accounts',
-      component: AccountsView,
     },
     {
       path: '/settings',

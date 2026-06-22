@@ -191,39 +191,40 @@ function extractRemoteDomains(html: string): string[] {
 
   const capture = (url: string) => {
     try {
-      domains.add(new URL(url).hostname.toLowerCase());
+      const normalized = url.startsWith('//') ? `https:${url}` : url;
+      domains.add(new URL(normalized).hostname.toLowerCase());
     } catch {
       // ignore invalid URLs
     }
   };
 
-  // src / href attributes
-  const attrRe = /(?:src|href)\s*=\s*["'](https?:\/\/[^"']+)["']/gi;
+  // src / href / background attributes (support protocol-relative URLs)
+  const attrRe = /(?:src|href|background)\s*=\s*["']((?:https?:)?\/\/[^"']+)["']/gi;
   let match: RegExpExecArray | null;
   while ((match = attrRe.exec(html)) !== null) {
     capture(match[1]);
   }
 
   // CSS url(...)
-  const urlRe = /url\((['"]?)(https?:\/\/[^"')]+)\1\)/gi;
+  const urlRe = /url\((['"]?)((?:https?:)?\/\/[^"')]+)\1\)/gi;
   while ((match = urlRe.exec(html)) !== null) {
     capture(match[2]);
   }
 
   // @import url(...)
-  const importRe = /@import\s+(?:url\()?["'](https?:\/\/[^"')]+)["']\)?/gi;
+  const importRe = /@import\s+(?:url\()?["']((?:https?:)?\/\/[^"')]+)["']\)?/gi;
   while ((match = importRe.exec(html)) !== null) {
     capture(match[1]);
   }
 
-  // srcset attribute (comma-separated url descriptors)
+  // srcset attribute (comma-separated url descriptors, supports protocol-relative)
   const srcsetRe = /srcset\s*=\s*["']([^"']+)["']/gi;
   while ((match = srcsetRe.exec(html)) !== null) {
     for (const part of match[1].split(',')) {
       const trimmed = part.trim();
       const spaceIdx = trimmed.search(/\s/);
       const url = spaceIdx > 0 ? trimmed.slice(0, spaceIdx) : trimmed;
-      if (url.startsWith('http')) {
+      if (url.startsWith('http') || url.startsWith('//')) {
         capture(url);
       }
     }

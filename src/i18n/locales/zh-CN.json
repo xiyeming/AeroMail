@@ -176,7 +176,12 @@
     "endpointPlaceholder": "https://api.example.com/translate",
     "selectAiProvider": "选择智能助手",
     "traditionalProvider": "标准翻译",
-    "aiTranslationProvider": "智能翻译"
+    "aiTranslationProvider": "智能翻译",
+    "trustedDomains": "信任的域名",
+    "trustedDomainsHint": "来自这些域名的远程图片和样式将在邮件阅读器中加载。",
+    "addTrustedDomain": "添加域名",
+    "domainPlaceholder": "example.com",
+    "noTrustedDomains": "暂无信任的域名"
   },
   "aiAssistant": {
     "title": "智能助手",

@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, onMounted, ref, watch } from 'vue';
+import { computed, nextTick, onMounted, ref, watch } from 'vue';
 import { useI18n } from 'vue-i18n';
 import { useRoute } from 'vue-router';
 import { Star, Archive, Paperclip, Check } from 'lucide-vue-next';
@@ -54,6 +54,7 @@ const contextMenu = ref<{
 const showMoveDialog = ref(false);
 const moveTargetMailId = ref<string | null>(null);
 const searchQuery = ref('');
+const listContainerRef = ref<HTMLElement | null>(null);
 
 onMounted(async () => {
   if (accountStore.accounts.length === 0) {
@@ -69,7 +70,9 @@ watch(
   currentFolderId,
   async (folderId) => {
     if (folderId) {
+      listContainerRef.value?.scrollTo(0, 0);
       await mailStore.loadMails(folderId);
+      await checkLoadMore();
     }
   },
   { immediate: true }
@@ -90,11 +93,17 @@ watch(
   }
 );
 
+const currentFolderUnread = computed(() => {
+  const folder = mailStore.folders.find((f) => f.id === currentFolderId.value);
+  return folder?.unreadCount ?? 0;
+});
+
 watch(
-  () => mailStore.totalUnread,
+  currentFolderUnread,
   (count) => {
     statusStore.setUnreadCount(count);
-  }
+  },
+  { immediate: true }
 );
 
 const displayedMails = computed(() => {
@@ -132,8 +141,28 @@ function handleScroll(event: Event) {
   const target = event.target as HTMLElement;
   if (target.scrollTop + target.clientHeight >= target.scrollHeight - 100) {
     if (mailStore.hasMore && !mailStore.loadingMore) {
-      mailStore.loadMails(currentFolderId.value, false);
+      void loadMoreMails();
     }
+  }
+}
+
+async function loadMoreMails() {
+  if (!mailStore.hasMore || mailStore.loadingMore || mailStore.loading) return;
+  await mailStore.loadMails(currentFolderId.value, false);
+  await checkLoadMore();
+}
+
+async function checkLoadMore() {
+  await nextTick();
+  const el = listContainerRef.value;
+  if (!el) return;
+  if (
+    el.scrollHeight <= el.clientHeight + 50 &&
+    mailStore.hasMore &&
+    !mailStore.loading &&
+    !mailStore.loadingMore
+  ) {
+    await loadMoreMails();
   }
 }
 
@@ -294,7 +323,13 @@ async function bulkMarkRead(isRead: boolean) {
     </div>
 
     <!-- Mail list -->
-    <div v-else class="flex-1 overflow-y-auto" role="list" @scroll="handleScroll">
+    <div
+      v-else
+      ref="listContainerRef"
+      class="flex-1 overflow-y-auto"
+      role="list"
+      @scroll="handleScroll"
+    >
       <div
         v-for="mail in displayedMails"
         :key="mail.id"

@@ -13,10 +13,14 @@ function buildCsp(): string {
   const allowed = (props.allowedDomains || [])
     .map((d) => d.trim())
     .filter(Boolean);
-  const imgSrc = ["'self'", 'data:', 'cid:', ...allowed].join(' ');
-  const styleSrc = ["'unsafe-inline'", "'self'", ...allowed].join(' ');
-  const fontSrc = ["'self'", ...allowed].join(' ');
-  const mediaSrc = ["'self'", ...allowed].join(' ');
+
+  // Allow exact host and its subdomains for each trusted domain.
+  const hosts = allowed.flatMap((domain) => [domain, `*.${domain}`]);
+
+  const imgSrc = ["'self'", 'data:', 'cid:', ...hosts].join(' ');
+  const styleSrc = ["'unsafe-inline'", "'self'", ...hosts].join(' ');
+  const fontSrc = ["'self'", ...hosts].join(' ');
+  const mediaSrc = ["'self'", ...hosts].join(' ');
   return [
     "default-src 'none'",
     `img-src ${imgSrc}`,

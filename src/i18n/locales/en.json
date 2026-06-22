@@ -176,7 +176,12 @@
     "endpointPlaceholder": "https://api.example.com/translate",
     "selectAiProvider": "Select smart assistant",
     "traditionalProvider": "Standard translation",
-    "aiTranslationProvider": "Smart translation"
+    "aiTranslationProvider": "Smart translation",
+    "trustedDomains": "Trusted domains",
+    "trustedDomainsHint": "Remote images and styles from these domains are allowed in the mail viewer.",
+    "addTrustedDomain": "Add domain",
+    "domainPlaceholder": "example.com",
+    "noTrustedDomains": "No trusted domains"
   },
   "aiAssistant": {
     "title": "Smart Assistant",

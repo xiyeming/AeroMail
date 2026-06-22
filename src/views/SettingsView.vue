@@ -8,6 +8,7 @@ import { useTheme, type Theme } from '@/composables/useTheme';
 import { useWindowFrame, type Decorations } from '@/composables/useWindowFrame';
 import { useAccountStore } from '@/stores/account';
 import { useAiStore } from '@/stores/ai';
+import { useSettingsStore } from '@/stores/settings';
 import AccountForm from '@/components/AccountForm.vue';
 import BaseSelect from '@/components/BaseSelect.vue';
 import type { AiProviderKind } from '@/types/ai';
@@ -52,6 +53,7 @@ const localeLabels: Record<Locale, string> = {
 // --- AI Providers ---
 const aiStore = useAiStore();
 const accountStore = useAccountStore();
+const settingsStore = useSettingsStore();
 const showAddForm = ref(false);
 const editingAccount = ref<AccountSummary | null>(null);
 const editingConfig = ref<AccountConfig | null>(null);
@@ -111,7 +113,52 @@ onMounted(() => {
   void aiStore.loadProviders();
   void loadTranslationProviders();
   void loadLogConfig();
+  void loadTrustedDomains();
 });
+
+// --- Trusted domains ---
+const trustedDomains = ref<string[]>([]);
+const newTrustedDomain = ref('');
+const isLoadingTrustedDomains = ref(false);
+
+async function loadTrustedDomains() {
+  isLoadingTrustedDomains.value = true;
+  try {
+    const raw = await settingsStore.get('trustedDomains');
+    trustedDomains.value = raw ? (JSON.parse(raw) as string[]) : [];
+  } catch (e) {
+    console.error('Failed to load trusted domains:', e);
+    trustedDomains.value = [];
+  } finally {
+    isLoadingTrustedDomains.value = false;
+  }
+}
+
+async function saveTrustedDomains() {
+  await settingsStore.set('trustedDomains', JSON.stringify(trustedDomains.value));
+}
+
+function isValidDomain(value: string): boolean {
+  // Allow simple hostnames like example.com or sub.example.com.
+  return /^[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?(\.[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?)*$/i.test(value);
+}
+
+async function addTrustedDomain() {
+  const domain = newTrustedDomain.value.trim().toLowerCase();
+  if (!domain || !isValidDomain(domain)) return;
+  if (trustedDomains.value.includes(domain)) {
+    newTrustedDomain.value = '';
+    return;
+  }
+  trustedDomains.value.push(domain);
+  newTrustedDomain.value = '';
+  await saveTrustedDomains();
+}
+
+async function removeTrustedDomain(domain: string) {
+  trustedDomains.value = trustedDomains.value.filter((d) => d !== domain);
+  await saveTrustedDomains();
+}
 
 function resetForm() {
   newName.value = '';
@@ -328,6 +375,65 @@ async function removeTranslationProvider(id: string) {
           />
         </div>
       </div>
+    </section>
+
+    <section
+      aria-labelledby="trusted-domains-heading"
+      class="mt-6 rounded-lg border border-border bg-elevated p-5"
+    >
+      <h2 id="trusted-domains-heading" class="mb-1 text-lg font-medium">
+        {{ $t('settings.trustedDomains') }}
+      </h2>
+      <p class="mb-4 text-xs text-secondary">{{ $t('settings.trustedDomainsHint') }}</p>
+
+      <div class="flex gap-2">
+        <input
+          id="trusted-domain-input"
+          v-model="newTrustedDomain"
+          type="text"
+          class="h-9 flex-1 rounded-md border border-border bg-base px-3 text-sm text-primary outline-none placeholder:text-tertiary focus:border-accent"
+          :placeholder="$t('settings.domainPlaceholder')"
+          @keydown.enter.prevent="addTrustedDomain"
+        />
+        <button
+          type="button"
+          class="flex h-9 items-center justify-center rounded-md border border-border bg-base px-3 text-sm text-primary transition-colors hover:bg-raised disabled:cursor-not-allowed disabled:opacity-50"
+          :disabled="!isValidDomain(newTrustedDomain.trim().toLowerCase())"
+          @click="addTrustedDomain"
+        >
+          {{ $t('settings.addTrustedDomain') }}
+        </button>
+      </div>
+
+      <div
+        v-if="isLoadingTrustedDomains"
+        class="py-6 text-center text-sm text-secondary"
+      >
+        {{ $t('common.loading') }}
+      </div>
+      <div
+        v-else-if="trustedDomains.length === 0"
+        class="py-6 text-center text-sm text-secondary"
+      >
+        {{ $t('settings.noTrustedDomains') }}
+      </div>
+      <ul v-else class="mt-4 divide-y divide-border">
+        <li
+          v-for="domain in trustedDomains"
+          :key="domain"
+          class="flex items-center justify-between py-2"
+        >
+          <span class="text-sm text-primary">{{ domain }}</span>
+          <button
+            type="button"
+            class="rounded-md p-1.5 text-secondary transition-colors hover:bg-danger-subtle hover:text-danger"
+            :aria-label="$t('common.delete')"
+            @click="removeTrustedDomain(domain)"
+          >
+            <Trash2 class="h-4 w-4" />
+          </button>
+        </li>
+      </ul>
     </section>
 
     <section

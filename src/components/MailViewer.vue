@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, computed, watch, nextTick } from 'vue';
+import { ref, computed, watch, nextTick, onMounted } from 'vue';
 import { useRouter } from 'vue-router';
 import { useI18n } from 'vue-i18n';
 import {
@@ -26,6 +26,7 @@ import { useAiChat } from '@/composables/useAiChat';
 import { useAiStore } from '@/stores/ai';
 import { useMailStore } from '@/stores/mail';
 import { useToastStore } from '@/stores/toast';
+import { useSettingsStore } from '@/stores/settings';
 import type { AttachmentInfo } from '@/types/mail';
 
 const { t } = useI18n();
@@ -34,6 +35,7 @@ const { createSession, sendMessage } = useAiChat();
 const aiStore = useAiStore();
 const mailStore = useMailStore();
 const toast = useToastStore();
+const settingsStore = useSettingsStore();
 
 const translatedText = ref<string | null>(null);
 const translatedLang = ref<string | null>(null);
@@ -42,6 +44,8 @@ const showTranslatePanel = ref(false);
 const showDeleteConfirm = ref(false);
 const attachments = ref<AttachmentInfo[]>([]);
 const deleteDialogRef = ref<HTMLDivElement | null>(null);
+const trustedDomains = ref<string[]>([]);
+const temporarilyAllowedDomains = ref<string[]>([]);
 
 const currentMailId = computed(() => mailStore.selectedMailId);
 const mail = computed(() => mailStore.selectedMail);
@@ -182,6 +186,96 @@ function formatAddresses(addresses: string | null): string {
   }
 }
 
+function extractRemoteDomains(html: string): string[] {
+  const domains = new Set<string>();
+
+  const capture = (url: string) => {
+    try {
+      domains.add(new URL(url).hostname.toLowerCase());
+    } catch {
+      // ignore invalid URLs
+    }
+  };
+
+  // src / href attributes
+  const attrRe = /(?:src|href)\s*=\s*["'](https?:\/\/[^"']+)["']/gi;
+  let match: RegExpExecArray | null;
+  while ((match = attrRe.exec(html)) !== null) {
+    capture(match[1]);
+  }
+
+  // CSS url(...)
+  const urlRe = /url\((['"]?)(https?:\/\/[^"')]+)\1\)/gi;
+  while ((match = urlRe.exec(html)) !== null) {
+    capture(match[2]);
+  }
+
+  // @import url(...)
+  const importRe = /@import\s+(?:url\()?["'](https?:\/\/[^"')]+)["']\)?/gi;
+  while ((match = importRe.exec(html)) !== null) {
+    capture(match[1]);
+  }
+
+  // srcset attribute (comma-separated url descriptors)
+  const srcsetRe = /srcset\s*=\s*["']([^"']+)["']/gi;
+  while ((match = srcsetRe.exec(html)) !== null) {
+    for (const part of match[1].split(',')) {
+      const trimmed = part.trim();
+      const spaceIdx = trimmed.search(/\s/);
+      const url = spaceIdx > 0 ? trimmed.slice(0, spaceIdx) : trimmed;
+      if (url.startsWith('http')) {
+        capture(url);
+      }
+    }
+  }
+
+  return Array.from(domains).sort();
+}
+
+const remoteDomains = computed(() => {
+  if (!mail.value?.bodyHtml) return [];
+  return extractRemoteDomains(mail.value.bodyHtml);
+});
+
+const allowedDomains = computed(() => [
+  ...trustedDomains.value,
+  ...temporarilyAllowedDomains.value,
+]);
+
+const untrustedDomains = computed(() =>
+  remoteDomains.value.filter(
+    (d) => !allowedDomains.value.includes(d)
+  )
+);
+
+const showSecurityBanner = computed(() => untrustedDomains.value.length > 0);
+
+function allowRemoteOnce() {
+  temporarilyAllowedDomains.value = [...untrustedDomains.value];
+}
+
+async function trustDomain(domain: string) {
+  if (!trustedDomains.value.includes(domain)) {
+    trustedDomains.value.push(domain);
+    await settingsStore.set('trustedDomains', JSON.stringify(trustedDomains.value));
+  }
+}
+
+async function loadTrustedDomains() {
+  try {
+    const raw = await settingsStore.get('trustedDomains');
+    if (raw) {
+      trustedDomains.value = JSON.parse(raw);
+    }
+  } catch (e) {
+    console.error('Failed to load trusted domains:', e);
+  }
+}
+
+onMounted(() => {
+  void loadTrustedDomains();
+});
+
 // Focus trap for delete dialog
 function getFocusableElements(container: HTMLElement): HTMLElement[] {
   const selector = 'button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])';
@@ -226,6 +320,7 @@ watch(currentMailId, (newMailId) => {
   showTranslation.value = false;
   showTranslatePanel.value = false;
   showDeleteConfirm.value = false;
+  temporarilyAllowedDomains.value = [];
   attachments.value = [];
   if (newMailId && mail.value?.hasAttachments) {
     loadAttachments(newMailId);
@@ -406,6 +501,42 @@ watch(currentMailId, (newMailId) => {
         </div>
       </div>
 
+      <!-- Remote content security banner -->
+      <div
+        v-if="showSecurityBanner"
+        class="border-b border-border bg-warning/10 px-6 py-3"
+      >
+        <div class="flex items-start gap-3">
+          <AlertTriangle class="mt-0.5 h-4 w-4 shrink-0 text-warning" aria-hidden="true" />
+          <div class="flex-1">
+            <p class="text-sm font-medium text-warning">
+              {{ t('mail.remoteContentBlocked') }}
+            </p>
+            <p class="text-xs text-secondary">
+              {{ t('mail.remoteContentHint') }}
+            </p>
+            <div class="mt-2 flex flex-wrap items-center gap-2">
+              <button
+                type="button"
+                class="rounded px-2 py-1 text-xs font-medium text-warning transition-colors hover:bg-warning/10"
+                @click="allowRemoteOnce"
+              >
+                {{ t('mail.allowOnce') }}
+              </button>
+              <button
+                v-for="domain in untrustedDomains"
+                :key="domain"
+                type="button"
+                class="rounded px-2 py-1 text-xs text-secondary transition-colors hover:bg-raised"
+                @click="trustDomain(domain)"
+              >
+                {{ t('mail.alwaysTrustDomain', { domain }) }}
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
+
       <!-- Mail body -->
       <div class="flex-1 overflow-y-auto px-6 py-4">
         <div
@@ -424,6 +555,7 @@ watch(currentMailId, (newMailId) => {
         <SandboxedHtml
           v-if="mail.bodyHtml"
           :html="mail.bodyHtml"
+          :allowed-domains="allowedDomains"
           class="prose prose-sm max-w-none text-primary"
         />
         <div v-else-if="mail.bodyText" class="whitespace-pre-wrap text-sm text-primary">

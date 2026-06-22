@@ -1139,6 +1139,21 @@ impl Database {
         Ok(count as u32)
     }
 
+    /// Counts unread mails for a specific folder.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the database query fails.
+    pub fn count_unread_in_folder(&self, folder_id: &str) -> Result<u32, AeroError> {
+        let conn = self.connection()?;
+        let count: i64 = conn.query_row(
+            "SELECT COUNT(*) FROM mails WHERE folder_id = ?1 AND is_read = 0",
+            [folder_id],
+            |row| row.get(0),
+        )?;
+        Ok(count as u32)
+    }
+
     /// Gets the account email address for the given account ID.
     ///
     /// # Errors

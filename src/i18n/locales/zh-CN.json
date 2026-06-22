@@ -62,7 +62,11 @@
     "to": "收件人",
     "cc": "抄送",
     "bcc": "密送",
-    "yesterday": "昨天"
+    "yesterday": "昨天",
+    "remoteContentBlocked": "远程内容已被拦截",
+    "remoteContentHint": "为保护隐私，外部图片和样式已被隐藏。",
+    "allowOnce": "临时允许",
+    "alwaysTrustDomain": "始终信任 {domain}"
   },
   "compose": {
     "addAttachment": "添加附件",

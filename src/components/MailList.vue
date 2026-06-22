@@ -2,7 +2,7 @@
 import { computed, onMounted, ref, watch } from 'vue';
 import { useI18n } from 'vue-i18n';
 import { useRoute } from 'vue-router';
-import { Star, Archive, Paperclip } from 'lucide-vue-next';
+import { Star, Archive, Paperclip, Check } from 'lucide-vue-next';
 import { useMailStore } from '@/stores/mail';
 import { useAccountStore } from '@/stores/account';
 import { useToastStore } from '@/stores/toast';
@@ -87,6 +87,13 @@ watch(
         await mailStore.loadMails(currentFolderId.value);
       }
     }
+  }
+);
+
+watch(
+  () => mailStore.totalUnread,
+  (count) => {
+    statusStore.setUnreadCount(count);
   }
 );
 
@@ -305,14 +312,20 @@ async function bulkMarkRead(isRead: boolean) {
         @contextmenu="handleContextMenu($event, mail)"
       >
         <div class="flex items-center gap-3">
-          <input
-            type="checkbox"
-            :checked="isSelected(mail.id)"
-            class="h-4 w-4 rounded border-border text-accent focus:ring-accent"
-            :aria-label="t('mail.select')"
-            @click.stop
-            @change="handleCheckboxChange(mail.id, $event)"
-          />
+          <label
+            class="relative flex h-4 w-4 shrink-0 cursor-pointer items-center justify-center rounded border border-border bg-base transition-colors hover:border-accent peer-focus-within:ring-2 peer-focus-within:ring-accent"
+            :class="isSelected(mail.id) ? 'border-accent bg-accent text-white' : 'text-transparent'"
+          >
+            <input
+              type="checkbox"
+              :checked="isSelected(mail.id)"
+              class="peer sr-only"
+              :aria-label="t('mail.select')"
+              @click.stop
+              @change="handleCheckboxChange(mail.id, $event)"
+            />
+            <Check class="h-3 w-3" />
+          </label>
           <div class="flex-1 min-w-0">
             <div class="flex items-center justify-between gap-2">
               <div class="flex items-center gap-2 min-w-0">

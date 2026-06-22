@@ -4,14 +4,35 @@ import { ref, watch, onMounted } from 'vue';
 const props = defineProps<{
   html: string;
   className?: string;
+  allowedDomains?: string[];
 }>();
 
 const iframeRef = ref<HTMLIFrameElement | null>(null);
+
+function buildCsp(): string {
+  const allowed = (props.allowedDomains || [])
+    .map((d) => d.trim())
+    .filter(Boolean);
+  const imgSrc = ["'self'", 'data:', 'cid:', ...allowed].join(' ');
+  const styleSrc = ["'unsafe-inline'", "'self'", ...allowed].join(' ');
+  const fontSrc = ["'self'", ...allowed].join(' ');
+  const mediaSrc = ["'self'", ...allowed].join(' ');
+  return [
+    "default-src 'none'",
+    `img-src ${imgSrc}`,
+    `style-src ${styleSrc}`,
+    `font-src ${fontSrc}`,
+    `media-src ${mediaSrc}`,
+    "script-src 'none'",
+  ].join('; ');
+}
 
 function renderHtml() {
   if (!iframeRef.value) return;
   const doc = iframeRef.value.contentDocument;
   if (!doc) return;
+
+  const csp = buildCsp();
 
   doc.open();
   doc.write(`
@@ -19,7 +40,7 @@ function renderHtml() {
     <html>
     <head>
       <meta charset="utf-8">
-      <meta http-equiv="Content-Security-Policy" content="default-src 'none'; img-src 'self' data: cid:; style-src 'unsafe-inline' 'self';">
+      <meta http-equiv="Content-Security-Policy" content="${csp}">
       <style>
         :root {
           color-scheme: light;
@@ -112,7 +133,7 @@ function adjustHeight() {
   iframeRef.value.style.height = `${Math.min(height + 20, 2000)}px`;
 }
 
-watch(() => props.html, renderHtml);
+watch(() => [props.html, props.allowedDomains], renderHtml, { deep: true });
 onMounted(renderHtml);
 </script>
 

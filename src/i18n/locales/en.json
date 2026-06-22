@@ -62,7 +62,11 @@
     "to": "To",
     "cc": "Cc",
     "bcc": "Bcc",
-    "yesterday": "Yesterday"
+    "yesterday": "Yesterday",
+    "remoteContentBlocked": "Remote content blocked",
+    "remoteContentHint": "External images and styles are hidden to protect your privacy.",
+    "allowOnce": "Allow once",
+    "alwaysTrustDomain": "Always trust {domain}"
   },
   "compose": {
     "addAttachment": "Add attachment",

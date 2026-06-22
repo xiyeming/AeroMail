@@ -293,7 +293,7 @@ impl SyncWorker {
             }
         }
 
-        let unread = i64::from(self.db.count_unread(&self.account_id)?);
+        let unread = i64::from(self.db.count_unread_in_folder(&folder_id)?);
         self.db.update_folder_sync(
             &folder_id,
             i64::from(remote_uid_validity),

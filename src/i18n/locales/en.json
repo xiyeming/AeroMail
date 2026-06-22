@@ -19,6 +19,8 @@
     "noEmails": "No messages",
     "selectEmail": "Select a message to read",
     "selectEmailHint": "Use keyboard shortcuts to navigate",
+    "skipToList": "Skip to message list",
+    "skipToReader": "Skip to reader",
     "navigate": "Navigate",
     "open": "Open",
     "close": "Close",

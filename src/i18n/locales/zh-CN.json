@@ -19,6 +19,8 @@
     "noEmails": "暂无邮件",
     "selectEmail": "选择一封邮件阅读",
     "selectEmailHint": "使用键盘快捷键导航",
+    "skipToList": "跳转到邮件列表",
+    "skipToReader": "跳转到阅读区",
     "navigate": "导航",
     "open": "打开",
     "close": "关闭",

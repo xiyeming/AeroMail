@@ -1,5 +1,5 @@
 <template>
-  <div class="flex h-full flex-col bg-background">
+  <div class="flex h-full flex-col bg-base text-primary">
     <ComposeHeader
       :draft="store.draft"
       :accounts="accounts"
@@ -16,13 +16,13 @@
     <div class="flex items-center gap-3 border-t border-border p-3">
       <button
         type="button"
-        class="rounded-lg border border-border bg-panel px-3 py-1.5 text-sm text-text transition-colors hover:bg-card"
+        class="rounded-md border border-border bg-elevated px-3 py-2 text-sm text-primary transition-colors hover:bg-raised"
         @click="addAttachment"
       >
         {{ $t('compose.addAttachment') }}
       </button>
-      <span v-if="store.saving" class="text-xs text-muted">{{ $t('compose.saving') }}</span>
-      <span v-else-if="store.draft.savedAt > 0" class="text-xs text-muted">{{
+      <span v-if="store.saving" class="text-xs text-tertiary">{{ $t('compose.saving') }}</span>
+      <span v-else-if="store.draft.savedAt > 0" class="text-xs text-tertiary">{{
         $t('compose.saved')
       }}</span>
     </div>
@@ -40,12 +40,14 @@ import ComposeEditor from '@/components/compose/ComposeEditor.vue';
 import ComposeAttachmentList from '@/components/compose/ComposeAttachmentList.vue';
 import type { AttachmentDraft } from '@/types/compose';
 import { useToastStore } from '@/stores/toast';
+import { useI18n } from 'vue-i18n';
 
 const route = useRoute();
 const store = useComposeStore();
 const accountStore = useAccountStore();
 const toast = useToastStore();
 const { call } = useTauriInvoke();
+const { t } = useI18n();
 
 const accounts = computed(() => accountStore.accounts);
 
@@ -73,7 +75,11 @@ onMounted(async () => {
 async function ensureDraftId(): Promise<string | null> {
   if (store.draft.id) return store.draft.id;
   if (!store.draft.accountId) {
-    toast.error('Please select an account first');
+    toast.add({
+      type: 'error',
+      message: t('compose.noAccountSelected'),
+      duration: 5000,
+    });
     return null;
   }
   await store.saveNow();

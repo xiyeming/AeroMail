@@ -1,18 +1,22 @@
 <script setup lang="ts">
-import { ref, computed, watch } from 'vue';
+import { ref, computed, watch, nextTick } from 'vue';
 import { useRouter } from 'vue-router';
 import { useI18n } from 'vue-i18n';
 import {
   Languages,
   Star,
   Trash2,
-  Maximize2,
-  Minimize2,
+  Expand,
+  Compress,
   Mail,
   Paperclip,
   Reply,
   ReplyAll,
   Forward,
+  Archive,
+  AlertTriangle,
+  ShieldCheck,
+  Sparkles,
 } from 'lucide-vue-next';
 import { invoke } from '@tauri-apps/api/core';
 import AiQuickActions from '@/components/AiQuickActions.vue';
@@ -30,20 +34,42 @@ const aiStore = useAiStore();
 const mailStore = useMailStore();
 
 const translatedText = ref<string | null>(null);
+const translatedLang = ref<string | null>(null);
 const showTranslation = ref(false);
 const showTranslatePanel = ref(false);
 const showDeleteConfirm = ref(false);
 const attachments = ref<AttachmentInfo[]>([]);
+const deleteDialogRef = ref<HTMLDivElement | null>(null);
 
 const currentMailId = computed(() => mailStore.selectedMailId);
 const mail = computed(() => mailStore.selectedMail);
 const isStarred = computed(() => mail.value?.isStarred ?? false);
+const isSpam = computed(() => mail.value?.isSpam ?? false);
+const isArchived = computed(() => mail.value?.isArchived ?? false);
 
 async function loadAttachments(mailId: string) {
   try {
     attachments.value = await invoke<AttachmentInfo[]>('get_attachments', { mailId });
   } catch (e) {
     console.error('Failed to load attachments:', e);
+  }
+}
+
+async function downloadAttachment(att: AttachmentInfo) {
+  try {
+    const bytes = await invoke<number[]>('get_attachment_content', { attachmentId: att.id });
+    const uint8 = new Uint8Array(bytes);
+    const blob = new Blob([uint8], { type: att.mimeType || 'application/octet-stream' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = att.filename;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+  } catch (e) {
+    console.error('Failed to download attachment:', e);
   }
 }
 
@@ -68,8 +94,9 @@ async function handleQuickAction(promptKey: keyof typeof PROMPTS) {
   await sendMessage(session.id, PROMPTS[promptKey]);
 }
 
-function handleTranslated(text: string) {
-  translatedText.value = text;
+function handleTranslated(payload: { text: string; lang: string }) {
+  translatedText.value = payload.text;
+  translatedLang.value = payload.lang;
   showTranslation.value = true;
   showTranslatePanel.value = false;
 }
@@ -81,6 +108,18 @@ function toggleTranslation() {
 function handleToggleStar() {
   if (currentMailId.value) {
     mailStore.toggleStar(currentMailId.value);
+  }
+}
+
+function handleArchive() {
+  if (currentMailId.value) {
+    mailStore.archiveMail(currentMailId.value);
+  }
+}
+
+function handleToggleSpam() {
+  if (currentMailId.value) {
+    mailStore.toggleSpam(currentMailId.value);
   }
 }
 
@@ -133,42 +172,89 @@ function formatAddresses(addresses: string | null): string {
   }
 }
 
-// Reset translation and load attachments when mail changes
+// Focus trap for delete dialog
+function getFocusableElements(container: HTMLElement): HTMLElement[] {
+  const selector =
+    'button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])';
+  return Array.from(container.querySelectorAll(selector)).filter(
+    (el) => !el.hasAttribute('disabled') && (el as HTMLElement).offsetParent !== null
+  ) as HTMLElement[];
+}
+
+function handleDeleteKeyDown(e: KeyboardEvent) {
+  if (e.key === 'Escape') {
+    e.preventDefault();
+    cancelDelete();
+    return;
+  }
+  if (e.key !== 'Tab' || !deleteDialogRef.value) return;
+
+  const focusable = getFocusableElements(deleteDialogRef.value);
+  if (focusable.length === 0) return;
+  const first = focusable[0];
+  const last = focusable[focusable.length - 1];
+
+  if (e.shiftKey && document.activeElement === first) {
+    e.preventDefault();
+    last.focus();
+  } else if (!e.shiftKey && document.activeElement === last) {
+    e.preventDefault();
+    first.focus();
+  }
+}
+
+watch(showDeleteConfirm, async (show) => {
+  if (show) {
+    await nextTick();
+    const focusable = deleteDialogRef.value
+      ? getFocusableElements(deleteDialogRef.value)
+      : [];
+    focusable[0]?.focus();
+  }
+});
+
 watch(currentMailId, (newMailId) => {
   translatedText.value = null;
+  translatedLang.value = null;
   showTranslation.value = false;
   showTranslatePanel.value = false;
   showDeleteConfirm.value = false;
   attachments.value = [];
-  if (newMailId) {
+  if (newMailId && mail.value?.hasAttachments) {
     loadAttachments(newMailId);
   }
 });
 </script>
 
 <template>
-  <div class="flex h-full flex-col bg-background">
+  <div class="flex h-full flex-col bg-base">
+    <!-- Empty state -->
     <div
       v-if="!currentMailId"
-      class="flex flex-1 flex-col items-center justify-center gap-4 text-muted"
+      class="flex flex-1 flex-col items-center justify-center gap-4 text-secondary"
     >
-      <Mail class="h-16 w-16 opacity-20" />
+      <Mail class="h-16 w-16 opacity-20" aria-hidden="true" />
       <div class="text-center">
         <p class="text-lg font-medium">{{ $t('mail.selectEmail') }}</p>
         <p class="mt-1 text-sm">{{ $t('mail.selectEmailHint') }}</p>
       </div>
-      <div class="mt-4 flex gap-4 text-xs text-muted/60">
+      <div class="mt-4 flex gap-4 text-xs text-tertiary">
         <span
-          ><kbd class="rounded bg-card px-1.5 py-0.5">J</kbd> /
-          <kbd class="rounded bg-card px-1.5 py-0.5">K</kbd> {{ $t('mail.navigate') }}</span
+          ><kbd class="rounded bg-raised px-1.5 py-0.5">J</kbd> /
+          <kbd class="rounded bg-raised px-1.5 py-0.5">K</kbd> {{ $t('mail.navigate') }}</span
         >
-        <span><kbd class="rounded bg-card px-1.5 py-0.5">Enter</kbd> {{ $t('mail.open') }}</span>
-        <span><kbd class="rounded bg-card px-1.5 py-0.5">Esc</kbd> {{ $t('mail.close') }}</span>
+        <span
+          ><kbd class="rounded bg-raised px-1.5 py-0.5">Enter</kbd> {{ $t('mail.open') }}</span
+        >
+        <span
+          ><kbd class="rounded bg-raised px-1.5 py-0.5">Esc</kbd> {{ $t('mail.close') }}</span
+        >
       </div>
     </div>
+
     <template v-else-if="mail">
       <!-- Toolbar -->
-      <div class="flex items-center justify-between border-b border-border px-4 py-2">
+      <div class="flex items-center justify-between border-b border-border px-3 py-2">
         <AiQuickActions
           @summarize="handleQuickAction('summarize')"
           @reply="handleQuickAction('reply')"
@@ -176,55 +262,89 @@ watch(currentMailId, (newMailId) => {
         />
         <div class="flex items-center gap-1">
           <button
-            class="flex h-8 items-center gap-1.5 rounded-md border border-border px-2 text-xs text-text-secondary hover:bg-card"
-            :class="{ 'text-yellow-500': isStarred }"
-            :title="t('mail.star')"
+            type="button"
+            class="flex h-8 w-8 items-center justify-center rounded-md text-secondary transition-colors hover:bg-raised"
+            :class="{ 'text-warning': isStarred }"
+            :title="isStarred ? t('mail.unstar') : t('mail.star')"
             @click="handleToggleStar"
           >
-            <Star class="h-3.5 w-3.5" :fill="isStarred ? 'currentColor' : 'none'" />
+            <Star class="h-4 w-4" :fill="isStarred ? 'currentColor' : 'none'" />
           </button>
           <button
-            class="flex h-8 items-center gap-1.5 rounded-md border border-border px-2 text-xs text-text-secondary hover:bg-card"
+            type="button"
+            class="flex h-8 w-8 items-center justify-center rounded-md text-secondary transition-colors hover:bg-raised"
+            :class="{ 'text-primary': isArchived }"
+            :title="t('mail.archive')"
+            @click="handleArchive"
+          >
+            <Archive class="h-4 w-4" />
+          </button>
+          <button
+            type="button"
+            class="flex h-8 w-8 items-center justify-center rounded-md text-secondary transition-colors hover:bg-raised"
+            :class="{ 'text-danger': isSpam }"
+            :title="isSpam ? t('mail.notSpam') : t('mail.markAsSpam')"
+            @click="handleToggleSpam"
+          >
+            <ShieldCheck v-if="isSpam" class="h-4 w-4" />
+            <AlertTriangle v-else class="h-4 w-4" />
+          </button>
+          <button
+            type="button"
+            class="flex h-8 w-8 items-center justify-center rounded-md text-secondary transition-colors hover:bg-raised"
             :title="t('mail.reply')"
             @click="handleReply"
           >
-            <Reply class="h-3.5 w-3.5" />
+            <Reply class="h-4 w-4" />
           </button>
           <button
-            class="flex h-8 items-center gap-1.5 rounded-md border border-border px-2 text-xs text-text-secondary hover:bg-card"
+            type="button"
+            class="flex h-8 w-8 items-center justify-center rounded-md text-secondary transition-colors hover:bg-raised"
             :title="t('mail.replyAll')"
             @click="handleReplyAll"
           >
-            <ReplyAll class="h-3.5 w-3.5" />
+            <ReplyAll class="h-4 w-4" />
           </button>
           <button
-            class="flex h-8 items-center gap-1.5 rounded-md border border-border px-2 text-xs text-text-secondary hover:bg-card"
+            type="button"
+            class="flex h-8 w-8 items-center justify-center rounded-md text-secondary transition-colors hover:bg-raised"
             :title="t('mail.forward')"
             @click="handleForward"
           >
-            <Forward class="h-3.5 w-3.5" />
+            <Forward class="h-4 w-4" />
           </button>
           <button
-            class="flex h-8 items-center gap-1.5 rounded-md border border-border px-2 text-xs text-text-secondary hover:bg-card"
+            type="button"
+            class="flex h-8 w-8 items-center justify-center rounded-md text-secondary transition-colors hover:bg-raised"
             :title="mailStore.isReadingMode ? t('mail.exitReadingMode') : t('mail.readingMode')"
             @click="mailStore.toggleReadingMode()"
           >
-            <Minimize2 v-if="mailStore.isReadingMode" class="h-3.5 w-3.5" />
-            <Maximize2 v-else class="h-3.5 w-3.5" />
+            <Compress v-if="mailStore.isReadingMode" class="h-4 w-4" />
+            <Expand v-else class="h-4 w-4" />
           </button>
           <button
-            class="flex h-8 items-center gap-1.5 rounded-md border border-border px-2 text-xs text-text-secondary hover:bg-card hover:text-red-500"
+            type="button"
+            class="flex h-8 w-8 items-center justify-center rounded-md text-secondary transition-colors hover:bg-raised hover:text-danger"
             :title="t('mail.delete')"
             @click="handleDelete"
           >
-            <Trash2 class="h-3.5 w-3.5" />
+            <Trash2 class="h-4 w-4" />
           </button>
           <button
-            class="flex h-8 items-center gap-1.5 rounded-md border border-border px-2 text-xs text-text-secondary hover:bg-card"
+            type="button"
+            class="flex h-8 w-8 items-center justify-center rounded-md text-secondary transition-colors hover:bg-raised"
             :title="t('translation.translate')"
             @click="showTranslatePanel = !showTranslatePanel"
           >
-            <Languages class="h-3.5 w-3.5" />
+            <Languages class="h-4 w-4" />
+          </button>
+          <button
+            type="button"
+            class="flex h-8 w-8 items-center justify-center rounded-md text-secondary transition-colors hover:bg-raised"
+            :title="t('aiAssistant.title')"
+            @click="aiStore.togglePanel()"
+          >
+            <Sparkles class="h-4 w-4" />
           </button>
         </div>
       </div>
@@ -237,13 +357,13 @@ watch(currentMailId, (newMailId) => {
       <!-- Translation display -->
       <div
         v-if="translatedText && showTranslation"
-        class="flex items-center justify-between border-b border-border bg-primary/5 px-4 py-1.5"
+        class="flex items-center justify-between border-b border-border bg-accent-subtle px-4 py-1.5"
       >
-        <span class="text-xs text-primary">
-          {{ t('translation.translatedTo', { lang: 'target' }) }}
+        <span class="text-xs text-accent">
+          {{ t('translation.translatedTo', { lang: translatedLang ?? 'target' }) }}
         </span>
         <button
-          class="text-xs text-primary underline hover:text-primary-hover"
+          class="text-xs text-accent underline hover:text-accent-hover"
           @click="toggleTranslation"
         >
           {{ t('translation.showOriginal') }}
@@ -252,33 +372,33 @@ watch(currentMailId, (newMailId) => {
 
       <!-- Mail header -->
       <div class="border-b border-border px-6 py-4">
-        <h1 class="text-xl font-semibold text-text">
+        <h1 class="text-xl font-semibold text-primary">
           {{ mail.subject || t('mail.noSubject') }}
         </h1>
-        <div class="mt-2 flex items-center gap-4 text-sm text-text-secondary">
+        <div class="mt-2 flex items-center gap-4 text-sm">
           <div class="flex items-center gap-2">
             <div
-              class="flex h-8 w-8 items-center justify-center rounded-full bg-primary/10 text-sm font-medium text-primary"
+              class="flex h-8 w-8 items-center justify-center rounded-full bg-accent-subtle text-sm font-medium text-accent"
             >
               {{ (mail.fromName || mail.fromAddress || '?').charAt(0).toUpperCase() }}
             </div>
             <div>
-              <div class="font-medium text-text">
+              <div class="font-medium text-primary">
                 {{ mail.fromName || mail.fromAddress || t('mail.unknownSender') }}
               </div>
-              <div class="text-xs text-muted">
+              <div class="text-xs text-tertiary">
                 {{ mail.fromAddress }}
               </div>
             </div>
           </div>
-          <div class="text-xs text-muted">
+          <div class="ml-auto text-xs text-tertiary">
             {{ formatDate(mail.date) }}
           </div>
         </div>
-        <div v-if="mail.toAddresses" class="mt-2 text-xs text-muted">
+        <div v-if="mail.toAddresses" class="mt-2 text-xs text-tertiary">
           {{ t('mail.to') }}: {{ formatAddresses(mail.toAddresses) }}
         </div>
-        <div v-if="mail.ccAddresses" class="mt-1 text-xs text-muted">
+        <div v-if="mail.ccAddresses" class="mt-1 text-xs text-tertiary">
           {{ t('mail.cc') }}: {{ formatAddresses(mail.ccAddresses) }}
         </div>
       </div>
@@ -287,11 +407,11 @@ watch(currentMailId, (newMailId) => {
       <div class="flex-1 overflow-y-auto px-6 py-4">
         <div
           v-if="translatedText && !showTranslation"
-          class="mb-4 rounded-lg bg-muted/10 p-4 text-sm text-text-secondary"
+          class="mb-4 rounded-lg bg-raised p-4 text-sm text-secondary"
         >
           {{ translatedText }}
           <button
-            class="ml-2 text-xs text-primary underline hover:text-primary-hover"
+            class="ml-2 text-xs text-accent underline hover:text-accent-hover"
             @click="toggleTranslation"
           >
             {{ t('translation.showOriginal') }}
@@ -301,41 +421,41 @@ watch(currentMailId, (newMailId) => {
         <SandboxedHtml
           v-if="mail.bodyHtml"
           :html="mail.bodyHtml"
-          class="prose prose-sm max-w-none text-text"
+          class="prose prose-sm max-w-none text-primary"
         />
-        <div v-else-if="mail.bodyText" class="whitespace-pre-wrap text-sm text-text">
+        <div v-else-if="mail.bodyText" class="whitespace-pre-wrap text-sm text-primary">
           {{ mail.bodyText }}
         </div>
-        <div v-else class="text-sm text-muted italic">
+        <div v-else class="text-sm italic text-secondary">
           {{ t('mail.noContent') }}
         </div>
       </div>
 
       <!-- Attachments -->
       <div v-if="attachments.length > 0" class="border-t border-border px-6 py-3">
-        <h3 class="mb-2 text-sm font-medium text-text">
+        <h3 class="mb-2 text-sm font-medium text-primary">
           {{ t('mail.attachments') }} ({{ attachments.length }})
         </h3>
         <div class="flex flex-wrap gap-2">
-          <div
+          <button
             v-for="att in attachments"
             :key="att.id"
-            class="flex items-center gap-2 rounded-md border border-border px-3 py-2 text-sm hover:bg-card"
+            type="button"
+            class="flex items-center gap-2 rounded-md border border-border px-3 py-2 text-sm transition-colors hover:bg-raised focus:outline-none focus:ring-2 focus:ring-accent"
+            @click="downloadAttachment(att)"
           >
-            <Paperclip class="h-4 w-4 text-muted" />
-            <span class="text-text">{{ att.filename }}</span>
-            <span class="text-xs text-muted">{{ formatSize(att.size) }}</span>
-          </div>
+            <Paperclip class="h-4 w-4 text-tertiary" />
+            <span class="text-primary">{{ att.filename }}</span>
+            <span class="text-xs text-tertiary">{{ formatSize(att.size) }}</span>
+          </button>
         </div>
       </div>
     </template>
 
     <!-- Loading state -->
-    <div v-else-if="currentMailId" class="flex flex-1 items-center justify-center text-muted">
+    <div v-else-if="currentMailId" class="flex flex-1 items-center justify-center text-secondary">
       <div class="flex items-center gap-2">
-        <div
-          class="h-4 w-4 animate-spin rounded-full border-2 border-primary border-t-transparent"
-        />
+        <div class="h-4 w-4 animate-spin rounded-full border-2 border-accent border-t-transparent" />
         {{ t('mail.loading') }}
       </div>
     </div>
@@ -347,18 +467,30 @@ watch(currentMailId, (newMailId) => {
         class="fixed inset-0 z-50 flex items-center justify-center bg-overlay"
         @click="cancelDelete"
       >
-        <div class="w-80 rounded-lg bg-panel p-4 shadow-lg" @click.stop>
-          <h3 class="text-lg font-medium text-text">{{ t('mail.deleteConfirmTitle') }}</h3>
-          <p class="mt-2 text-sm text-text-secondary">{{ t('mail.deleteConfirmMessage') }}</p>
+        <div
+          ref="deleteDialogRef"
+          role="alertdialog"
+          aria-modal="true"
+          aria-labelledby="delete-title"
+          aria-describedby="delete-message"
+          class="w-80 rounded-lg bg-elevated p-4 shadow-lg"
+          tabindex="-1"
+          @keydown="handleDeleteKeyDown"
+          @click.stop
+        >
+          <h3 id="delete-title" class="text-lg font-medium text-primary">{{ t('mail.deleteConfirmTitle') }}</h3>
+          <p id="delete-message" class="mt-2 text-sm text-secondary">{{ t('mail.deleteConfirmMessage') }}</p>
           <div class="mt-4 flex justify-end gap-2">
             <button
-              class="rounded-md border border-border px-3 py-1.5 text-sm text-text-secondary hover:bg-card"
+              type="button"
+              class="rounded-md border border-border px-3 py-1.5 text-sm text-secondary transition-colors hover:bg-raised"
               @click="cancelDelete"
             >
               {{ t('common.cancel') }}
             </button>
             <button
-              class="rounded-md bg-red-500 px-3 py-1.5 text-sm text-white hover:bg-red-600"
+              type="button"
+              class="rounded-md bg-danger px-3 py-1.5 text-sm text-white transition-colors hover:bg-danger/90"
               @click="confirmDelete"
             >
               {{ t('common.delete') }}

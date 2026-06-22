@@ -1,6 +1,6 @@
+use lettre::Message;
 use lettre::message::header::ContentType;
 use lettre::message::{Attachment, MultiPart, SinglePart};
-use lettre::Message;
 
 use crate::error::AeroError;
 use crate::models::compose::ComposeDraft;
@@ -15,10 +15,21 @@ pub fn build_message(
     from_name: &str,
     attachment_bytes: &[(String, Vec<u8>)], // (attachment_id, bytes)
 ) -> Result<Vec<u8>, AeroError> {
-    let from_header = format!("{} <{}>", from_name, from_address)
+    let from_header = format!("{from_name} <{from_address}>")
         .parse()
         .map_err(|e| AeroError::InvalidRecipient(format!("invalid from: {e}")))?;
     let mut builder = Message::builder().from(from_header);
+
+    // Set In-Reply-To when replying to a mail with a known Message-ID
+    if let Some(ref reply_context) = draft.reply_context {
+        if let Some(ref original_message_id) = reply_context.original_message_id {
+            let id = original_message_id
+                .trim()
+                .trim_start_matches('<')
+                .trim_end_matches('>');
+            builder = builder.in_reply_to(id.to_string());
+        }
+    }
 
     for addr in &draft.to {
         let to_header = addr
@@ -37,10 +48,6 @@ pub fn build_message(
             .parse()
             .map_err(|e| AeroError::InvalidRecipient(format!("invalid bcc {addr}: {e}")))?;
         builder = builder.bcc(bcc_header);
-    }
-
-    if let Some(ref reply_ctx) = draft.reply_context {
-        builder = builder.in_reply_to(reply_ctx.original_mail_id.clone());
     }
 
     let message = builder
@@ -162,5 +169,18 @@ mod tests {
         let text = String::from_utf8(bytes).unwrap();
         assert!(text.contains("note.txt"));
         assert!(text.contains("hello"));
+    }
+
+    #[test]
+    fn builds_reply_with_in_reply_to() {
+        let mut draft = sample_draft();
+        draft.reply_context = Some(crate::models::compose::ReplyContext {
+            original_mail_id: "m1".to_string(),
+            original_message_id: Some("<abc@example.com>".to_string()),
+            kind: crate::models::compose::ReplyKind::Reply,
+        });
+        let bytes = build_message(&draft, "from@example.com", "Sender", &[]).unwrap();
+        let text = String::from_utf8(bytes).unwrap();
+        assert!(text.contains("In-Reply-To: <abc@example.com>"));
     }
 }

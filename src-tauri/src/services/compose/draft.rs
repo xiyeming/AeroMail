@@ -17,7 +17,7 @@ pub struct DraftService {
 }
 
 impl DraftService {
-    pub fn new(db: Arc<Database>, drafts_dir: PathBuf) -> Self {
+    pub const fn new(db: Arc<Database>, drafts_dir: PathBuf) -> Self {
         Self { db, drafts_dir }
     }
 
@@ -58,10 +58,7 @@ impl DraftService {
     }
 
     /// Saves a draft and its attachment metadata locally.
-    pub fn save_draft(
-        &self,
-        draft: &mut ComposeDraft,
-    ) -> Result<(), AeroError> {
+    pub fn save_draft(&self, draft: &mut ComposeDraft) -> Result<(), AeroError> {
         if draft.id.is_empty() {
             draft.id = Uuid::new_v4().to_string();
         }
@@ -72,10 +69,7 @@ impl DraftService {
     }
 
     /// Retrieves a draft by ID.
-    pub fn get_draft(
-        &self,
-        draft_id: &str,
-    ) -> Result<Option<ComposeDraft>, AeroError> {
+    pub fn get_draft(&self, draft_id: &str) -> Result<Option<ComposeDraft>, AeroError> {
         self.db.get_draft(draft_id)
     }
 
@@ -88,10 +82,7 @@ impl DraftService {
     }
 
     /// Deletes a draft and its attachment files.
-    pub fn delete_draft(
-        &self,
-        draft_id: &str,
-    ) -> Result<(), AeroError> {
+    pub fn delete_draft(&self, draft_id: &str) -> Result<(), AeroError> {
         self.db.delete_draft(draft_id)?;
         let dir = self.draft_dir(draft_id)?;
         if dir.exists() {
@@ -110,11 +101,13 @@ impl DraftService {
     ) -> Result<PathBuf, AeroError> {
         self.ensure_draft_dir(draft_id)?;
         let dir = self.attachment_dir(draft_id, &attachment.id)?;
-        std::fs::create_dir_all(&dir)
-            .map_err(|e| AeroError::InvalidAttachment(format!("failed to create attachment dir: {e}")))?;
+        std::fs::create_dir_all(&dir).map_err(|e| {
+            AeroError::InvalidAttachment(format!("failed to create attachment dir: {e}"))
+        })?;
         let path = dir.join(&attachment.filename);
-        std::fs::write(&path, data)
-            .map_err(|e| AeroError::InvalidAttachment(format!("failed to write attachment: {e}")))?;
+        std::fs::write(&path, data).map_err(|e| {
+            AeroError::InvalidAttachment(format!("failed to write attachment: {e}"))
+        })?;
         Ok(path)
     }
 
@@ -126,7 +119,8 @@ impl DraftService {
         filename: &str,
     ) -> Result<Vec<u8>, AeroError> {
         let path = self.attachment_dir(draft_id, attachment_id)?.join(filename);
-        std::fs::read(&path).map_err(|e| AeroError::AttachmentNotFound(format!("{path:?}: {e}")))
+        std::fs::read(&path)
+            .map_err(|e| AeroError::AttachmentNotFound(format!("{}: {e}", path.display())))
     }
 
     /// Prepares a reply/forward draft from an existing mail.
@@ -136,30 +130,41 @@ impl DraftService {
         original: &MailDetail,
         kind: ReplyKind,
     ) -> Result<ComposeDraft, AeroError> {
+        let own_address = self
+            .db
+            .get_account_email(account_id)?
+            .map(|a| a.to_lowercase());
+
         let mut to = Vec::new();
         let mut cc = Vec::new();
 
-        if let Some(ref from) = original.from_address {
-            match kind {
-                ReplyKind::Reply | ReplyKind::ReplyAll => to.push(from.clone()),
-                ReplyKind::Forward => {}
-            }
+        if let Some(ref from) = original.from_address
+            && matches!(kind, ReplyKind::Reply | ReplyKind::ReplyAll)
+            && own_address
+                .as_ref()
+                .is_none_or(|own| extract_email(from).to_lowercase() != *own)
+        {
+            to.push(from.clone());
         }
 
         if matches!(kind, ReplyKind::ReplyAll) {
             if let Some(ref to_addrs) = original.to_addresses {
-                for addr in to_addrs.split(',') {
-                    let trimmed = addr.trim();
-                    if !trimmed.is_empty() {
-                        to.push(trimmed.to_string());
+                for addr in parse_address_list(to_addrs) {
+                    if own_address
+                        .as_ref()
+                        .is_none_or(|own| extract_email(&addr).to_lowercase() != *own)
+                    {
+                        to.push(addr);
                     }
                 }
             }
             if let Some(ref cc_addrs) = original.cc_addresses {
-                for addr in cc_addrs.split(',') {
-                    let trimmed = addr.trim();
-                    if !trimmed.is_empty() {
-                        cc.push(trimmed.to_string());
+                for addr in parse_address_list(cc_addrs) {
+                    if own_address
+                        .as_ref()
+                        .is_none_or(|own| extract_email(&addr).to_lowercase() != *own)
+                    {
+                        cc.push(addr);
                     }
                 }
             }
@@ -171,23 +176,35 @@ impl DraftService {
         };
         let subject = match original.subject {
             Some(ref s) if s.starts_with(subject_prefix) => s.clone(),
-            Some(ref s) => format!("{}{}", subject_prefix, s),
+            Some(ref s) => format!("{subject_prefix}{s}"),
             None => subject_prefix.trim_end().to_string(),
         };
 
         let quote = format!(
             "\n\nOn {}, {} wrote:\n> {}",
-            original.date.map(|d| d.to_string()).unwrap_or_default(),
+            original
+                .date
+                .and_then(|d| chrono::DateTime::from_timestamp(d, 0))
+                .map(|d| d.to_rfc2822())
+                .unwrap_or_default(),
             original.from_address.clone().unwrap_or_default(),
-            original.body_text.clone().unwrap_or_default().replace('\n', "\n> ")
+            original
+                .body_text
+                .clone()
+                .unwrap_or_default()
+                .replace('\n', "\n> ")
         );
-        let body_html = format!("\n\n<blockquote>{}\n</blockquote>", html_escape::encode_safe(&original.body_text.clone().unwrap_or_default()));
+        let body_html = format!(
+            "\n\n<blockquote>{}\n</blockquote>",
+            html_escape::encode_safe(&original.body_text.clone().unwrap_or_default())
+        );
 
         Ok(ComposeDraft {
             id: String::new(),
             account_id: account_id.to_string(),
             reply_context: Some(ReplyContext {
                 original_mail_id: original.id.clone(),
+                original_message_id: original.message_id.clone(),
                 kind,
             }),
             subject,
@@ -202,4 +219,25 @@ impl DraftService {
             remote_uid: None,
         })
     }
+}
+
+/// Parses a JSON address list string, falling back to comma-separated values.
+fn parse_address_list(json: &str) -> Vec<String> {
+    serde_json::from_str::<Vec<String>>(json).unwrap_or_else(|_| {
+        json.split(',')
+            .map(|s| s.trim().to_string())
+            .filter(|s| !s.is_empty())
+            .collect()
+    })
+}
+
+/// Extracts the bare email address from a header value like `"Name" <addr@example.com>`.
+fn extract_email(addr: &str) -> &str {
+    let trimmed = addr.trim();
+    if let Some(start) = trimmed.find('<') {
+        if let Some(end) = trimmed.find('>') {
+            return trimmed[start + 1..end].trim();
+        }
+    }
+    trimmed
 }

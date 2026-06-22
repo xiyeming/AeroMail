@@ -54,6 +54,10 @@ pub enum AeroError {
     MailBuilderFailed(String),
     #[error("IMAP append failed: {0}")]
     ImapAppendFailed(String),
+    #[error("OAuth2 refresh failed: {0}")]
+    OAuth2RefreshFailed(String),
+    #[error("OAuth2 configuration incomplete")]
+    OAuth2ConfigIncomplete,
     #[error("sync error: {0}")]
     SyncError(String),
     #[error("search index error: {0}")]
@@ -78,11 +82,11 @@ impl AeroError {
             },
             Self::InvalidConfig(reason) => ErrorPayload {
                 code: "INVALID_ACCOUNT_CONFIG".to_string(),
-                args: vec![reason.clone()],
+                args: vec![format!("Account settings are incomplete or incorrect. {reason}")],
             },
             Self::ConnectionTestFailed(reason) => ErrorPayload {
                 code: "CONNECTION_TEST_FAILED".to_string(),
-                args: vec![reason.clone()],
+                args: vec![format!("Account connection test failed: {reason}.")],
             },
             Self::Internal(reason) => ErrorPayload {
                 code: "INTERNAL_ERROR".to_string(),
@@ -90,19 +94,19 @@ impl AeroError {
             },
             Self::AiProviderNotFound => ErrorPayload {
                 code: "AI_PROVIDER_NOT_FOUND".to_string(),
-                args: vec![],
+                args: vec!["Smart assistant not found".to_string()],
             },
             Self::AiApiError(msg) => ErrorPayload {
                 code: "AI_API_ERROR".to_string(),
-                args: vec![msg.clone()],
+                args: vec![format!("Smart assistant request failed: {msg}")],
             },
             Self::AiRateLimited => ErrorPayload {
                 code: "AI_RATE_LIMITED".to_string(),
-                args: vec![],
+                args: vec!["Rate limited, please try again later".to_string()],
             },
             Self::AiContextMailNotFound => ErrorPayload {
                 code: "AI_CONTEXT_MAIL_NOT_FOUND".to_string(),
-                args: vec![],
+                args: vec!["Context message not found".to_string()],
             },
             Self::TranslationProviderNotFound => ErrorPayload {
                 code: "TRANSLATION_PROVIDER_NOT_FOUND".to_string(),
@@ -110,19 +114,19 @@ impl AeroError {
             },
             Self::TranslationApiError(msg) => ErrorPayload {
                 code: "TRANSLATION_API_ERROR".to_string(),
-                args: vec![msg.clone()],
+                args: vec![format!("Translation failed: {msg}")],
             },
             Self::TranslationNoText => ErrorPayload {
                 code: "TRANSLATION_NO_TEXT".to_string(),
                 args: vec![],
             },
-            Self::ImapConnectionFailed(msg) => ErrorPayload {
+            Self::ImapConnectionFailed(_) => ErrorPayload {
                 code: "IMAP_CONNECTION_FAILED".to_string(),
-                args: vec![msg.clone()],
+                args: vec!["Could not reach the incoming mail server. Check your network or server address.".to_string()],
             },
-            Self::ImapAuthFailed(msg) => ErrorPayload {
+            Self::ImapAuthFailed(account) => ErrorPayload {
                 code: "IMAP_AUTH_FAILED".to_string(),
-                args: vec![msg.clone()],
+                args: vec![format!("Sign-in failed for {account}. Check your email address and password or app password.")],
             },
             Self::MailNotFound(id) => ErrorPayload {
                 code: "MAIL_NOT_FOUND".to_string(),
@@ -132,13 +136,13 @@ impl AeroError {
                 code: "FOLDER_NOT_FOUND".to_string(),
                 args: vec![id.clone()],
             },
-            Self::SmtpConnectionFailed(msg) => ErrorPayload {
+            Self::SmtpConnectionFailed(_) => ErrorPayload {
                 code: "SMTP_CONNECTION_FAILED".to_string(),
-                args: vec![msg.clone()],
+                args: vec!["Could not connect to the outgoing mail server.".to_string()],
             },
-            Self::SmtpAuthFailed(msg) => ErrorPayload {
+            Self::SmtpAuthFailed(_) => ErrorPayload {
                 code: "SMTP_AUTH_FAILED".to_string(),
-                args: vec![msg.clone()],
+                args: vec!["Outgoing mail sign-in failed. Check your password or app password.".to_string()],
             },
             Self::InvalidRecipient(msg) => ErrorPayload {
                 code: "INVALID_RECIPIENT".to_string(),
@@ -163,6 +167,14 @@ impl AeroError {
             Self::ImapAppendFailed(msg) => ErrorPayload {
                 code: "IMAP_APPEND_FAILED".to_string(),
                 args: vec![msg.clone()],
+            },
+            Self::OAuth2RefreshFailed(msg) => ErrorPayload {
+                code: "OAUTH2_REFRESH_FAILED".to_string(),
+                args: vec![msg.clone()],
+            },
+            Self::OAuth2ConfigIncomplete => ErrorPayload {
+                code: "OAUTH2_CONFIG_INCOMPLETE".to_string(),
+                args: vec![],
             },
             Self::SyncError(msg) => ErrorPayload {
                 code: "SYNC_ERROR".to_string(),

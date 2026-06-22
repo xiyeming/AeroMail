@@ -34,15 +34,16 @@ impl AccountManager {
         self.db.connection()?.execute(
             r"
             INSERT INTO accounts (
-                id, name, provider, imap_host, imap_port, smtp_host, smtp_port,
+                id, name, email, provider, imap_host, imap_port, smtp_host, smtp_port,
                 tls_mode, auth_type, auth_credentials_encrypted, ca_cert_path,
                 verify_certificate, connect_timeout, read_timeout, keepalive,
                 sync_interval, excluded_folders, created_at, updated_at
-            ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16, ?17, ?18, ?19)
+            ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16, ?17, ?18, ?19, ?20)
             ",
             params![
                 &config.id,
                 &config.name,
+                &config.email,
                 serde_json::to_string(&config.provider)?,
                 &config.imap.host,
                 config.imap.port,
@@ -79,17 +80,17 @@ impl AccountManager {
         let conn = self.db.connection()?;
         let mut stmt = conn.prepare(
             r"
-            SELECT id, name, provider, imap_host, smtp_host
+            SELECT id, name, email, provider, imap_host, smtp_host
             FROM accounts
             ORDER BY created_at ASC
             ",
         )?;
 
         let rows = stmt.query_map([], |row| {
-            let provider_json: String = row.get(2)?;
+            let provider_json: String = row.get(3)?;
             let provider = serde_json::from_str(&provider_json).map_err(|e| {
                 rusqlite::Error::FromSqlConversionFailure(
-                    2,
+                    3,
                     rusqlite::types::Type::Text,
                     Box::new(e),
                 )
@@ -97,9 +98,10 @@ impl AccountManager {
             Ok(AccountSummary {
                 id: row.get(0)?,
                 name: row.get(1)?,
+                email: row.get(2)?,
                 provider,
-                imap_host: row.get(3)?,
-                smtp_host: row.get(4)?,
+                imap_host: row.get(4)?,
+                smtp_host: row.get(5)?,
             })
         })?;
 
@@ -129,34 +131,40 @@ impl AccountManager {
     /// # Errors
     ///
     /// Returns [`AeroError::AccountNotFound`] if no account with the given ID exists.
-    #[allow(clippy::significant_drop_tightening)]
-    pub fn get_account_config(
-        &self,
-        account_id: &str,
-    ) -> Result<AccountConfig, AeroError> {
+    #[allow(
+        clippy::cast_lossless,
+        clippy::cast_possible_truncation,
+        clippy::cast_sign_loss,
+        clippy::significant_drop_tightening
+    )]
+    pub fn get_account_config(&self, account_id: &str) -> Result<AccountConfig, AeroError> {
         let conn = self.db.connection()?;
         conn.query_row(
-            "SELECT id, name, provider, imap_host, imap_port, smtp_host, smtp_port,
+            "SELECT id, name, email, provider, imap_host, imap_port, smtp_host, smtp_port,
              tls_mode, auth_type, auth_credentials_encrypted, ca_cert_path,
              verify_certificate, connect_timeout, read_timeout, keepalive,
              sync_interval, excluded_folders
              FROM accounts WHERE id = ?1",
             [account_id],
             |row| {
-                let provider_json: String = row.get(2)?;
-                let provider = serde_json::from_str(&provider_json)
-                    .map_err(|e| rusqlite::Error::FromSqlConversionFailure(
-                        2,
+                let name: String = row.get(1)?;
+                let email: Option<String> = row.get(2)?;
+
+                let provider_json: String = row.get(3)?;
+                let provider = serde_json::from_str(&provider_json).map_err(|e| {
+                    rusqlite::Error::FromSqlConversionFailure(
+                        3,
                         rusqlite::types::Type::Text,
                         Box::new(e),
-                    ))?;
+                    )
+                })?;
 
-                let tls_mode_json: String = row.get(7)?;
+                let tls_mode_json: String = row.get(8)?;
                 let tls_mode = serde_json::from_str(&tls_mode_json)
                     .map_err(|e| rusqlite::Error::InvalidParameterName(e.to_string()))?;
 
-                let auth_type: String = row.get(8)?;
-                let auth_credentials: Option<Vec<u8>> = row.get(9)?;
+                let auth_type: String = row.get(9)?;
+                let auth_credentials: Option<Vec<u8>> = row.get(10)?;
                 let auth = match auth_type.as_str() {
                     "Password" => AuthConfig::Password {
                         password_encrypted: auth_credentials.unwrap_or_default(),
@@ -167,44 +175,49 @@ impl AccountManager {
                         serde_json::from_str(&creds_json)
                             .map_err(|e| rusqlite::Error::InvalidParameterName(e.to_string()))?
                     }
-                    _ => return Err(rusqlite::Error::InvalidParameterName(format!(
-                        "Unknown auth type: {auth_type}"
-                    ))),
+                    _ => {
+                        return Err(rusqlite::Error::InvalidParameterName(format!(
+                            "Unknown auth type: {auth_type}"
+                        )));
+                    }
                 };
 
-                let excluded_folders_json: String = row.get(16)?;
+                let excluded_folders_json: String = row.get(17)?;
                 let excluded_folders: Vec<String> =
                     serde_json::from_str(&excluded_folders_json).unwrap_or_default();
 
                 Ok(AccountConfig {
                     id: row.get(0)?,
-                    name: row.get(1)?,
+                    name: name.clone(),
+                    email: email.or(Some(name)),
                     provider,
                     imap: crate::models::account::ServerConfig {
-                        host: row.get(3)?,
-                        port: row.get::<_, i64>(4)? as u16,
+                        host: row.get(4)?,
+                        port: row.get::<_, i64>(5)? as u16,
                         tls_mode,
                     },
                     smtp: crate::models::account::ServerConfig {
-                        host: row.get(5)?,
-                        port: row.get::<_, i64>(6)? as u16,
+                        host: row.get(6)?,
+                        port: row.get::<_, i64>(7)? as u16,
                         tls_mode: crate::models::account::TlsMode::Required,
                     },
                     auth,
                     advanced: crate::models::account::AdvancedConfig {
-                        ca_cert_path: row.get(10)?,
-                        verify_certificate: row.get::<_, i64>(11)? != 0,
-                        connect_timeout_secs: row.get::<_, i64>(12)? as u64,
-                        read_timeout_secs: row.get::<_, i64>(13)? as u64,
-                        keepalive: row.get::<_, i64>(14)? != 0,
+                        ca_cert_path: row.get(11)?,
+                        verify_certificate: row.get::<_, i64>(12)? != 0,
+                        connect_timeout_secs: row.get::<_, i64>(13)? as u64,
+                        read_timeout_secs: row.get::<_, i64>(14)? as u64,
+                        keepalive: row.get::<_, i64>(15)? != 0,
                     },
-                    sync_interval_secs: row.get::<_, i64>(15)? as u64,
+                    sync_interval_secs: row.get::<_, i64>(16)? as u64,
                     excluded_folders,
                 })
             },
         )
         .map_err(|e| match e {
-            rusqlite::Error::QueryReturnedNoRows => AeroError::AccountNotFound(account_id.to_string()),
+            rusqlite::Error::QueryReturnedNoRows => {
+                AeroError::AccountNotFound(account_id.to_string())
+            }
             _ => AeroError::Database(e.to_string()),
         })
     }

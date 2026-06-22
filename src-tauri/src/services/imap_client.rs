@@ -36,7 +36,7 @@ pub async fn connect_imap(config: &AccountConfig) -> Result<ImapSession, AeroErr
     let tls = build_tls_connector(config)?;
 
     debug!("building TLS connector");
-    let client = match config.imap.tls_mode {
+    let mut client = match config.imap.tls_mode {
         TlsMode::Required => connect_tls(&domain, config.imap.port, &tls).await?,
         TlsMode::StartTls => connect_starttls(&domain, config.imap.port, &tls).await?,
         TlsMode::None => {
@@ -46,8 +46,12 @@ pub async fn connect_imap(config: &AccountConfig) -> Result<ImapSession, AeroErr
         }
     };
 
+    identify_client_raw(&mut client).await?;
+
     debug!("authenticating IMAP session");
-    authenticate(client, config).await
+    let mut session = authenticate(client, config).await?;
+    identify_session(&mut session).await?;
+    Ok(session)
 }
 
 #[instrument(skip_all, fields(verify = config.advanced.verify_certificate), err(Debug))]
@@ -125,6 +129,57 @@ where
         .map_err(|e| AeroError::ImapConnectionFailed(e.to_string()))?
         .ok_or_else(|| AeroError::ImapConnectionFailed("no greeting from server".into()))?;
     debug!("received IMAP greeting");
+    Ok(())
+}
+
+#[instrument(skip_all, err(Debug))]
+async fn identify_client_raw<T>(client: &mut async_imap::Client<T>) -> Result<(), AeroError>
+where
+    T: tokio::io::AsyncRead + tokio::io::AsyncWrite + Unpin + std::fmt::Debug,
+{
+    let version = env!("CARGO_PKG_VERSION");
+    let id_cmd = format!(r#"ID ("name" "AeroMail" "version" "{version}")"#);
+    match client.run_command_and_check_ok(&id_cmd, None).await {
+        Ok(()) => {
+            debug!("sent IMAP ID before login");
+        }
+        Err(e) => {
+            warn!("IMAP ID before login failed (server may not support ID): {e}");
+        }
+    }
+    Ok(())
+}
+
+#[instrument(skip_all, err(Debug))]
+async fn identify_session(session: &mut ImapSession) -> Result<(), AeroError> {
+    match session.capabilities().await {
+        Ok(caps) => {
+            if caps.has_str("ID") {
+                session
+                    .id([
+                        ("name", Some("AeroMail")),
+                        ("version", Some(env!("CARGO_PKG_VERSION"))),
+                    ])
+                    .await
+                    .map_err(|e| {
+                        AeroError::ImapConnectionFailed(format!("IMAP ID command failed: {e}"))
+                    })?;
+                debug!("sent IMAP ID to server");
+            }
+        }
+        Err(e) => {
+            warn!("could not query IMAP capabilities after authentication: {e}");
+            if let Err(id_err) = session
+                .id([
+                    ("name", Some("AeroMail")),
+                    ("version", Some(env!("CARGO_PKG_VERSION"))),
+                ])
+                .await
+            {
+                warn!("IMAP ID command failed, continuing without it: {id_err}");
+            }
+        }
+    }
     Ok(())
 }
 

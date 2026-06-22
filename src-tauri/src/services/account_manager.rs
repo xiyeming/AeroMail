@@ -378,6 +378,10 @@ impl AccountManager {
 
         let mut session = crate::services::imap_client::connect_imap(&config).await?;
         session
+            .select("INBOX")
+            .await
+            .map_err(|e| AeroError::ConnectionTestFailed(e.to_string()))?;
+        session
             .logout()
             .await
             .map_err(|e| AeroError::ConnectionTestFailed(e.to_string()))?;

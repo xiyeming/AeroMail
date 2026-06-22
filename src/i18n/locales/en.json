@@ -10,8 +10,10 @@
   "account": {
     "addAccount": "Add Account",
     "accountName": "Account Name",
+    "emailAddress": "Email Address",
     "provider": "Provider",
     "namePlaceholder": "Work Gmail",
+    "emailPlaceholder": "your.email@example.com",
     "imapHost": "IMAP Host",
     "imapPort": "IMAP Port",
     "smtpHost": "SMTP Host",
@@ -37,7 +39,10 @@
     "switchLanguage": "Switch Language",
     "switchToEnglish": "Switch to English",
     "switchToChinese": "Switch to 简体中文",
-    "openAiAssistant": "Open AI Assistant"
+    "openAiAssistant": "Open AI Assistant",
+    "mail": "Mail",
+    "noResults": "No results found",
+    "history": "History"
   },
   "settings": {
     "language": "Language",
@@ -62,7 +67,66 @@
   },
   "mail": {
     "selectEmail": "Select an email to read",
-    "newMail": "New Mail"
+    "selectEmailHint": "Use keyboard shortcuts to navigate",
+    "newMail": "New Mail",
+    "loading": "Loading...",
+    "noSubject": "(No subject)",
+    "unknownSender": "Unknown sender",
+    "noContent": "No content",
+    "to": "To",
+    "cc": "Cc",
+    "star": "Star",
+    "unstar": "Unstar",
+    "delete": "Delete",
+    "deleted": "Email deleted",
+    "archive": "Archive",
+    "reply": "Reply",
+    "replyAll": "Reply All",
+    "forward": "Forward",
+    "readingMode": "Reading Mode",
+    "exitReadingMode": "Exit Reading Mode",
+    "deleteConfirmTitle": "Delete Email",
+    "deleteConfirmMessage": "Are you sure you want to delete this email? This action cannot be undone.",
+    "hasAttachments": "Has attachments",
+    "navigate": "Navigate",
+    "open": "Open",
+    "close": "Close",
+    "selectedCount": "{count} selected",
+    "selectAll": "Select All",
+    "deselectAll": "Deselect All",
+    "moveTo": "Move to",
+    "moved": "Email moved",
+    "selectFolder": "Select a folder to move to",
+    "attachments": "Attachments",
+    "markAsRead": "Mark as Read",
+    "markAsUnread": "Mark as Unread",
+    "markedAsRead": "Marked as read",
+    "markedAsUnread": "Marked as unread",
+    "noEmails": "No emails"
+  },
+  "compose": {
+    "selectAccount": "Select account",
+    "send": "Send",
+    "to": "To",
+    "toPlaceholder": "Enter recipient emails",
+    "cc": "Cc",
+    "bcc": "Bcc",
+    "subject": "Subject",
+    "addAttachment": "Add attachment",
+    "editorPlaceholder": "Write something...",
+    "saving": "Saving...",
+    "saved": "Saved",
+    "sendSuccess": "Mail sent",
+    "sendFailed": "Failed to send mail"
+  },
+  "contextMenu": {
+    "open": "Open",
+    "star": "Star",
+    "unstar": "Unstar",
+    "markRead": "Mark as Read",
+    "markUnread": "Mark as Unread",
+    "delete": "Delete",
+    "moveTo": "Move to..."
   },
   "folders": {
     "inbox": "Inbox",
@@ -71,6 +135,13 @@
     "drafts": "Drafts",
     "archived": "Archived",
     "spam": "Spam"
+  },
+  "drafts": {
+    "title": "Drafts",
+    "noDrafts": "No saved drafts",
+    "noSubject": "(No subject)",
+    "noRecipient": "(No recipient)",
+    "to": "To"
   },
   "sidebar": {
     "accounts": "ACCOUNTS"
@@ -89,9 +160,20 @@
   },
   "common": {
     "loading": "Loading...",
-    "cancel": "Cancel"
+    "cancel": "Cancel",
+    "delete": "Delete",
+    "confirm": "Confirm"
   },
   "errors": {
+    "SMTP_CONNECTION_FAILED": "SMTP connection failed: {0}",
+    "SMTP_AUTH_FAILED": "SMTP authentication failed: {0}",
+    "INVALID_RECIPIENT": "Invalid recipient: {0}",
+    "DRAFT_NOT_FOUND": "Draft not found: {0}",
+    "ATTACHMENT_NOT_FOUND": "Attachment not found: {0}",
+    "INVALID_ATTACHMENT": "Invalid attachment: {0}",
+    "MAIL_BUILDER_FAILED": "Failed to build email: {0}",
+    "IMAP_APPEND_FAILED": "Failed to sync draft: {0}",
+    "MAIL_NOT_FOUND": "Email not found: {0}",
     "IMAP_AUTH_FAILED": "IMAP authentication failed for {0}",
     "IMAP_CONNECTION_TIMEOUT": "IMAP connection timed out",
     "SMTP_SEND_FAILED": "Failed to send email: {0}",

@@ -2,6 +2,7 @@ export type ReplyKind = 'reply' | 'reply_all' | 'forward';
 
 export interface ReplyContext {
   originalMailId: string;
+  originalMessageId: string | null;
   kind: ReplyKind;
 }
 

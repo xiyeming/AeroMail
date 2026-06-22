@@ -38,6 +38,7 @@ export interface AdvancedConfig {
 export interface AccountConfig {
   id: string;
   name: string;
+  email: string;
   provider: MailProvider;
   imap: ServerConfig;
   smtp: ServerConfig;
@@ -50,6 +51,7 @@ export interface AccountConfig {
 export interface AccountSummary {
   id: string;
   name: string;
+  email: string;
   provider: MailProvider;
   imapHost: string;
   smtpHost: string;

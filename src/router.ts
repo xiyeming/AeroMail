@@ -1,5 +1,5 @@
 import { createRouter, createWebHistory } from 'vue-router';
-import InboxView from './views/InboxView.vue';
+import MailViewer from './components/MailViewer.vue';
 import SettingsView from './views/SettingsView.vue';
 import ComposeView from './views/ComposeView.vue';
 import DraftsView from './views/DraftsView.vue';
@@ -10,12 +10,12 @@ const router = createRouter({
     {
       path: '/',
       name: 'inbox',
-      component: InboxView,
+      component: MailViewer,
     },
     {
       path: '/folder/:folderId',
       name: 'folder',
-      component: InboxView,
+      component: MailViewer,
     },
     {
       path: '/settings',

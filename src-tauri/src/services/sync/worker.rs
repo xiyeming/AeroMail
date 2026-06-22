@@ -165,8 +165,9 @@ impl SyncWorker {
             AuthConfig::Password { password_encrypted } => {
                 // TODO: Decrypt the password. For now, treat as plain text.
                 let password = String::from_utf8_lossy(password_encrypted);
+                let login_user = config.email.as_deref().unwrap_or(&config.name);
                 client
-                    .login(&config.name, &password)
+                    .login(login_user, &password)
                     .map_err(|e| AeroError::ImapAuthFailed(e.0.to_string()))?
             }
             AuthConfig::OAuth2 { .. } => {

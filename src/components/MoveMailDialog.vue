@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed } from 'vue';
+import { computed, nextTick, ref, watch } from 'vue';
 import { useI18n } from 'vue-i18n';
 import { FolderInput } from 'lucide-vue-next';
 import { useMailStore } from '@/stores/mail';
@@ -12,6 +12,8 @@ const emit = defineEmits<{
   move: [targetFolderId: string];
 }>();
 
+const dialogRef = ref<HTMLDivElement | null>(null);
+
 const folders = computed(() => {
   return mailStore.folders.filter((f) => f.id !== mailStore.currentFolderId);
 });
@@ -19,6 +21,46 @@ const folders = computed(() => {
 function handleMove(folderId: string) {
   emit('move', folderId);
 }
+
+function getFocusableElements(container: HTMLElement): HTMLElement[] {
+  const selector =
+    'button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])';
+  return Array.from(container.querySelectorAll(selector)).filter(
+    (el) => !el.hasAttribute('disabled') && (el as HTMLElement).offsetParent !== null
+  ) as HTMLElement[];
+}
+
+function handleKeyDown(e: KeyboardEvent) {
+  if (e.key === 'Escape') {
+    e.preventDefault();
+    emit('close');
+    return;
+  }
+  if (e.key !== 'Tab' || !dialogRef.value) return;
+
+  const focusable = getFocusableElements(dialogRef.value);
+  if (focusable.length === 0) return;
+  const first = focusable[0];
+  const last = focusable[focusable.length - 1];
+
+  if (e.shiftKey && document.activeElement === first) {
+    e.preventDefault();
+    last.focus();
+  } else if (!e.shiftKey && document.activeElement === last) {
+    e.preventDefault();
+    first.focus();
+  }
+}
+
+watch(
+  () => true,
+  async () => {
+    await nextTick();
+    const focusable = dialogRef.value ? getFocusableElements(dialogRef.value) : [];
+    focusable[0]?.focus();
+  },
+  { immediate: true }
+);
 </script>
 
 <template>
@@ -27,26 +69,38 @@ function handleMove(folderId: string) {
       class="fixed inset-0 z-50 flex items-center justify-center bg-overlay"
       @click="emit('close')"
     >
-      <div class="w-80 rounded-lg bg-panel p-4 shadow-lg" @click.stop>
-        <h3 class="text-lg font-medium text-text">{{ t('mail.moveTo') }}</h3>
-        <p class="mt-2 text-sm text-text-secondary">{{ t('mail.selectFolder') }}</p>
+      <div
+        ref="dialogRef"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="move-title"
+        aria-describedby="move-desc"
+        class="w-80 rounded-lg bg-elevated p-4 shadow-lg"
+        tabindex="-1"
+        @keydown="handleKeyDown"
+        @click.stop
+      >
+        <h3 id="move-title" class="text-lg font-medium text-primary">{{ t('mail.moveTo') }}</h3>
+        <p id="move-desc" class="mt-2 text-sm text-secondary">{{ t('mail.selectFolder') }}</p>
 
         <div class="mt-4 max-h-60 overflow-y-auto">
           <button
             v-for="folder in folders"
             :key="folder.id"
-            class="flex w-full items-center gap-3 rounded-md px-3 py-2 text-sm text-text-secondary hover:bg-card"
+            type="button"
+            class="flex w-full items-center gap-3 rounded-md px-3 py-2 text-sm text-secondary transition-colors hover:bg-raised"
             @click="handleMove(folder.id)"
           >
             <FolderInput class="h-4 w-4" />
             <span>{{ folder.name }}</span>
-            <span class="ml-auto text-xs text-muted">{{ folder.unreadCount }}</span>
+            <span v-if="folder.unreadCount > 0" class="ml-auto text-xs text-tertiary">{{ folder.unreadCount }}</span>
           </button>
         </div>
 
         <div class="mt-4 flex justify-end">
           <button
-            class="rounded-md border border-border px-3 py-1.5 text-sm text-text-secondary hover:bg-card"
+            type="button"
+            class="rounded-md border border-border px-3 py-1.5 text-sm text-secondary transition-colors hover:bg-raised"
             @click="emit('close')"
           >
             {{ t('common.cancel') }}

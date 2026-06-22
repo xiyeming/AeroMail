@@ -1,3 +1,5 @@
+use tracing::{debug, instrument};
+
 use crate::db::pool::Database;
 use crate::error::AeroError;
 use crate::models::ai::{AiChatMessage, AiChatSession};
@@ -9,6 +11,7 @@ use crate::services::ai::{AiService, ChatMessage};
 /// # Errors
 ///
 /// Returns an error if the database query for mail context fails.
+#[instrument(skip_all, fields(session_id = %session.id, has_context = session.context_mail_id.is_some(), history_len = history.len(), content_len = user_content.len()), err(Debug))]
 pub fn build_messages(
     db: &Database,
     session: &AiChatSession,
@@ -21,6 +24,7 @@ pub fn build_messages(
     }];
 
     if let Some(ref mail_id) = session.context_mail_id {
+        debug!(mail_id = %mail_id, "adding email context to chat messages");
         let subject = db
             .get_mail_subject(mail_id)?
             .ok_or(AeroError::AiContextMailNotFound)?;
@@ -58,16 +62,20 @@ pub fn build_messages(
 ///
 /// Returns an error if the session is not found, the database operations fail,
 /// or the AI API request fails.
+#[instrument(skip_all, fields(session_id = %session_id, content_len = user_content.len()), err(Debug))]
 pub async fn send_message(
     ai: &AiService,
     session_id: &str,
     user_content: &str,
 ) -> Result<AiChatMessage, AeroError> {
+    debug!("loading chat session and history");
     let session = ai.db.get_chat_session(session_id)?;
     let history = ai.db.get_chat_messages(session_id)?;
     let messages = build_messages(&ai.db, &session, &history, user_content)?;
+    debug!(provider_id = %session.provider_id, message_count = messages.len(), "calling AI provider");
     let reply = ai.complete(&session.provider_id, messages).await?;
 
+    debug!("persisting chat messages");
     let mut conn = ai.db.connection()?;
     let tx = conn.transaction()?;
     let user_id = uuid::Uuid::new_v4().to_string();

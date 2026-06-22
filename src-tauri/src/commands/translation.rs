@@ -1,4 +1,5 @@
 use tauri::State;
+use tracing::{debug, instrument};
 
 use crate::AppState;
 use crate::models::error::ErrorPayload;
@@ -10,6 +11,7 @@ use crate::models::translation::{TranslationProvider, TranslationProviderSummary
 ///
 /// Returns an error if the database query fails.
 #[tauri::command]
+#[instrument(skip(state), err(Debug))]
 pub async fn list_translation_providers(
     state: State<'_, AppState>,
 ) -> Result<Vec<TranslationProviderSummary>, ErrorPayload> {
@@ -43,6 +45,7 @@ pub async fn list_translation_providers(
 ///
 /// Returns an error if the database write fails.
 #[tauri::command]
+#[instrument(skip(state, provider), fields(provider_id = %match &provider { TranslationProvider::Traditional { id, .. } | TranslationProvider::Ai { id, .. } => id.as_str() }), err(Debug))]
 pub async fn upsert_translation_provider(
     provider: TranslationProvider,
     state: State<'_, AppState>,
@@ -65,6 +68,7 @@ pub async fn upsert_translation_provider(
 ///
 /// Returns an error if the provider is not found or the database write fails.
 #[tauri::command]
+#[instrument(skip(state), fields(provider_id = %provider_id), err(Debug))]
 pub async fn delete_translation_provider(
     provider_id: String,
     state: State<'_, AppState>,
@@ -82,12 +86,14 @@ pub async fn delete_translation_provider(
 /// Returns an error if the mail is not found, the provider is not found,
 /// or the translation API call fails.
 #[tauri::command]
+#[instrument(skip(state), fields(mail_id = %mail_id, target_lang = %target_lang, provider_id = %provider_id), err(Debug))]
 pub async fn translate_mail_text(
     mail_id: String,
     target_lang: String,
     provider_id: String,
     state: State<'_, AppState>,
 ) -> Result<String, ErrorPayload> {
+    debug!("translating mail body");
     let text = state
         .db
         .get_mail_body_text(&mail_id)
@@ -106,11 +112,13 @@ pub async fn translate_mail_text(
 ///
 /// Returns an error if the mail is not found or the database query fails.
 #[tauri::command]
+#[instrument(skip(state), fields(mail_id = %mail_id, target_lang = %target_lang), err(Debug))]
 pub async fn get_cached_translation(
     mail_id: String,
     target_lang: String,
     state: State<'_, AppState>,
 ) -> Result<Option<String>, ErrorPayload> {
+    debug!("checking cached translation");
     let text = state
         .db
         .get_mail_body_text(&mail_id)

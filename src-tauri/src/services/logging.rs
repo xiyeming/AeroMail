@@ -133,7 +133,7 @@ fn build_layer(
     };
 
     let env_filter = if config.enabled {
-        EnvFilter::new("info,aeromail=debug")
+        EnvFilter::new("debug")
     } else {
         EnvFilter::new("off")
     };
@@ -141,6 +141,9 @@ fn build_layer(
     let layer = fmt::layer()
         .with_writer(writer)
         .with_ansi(false)
+        .with_file(true)
+        .with_line_number(true)
+        .with_target(true)
         .with_filter(env_filter);
 
     Ok((Box::new(layer), guard))

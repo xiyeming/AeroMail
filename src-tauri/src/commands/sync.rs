@@ -1,11 +1,13 @@
 #![allow(clippy::missing_errors_doc)]
 
 use tauri::{AppHandle, State};
+use tracing::instrument;
 
 use crate::AppState;
 use crate::models::error::ErrorPayload;
 
 #[tauri::command]
+#[instrument(skip(state, app_handle), fields(account_id = %account_id), err(Debug))]
 pub async fn start_sync(
     account_id: String,
     app_handle: AppHandle,
@@ -18,6 +20,7 @@ pub async fn start_sync(
 }
 
 #[tauri::command]
+#[instrument(skip(state), fields(account_id = %account_id), err(Debug))]
 pub async fn stop_sync(account_id: String, state: State<'_, AppState>) -> Result<(), ErrorPayload> {
     let sync = state.sync_service.read().await;
     sync.stop_sync(&account_id)

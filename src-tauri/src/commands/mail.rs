@@ -1,6 +1,7 @@
 #![allow(clippy::missing_errors_doc)]
 
 use tauri::State;
+use tracing::{debug, instrument};
 
 use crate::AppState;
 use crate::error::AeroError;
@@ -9,30 +10,35 @@ use crate::models::mail::{AttachmentInfo, FolderInfo, MailDetail, MailHeader};
 use crate::services::imap_client;
 
 #[tauri::command]
+#[instrument(skip(state), fields(folder_id = %folder_id, limit, offset), err(Debug))]
 pub async fn get_mail_list(
     folder_id: String,
     limit: u32,
     offset: u32,
     state: State<'_, AppState>,
 ) -> Result<Vec<MailHeader>, ErrorPayload> {
+    debug!("listing mails");
     let db = &state.db;
     db.list_mails(&folder_id, limit, offset)
         .map_err(|e| e.to_payload())
 }
 
 #[tauri::command]
+#[instrument(skip(state), fields(folder_id = %folder_id, limit, offset), err(Debug))]
 pub async fn get_virtual_mail_list(
     folder_id: String,
     limit: u32,
     offset: u32,
     state: State<'_, AppState>,
 ) -> Result<Vec<MailHeader>, ErrorPayload> {
+    debug!("listing virtual folder mails");
     let db = &state.db;
     db.list_virtual_mails(&folder_id, limit, offset)
         .map_err(|e| e.to_payload())
 }
 
 #[tauri::command]
+#[instrument(skip(state), fields(mail_id = %mail_id), err(Debug))]
 pub async fn archive_mail(
     mail_id: String,
     state: State<'_, AppState>,
@@ -43,6 +49,7 @@ pub async fn archive_mail(
 }
 
 #[tauri::command]
+#[instrument(skip(state), fields(mail_id = %mail_id), err(Debug))]
 pub async fn toggle_mail_spam(
     mail_id: String,
     state: State<'_, AppState>,
@@ -59,6 +66,7 @@ pub async fn toggle_mail_spam(
 }
 
 #[tauri::command]
+#[instrument(skip(state), fields(folder_id = %folder_id), err(Debug))]
 pub async fn get_virtual_unread_count(
     folder_id: String,
     state: State<'_, AppState>,
@@ -69,6 +77,7 @@ pub async fn get_virtual_unread_count(
 }
 
 #[tauri::command]
+#[instrument(skip(state), fields(mail_id = %mail_id), err(Debug))]
 pub async fn get_mail_detail(
     mail_id: String,
     state: State<'_, AppState>,
@@ -80,6 +89,7 @@ pub async fn get_mail_detail(
 }
 
 #[tauri::command]
+#[instrument(skip(state), fields(mail_id = %mail_id, is_read), err(Debug))]
 pub async fn mark_mail_read(
     mail_id: String,
     is_read: bool,
@@ -91,6 +101,7 @@ pub async fn mark_mail_read(
 }
 
 #[tauri::command]
+#[instrument(skip(state), fields(mail_id = %mail_id), err(Debug))]
 pub async fn toggle_mail_star(
     mail_id: String,
     state: State<'_, AppState>,
@@ -100,6 +111,7 @@ pub async fn toggle_mail_star(
 }
 
 #[tauri::command]
+#[instrument(skip(state), fields(account_id = %account_id), err(Debug))]
 pub async fn list_folders(
     account_id: String,
     state: State<'_, AppState>,
@@ -109,6 +121,7 @@ pub async fn list_folders(
 }
 
 #[tauri::command]
+#[instrument(skip(state), fields(account_id = %account_id), err(Debug))]
 pub async fn get_unread_count(
     account_id: String,
     state: State<'_, AppState>,
@@ -118,6 +131,7 @@ pub async fn get_unread_count(
 }
 
 #[tauri::command]
+#[instrument(skip(state), fields(mail_id = %mail_id), err(Debug))]
 pub async fn delete_mail(mail_id: String, state: State<'_, AppState>) -> Result<(), ErrorPayload> {
     let db = &state.db;
     let mail = db
@@ -125,12 +139,14 @@ pub async fn delete_mail(mail_id: String, state: State<'_, AppState>) -> Result<
         .map_err(|e| e.to_payload())?
         .ok_or_else(|| AeroError::MailNotFound(mail_id.clone()).to_payload())?;
 
+    debug!(account_id = %mail.account_id, folder_id = %mail.folder_id, uid = mail.uid, "deleting mail on server");
     sync_delete_to_imap(&state, &mail.account_id, &mail.folder_id, mail.uid).await?;
 
     db.delete_mail(&mail_id).map_err(|e| e.to_payload())
 }
 
 #[tauri::command]
+#[instrument(skip(state), fields(mail_id = %mail_id, target_folder_id = %target_folder_id), err(Debug))]
 pub async fn move_mail(
     mail_id: String,
     target_folder_id: String,
@@ -142,6 +158,7 @@ pub async fn move_mail(
         .map_err(|e| e.to_payload())?
         .ok_or_else(|| AeroError::MailNotFound(mail_id.clone()).to_payload())?;
 
+    debug!(account_id = %mail.account_id, folder_id = %mail.folder_id, uid = mail.uid, target_folder_id = %target_folder_id, "moving mail on server");
     sync_move_to_imap(
         &state,
         &mail.account_id,
@@ -156,6 +173,7 @@ pub async fn move_mail(
 }
 
 #[tauri::command]
+#[instrument(skip(state), fields(mail_id = %mail_id), err(Debug))]
 pub async fn get_attachments(
     mail_id: String,
     state: State<'_, AppState>,
@@ -165,6 +183,7 @@ pub async fn get_attachments(
 }
 
 #[tauri::command]
+#[instrument(skip(state), fields(attachment_id = %attachment_id), err(Debug))]
 pub async fn get_attachment_content(
     attachment_id: String,
     state: State<'_, AppState>,
@@ -175,11 +194,13 @@ pub async fn get_attachment_content(
         .map_err(|e| e.to_payload())?
         .ok_or_else(|| AeroError::AttachmentNotFound(attachment_id.clone()).to_payload())?;
 
+    debug!(path = %local_path, "reading attachment from disk");
     std::fs::read(&local_path).map_err(|e| {
         AeroError::Internal(format!("failed to read attachment {attachment_id}: {e}")).to_payload()
     })
 }
 
+#[instrument(skip(state), fields(account_id = %account_id, folder_id = %folder_id, uid), err(Debug))]
 async fn sync_delete_to_imap(
     state: &State<'_, AppState>,
     account_id: &str,
@@ -203,6 +224,7 @@ async fn sync_delete_to_imap(
         .map_err(|e| e.to_payload())?
         .ok_or_else(|| AeroError::MailNotFound(folder_id.to_string()).to_payload())?;
 
+    debug!(folder_path = %folder.path, uid, "issuing IMAP delete");
     let mut session = imap_client::connect_imap(&config)
         .await
         .map_err(|e| e.to_payload())?;
@@ -217,6 +239,7 @@ async fn sync_delete_to_imap(
     Ok(())
 }
 
+#[instrument(skip(state), fields(account_id = %account_id, folder_id = %folder_id, target_folder_id = %target_folder_id, uid), err(Debug))]
 async fn sync_move_to_imap(
     state: &State<'_, AppState>,
     account_id: &str,
@@ -246,6 +269,7 @@ async fn sync_move_to_imap(
         .map_err(|e| e.to_payload())?
         .ok_or_else(|| AeroError::MailNotFound(target_folder_id.to_string()).to_payload())?;
 
+    debug!(source_path = %source_folder.path, target_path = %target_folder.path, uid, "issuing IMAP move");
     let mut session = imap_client::connect_imap(&config)
         .await
         .map_err(|e| e.to_payload())?;

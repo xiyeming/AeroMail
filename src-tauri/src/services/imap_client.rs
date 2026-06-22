@@ -1,7 +1,7 @@
 use async_imap::types::Flag;
 use tokio::net::TcpStream;
 use tokio_native_tls::TlsStream;
-use tracing::warn;
+use tracing::{debug, instrument, warn};
 
 use crate::error::AeroError;
 use crate::models::account::{AccountConfig, AuthConfig, TlsMode};
@@ -30,10 +30,12 @@ impl async_imap::Authenticator for &Xoauth2Auth {
 /// # Errors
 ///
 /// Returns an error if the connection or authentication fails.
+#[instrument(skip_all, fields(host = %config.imap.host, port = config.imap.port, tls_mode = ?config.imap.tls_mode), err(Debug))]
 pub async fn connect_imap(config: &AccountConfig) -> Result<ImapSession, AeroError> {
     let domain = config.imap.host.clone();
     let tls = build_tls_connector(config)?;
 
+    debug!("building TLS connector");
     let client = match config.imap.tls_mode {
         TlsMode::Required => connect_tls(&domain, config.imap.port, &tls).await?,
         TlsMode::StartTls => connect_starttls(&domain, config.imap.port, &tls).await?,
@@ -44,9 +46,11 @@ pub async fn connect_imap(config: &AccountConfig) -> Result<ImapSession, AeroErr
         }
     };
 
+    debug!("authenticating IMAP session");
     authenticate(client, config).await
 }
 
+#[instrument(skip_all, fields(verify = config.advanced.verify_certificate), err(Debug))]
 fn build_tls_connector(
     config: &AccountConfig,
 ) -> Result<tokio_native_tls::TlsConnector, AeroError> {
@@ -67,11 +71,13 @@ fn build_tls_connector(
     Ok(tokio_native_tls::TlsConnector::from(tls))
 }
 
+#[instrument(skip_all, fields(domain = %domain, port), err(Debug))]
 async fn connect_tls(
     domain: &str,
     port: u16,
     tls: &tokio_native_tls::TlsConnector,
 ) -> Result<async_imap::Client<TlsStream<TcpStream>>, AeroError> {
+    debug!("opening TCP connection");
     let tcp_stream = TcpStream::connect((domain, port))
         .await
         .map_err(|e| AeroError::ImapConnectionFailed(e.to_string()))?;
@@ -84,11 +90,13 @@ async fn connect_tls(
     Ok(client)
 }
 
+#[instrument(skip_all, fields(domain = %domain, port), err(Debug))]
 async fn connect_starttls(
     domain: &str,
     port: u16,
     tls: &tokio_native_tls::TlsConnector,
 ) -> Result<async_imap::Client<TlsStream<TcpStream>>, AeroError> {
+    debug!("opening TCP connection for STARTTLS");
     let tcp_stream = TcpStream::connect((domain, port))
         .await
         .map_err(|e| AeroError::ImapConnectionFailed(e.to_string()))?;
@@ -106,6 +114,7 @@ async fn connect_starttls(
     Ok(async_imap::Client::new(tls_stream))
 }
 
+#[instrument(skip_all, err(Debug))]
 async fn read_greeting<T>(client: &mut async_imap::Client<T>) -> Result<(), AeroError>
 where
     T: tokio::io::AsyncRead + tokio::io::AsyncWrite + Unpin + std::fmt::Debug,
@@ -115,9 +124,11 @@ where
         .await
         .map_err(|e| AeroError::ImapConnectionFailed(e.to_string()))?
         .ok_or_else(|| AeroError::ImapConnectionFailed("no greeting from server".into()))?;
+    debug!("received IMAP greeting");
     Ok(())
 }
 
+#[instrument(skip_all, fields(user = ?config.email.as_deref().unwrap_or(&config.name), auth_type = ?std::mem::discriminant(&config.auth)), err(Debug))]
 async fn authenticate(
     client: async_imap::Client<TlsStream<TcpStream>>,
     config: &AccountConfig,
@@ -127,12 +138,14 @@ async fn authenticate(
     match &config.auth {
         AuthConfig::Password { password_encrypted } => {
             let password = String::from_utf8_lossy(password_encrypted);
+            debug!("authenticating with password");
             client
                 .login(&login_user, &password)
                 .await
                 .map_err(|(e, _)| AeroError::ImapAuthFailed(e.to_string()))
         }
         AuthConfig::OAuth2 { access_token, .. } => {
+            debug!("authenticating with XOAUTH2");
             let auth = Xoauth2Auth {
                 user: login_user,
                 access_token: access_token.clone(),
@@ -150,6 +163,7 @@ async fn authenticate(
 /// # Errors
 ///
 /// Returns an error if the IMAP operation fails.
+#[instrument(skip_all, fields(folder_path = %folder_path, uid), err(Debug))]
 pub async fn delete_mail_on_server(
     session: &mut ImapSession,
     folder_path: &str,
@@ -157,6 +171,7 @@ pub async fn delete_mail_on_server(
 ) -> Result<(), AeroError> {
     use futures::TryStreamExt;
 
+    debug!("selecting folder for delete");
     session
         .select(folder_path)
         .await
@@ -175,6 +190,7 @@ pub async fn delete_mail_on_server(
         .try_collect::<Vec<_>>()
         .await
         .map_err(|e| AeroError::ImapConnectionFailed(e.to_string()))?;
+    debug!("mail deleted and expunged");
     Ok(())
 }
 
@@ -184,6 +200,7 @@ pub async fn delete_mail_on_server(
 /// # Errors
 ///
 /// Returns an error if the IMAP operation fails.
+#[instrument(skip_all, fields(folder_path = %folder_path, target_folder = %target_folder, uid), err(Debug))]
 pub async fn move_mail_on_server(
     session: &mut ImapSession,
     folder_path: &str,
@@ -192,6 +209,7 @@ pub async fn move_mail_on_server(
 ) -> Result<(), AeroError> {
     use futures::TryStreamExt;
 
+    debug!("selecting folder for move");
     session
         .select(folder_path)
         .await
@@ -214,6 +232,7 @@ pub async fn move_mail_on_server(
         .try_collect::<Vec<_>>()
         .await
         .map_err(|e| AeroError::ImapConnectionFailed(e.to_string()))?;
+    debug!("mail moved and original expunged");
     Ok(())
 }
 
@@ -250,6 +269,7 @@ pub fn is_flagged_flag<'a>(mut flags: impl Iterator<Item = Flag<'a>>) -> bool {
 /// # Errors
 ///
 /// Returns an error if no drafts folder can be located.
+#[instrument(skip_all, err(Debug))]
 pub async fn find_drafts_folder(session: &mut ImapSession) -> Result<String, AeroError> {
     use futures::StreamExt;
 
@@ -264,6 +284,8 @@ pub async fn find_drafts_folder(session: &mut ImapSession) -> Result<String, Aer
         mailboxes.push(name.name().to_string());
     }
 
+    debug!(candidates = ?mailboxes, "searching for drafts folder");
+
     let candidates = [
         "Drafts",
         "Draft",
@@ -276,11 +298,13 @@ pub async fn find_drafts_folder(session: &mut ImapSession) -> Result<String, Aer
             .iter()
             .find(|name| name.eq_ignore_ascii_case(candidate))
         {
+            debug!(folder = %folder, "found drafts folder");
             return Ok(folder.clone());
         }
     }
     for folder in &mailboxes {
         if folder.to_lowercase().contains("draft") {
+            debug!(folder = %folder, "found drafts folder by substring");
             return Ok(folder.clone());
         }
     }
@@ -295,11 +319,13 @@ pub async fn find_drafts_folder(session: &mut ImapSession) -> Result<String, Aer
 /// # Errors
 ///
 /// Returns an error if the append operation fails.
+#[instrument(skip_all, fields(folder = %folder, size = message_bytes.len()), err(Debug))]
 pub async fn append_message(
     session: &mut ImapSession,
     folder: &str,
     message_bytes: &[u8],
 ) -> Result<(), AeroError> {
+    debug!("appending message to folder");
     session
         .append(folder, Some("\\Draft"), None, message_bytes)
         .await

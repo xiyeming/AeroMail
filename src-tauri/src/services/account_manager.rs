@@ -8,6 +8,7 @@ use crate::db::pool::Database;
 use crate::error::AeroError;
 use crate::models::account::{AccountConfig, AccountSummary, AuthConfig};
 use crate::services::crypto;
+use tracing::{debug, info, instrument};
 
 #[derive(Debug)]
 pub struct AccountManager {
@@ -30,9 +31,13 @@ impl AccountManager {
     /// # Errors
     ///
     /// Returns an error if the configuration is invalid or the database write fails.
+    #[instrument(skip_all, fields(account_id = tracing::field::Empty, account_name = %config.name, email = ?config.email), err(Debug))]
     pub fn add_account(&self, mut config: AccountConfig) -> Result<String, AeroError> {
         let id = Uuid::new_v4().to_string();
         config.id.clone_from(&id);
+        tracing::Span::current().record("account_id", &id);
+
+        debug!("persisting new account to database");
 
         let (auth_type, auth_credentials) = match &config.auth {
             AuthConfig::Password { password_encrypted } => {
@@ -81,6 +86,7 @@ impl AccountManager {
             ],
         )?;
 
+        info!(account_id = %id, "account added");
         Ok(id)
     }
 
@@ -90,6 +96,7 @@ impl AccountManager {
     ///
     /// Returns an error if the database read fails.
     #[allow(clippy::significant_drop_tightening)]
+    #[instrument(skip_all, err(Debug))]
     pub fn list_accounts(&self) -> Result<Vec<AccountSummary>, AeroError> {
         let conn = self.db.connection()?;
         let mut stmt = conn.prepare(
@@ -119,7 +126,11 @@ impl AccountManager {
             })
         })?;
 
-        rows.collect::<Result<Vec<_>, _>>().map_err(AeroError::from)
+        let accounts = rows
+            .collect::<Result<Vec<_>, _>>()
+            .map_err(AeroError::from)?;
+        info!(count = accounts.len(), "listed accounts");
+        Ok(accounts)
     }
 
     /// Deletes an email account by its ID.
@@ -127,6 +138,7 @@ impl AccountManager {
     /// # Errors
     ///
     /// Returns [`AeroError::AccountNotFound`] if no account with the given ID exists.
+    #[instrument(skip_all, fields(account_id = %account_id), err(Debug))]
     pub fn delete_account(&self, account_id: &str) -> Result<(), AeroError> {
         let rows = self
             .db
@@ -137,6 +149,7 @@ impl AccountManager {
             return Err(AeroError::AccountNotFound(account_id.to_string()));
         }
 
+        info!(account_id = %account_id, "deleted account");
         Ok(())
     }
 
@@ -151,7 +164,9 @@ impl AccountManager {
         clippy::cast_sign_loss,
         clippy::significant_drop_tightening
     )]
+    #[instrument(skip_all, fields(account_id = %account_id), err(Debug))]
     pub fn get_account_config(&self, account_id: &str) -> Result<AccountConfig, AeroError> {
+        debug!("loading account configuration");
         let conn = self.db.connection()?;
         conn.query_row(
             "SELECT id, name, email, provider, imap_host, imap_port, smtp_host, smtp_port,
@@ -247,10 +262,12 @@ impl AccountManager {
     /// # Errors
     ///
     /// Returns [`AeroError::AccountNotFound`] if no account with the given ID exists.
+    #[instrument(skip_all, fields(account_id = %account_id), err(Debug))]
     pub async fn get_account_config_with_refresh(
         &self,
         account_id: &str,
     ) -> Result<AccountConfig, AeroError> {
+        debug!("refreshing OAuth2 token if needed");
         let mut config = self.get_account_config(account_id)?;
         crate::services::oauth2::ensure_access_token(
             Some(account_id),
@@ -266,6 +283,7 @@ impl AccountManager {
     /// # Errors
     ///
     /// Returns an error if the configuration is invalid or the connection fails.
+    #[instrument(skip_all, fields(host = %config.imap.host, port = config.imap.port), err(Debug))]
     pub async fn test_connection(&self, config: &AccountConfig) -> Result<String, AeroError> {
         if config.imap.host.is_empty() {
             return Err(AeroError::InvalidConfig(
@@ -278,6 +296,7 @@ impl AccountManager {
             ));
         }
 
+        debug!("starting account connection test");
         let mut config = config.clone();
         crate::services::oauth2::ensure_access_token(None, &mut config, None).await?;
 
@@ -287,6 +306,7 @@ impl AccountManager {
             .await
             .map_err(|e| AeroError::ConnectionTestFailed(e.to_string()))?;
 
+        info!(host = %config.imap.host, port = config.imap.port, "connection test passed");
         Ok(format!(
             "Connection test passed for {}:{}",
             config.imap.host, config.imap.port

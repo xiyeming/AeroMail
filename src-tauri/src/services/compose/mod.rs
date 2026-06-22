@@ -9,6 +9,7 @@ use std::path::PathBuf;
 use std::sync::Arc;
 
 use tokio::sync::RwLock;
+use tracing::{debug, instrument};
 
 use crate::db::pool::Database;
 use crate::error::AeroError;
@@ -38,15 +39,18 @@ impl ComposeService {
         }
     }
 
+    #[instrument(skip_all, fields(draft_id = %draft.id, account_id = ?draft.account_id), err(Debug))]
     pub fn save_draft(&self, mut draft: ComposeDraft) -> Result<ComposeDraft, AeroError> {
         self.draft_service.save_draft(&mut draft)?;
         Ok(draft)
     }
 
+    #[instrument(skip_all, fields(draft_id = %draft_id), err(Debug))]
     pub fn get_draft(&self, draft_id: &str) -> Result<Option<ComposeDraft>, AeroError> {
         self.draft_service.get_draft(draft_id)
     }
 
+    #[instrument(skip_all, fields(account_id = ?account_id), err(Debug))]
     pub fn list_drafts(
         &self,
         account_id: Option<&str>,
@@ -54,10 +58,12 @@ impl ComposeService {
         self.draft_service.list_drafts(account_id)
     }
 
+    #[instrument(skip_all, fields(draft_id = %draft_id), err(Debug))]
     pub fn delete_draft(&self, draft_id: &str) -> Result<(), AeroError> {
         self.draft_service.delete_draft(draft_id)
     }
 
+    #[instrument(skip_all, fields(account_id = %account_id, original_mail_id = %original.id), err(Debug))]
     pub fn prepare_reply(
         &self,
         account_id: &str,
@@ -67,6 +73,7 @@ impl ComposeService {
         self.draft_service.prepare_reply(account_id, original, kind)
     }
 
+    #[instrument(skip_all, fields(draft_id = %req.draft_id), err(Debug))]
     pub async fn send_mail(&self, req: SendMailRequest) -> Result<(), AeroError> {
         let draft = self
             .draft_service
@@ -76,6 +83,7 @@ impl ComposeService {
         let account_id = draft.account_id.clone();
         let account_config = self.load_account_config(&account_id).await?;
 
+        debug!("building MIME message");
         // Collect attachment bytes
         let mut attachment_bytes = Vec::new();
         for att in &draft.attachments {
@@ -96,6 +104,7 @@ impl ComposeService {
             &attachment_bytes,
         )?;
 
+        debug!("sending message via SMTP");
         smtp_sender::send_message(&account_config, message_bytes.clone()).await?;
 
         // Clean up local draft
@@ -104,6 +113,7 @@ impl ComposeService {
         Ok(())
     }
 
+    #[instrument(skip_all, fields(draft_id = %draft_id), err(Debug))]
     pub async fn sync_draft_to_imap(&self, draft_id: &str) -> Result<(), AeroError> {
         let draft = self
             .draft_service
@@ -112,6 +122,7 @@ impl ComposeService {
 
         let account_config = self.load_account_config(&draft.account_id).await?;
 
+        debug!("building MIME message for IMAP draft sync");
         let mut attachment_bytes = Vec::new();
         for att in &draft.attachments {
             let bytes = self
@@ -131,6 +142,7 @@ impl ComposeService {
             &attachment_bytes,
         )?;
 
+        debug!("uploading draft to IMAP");
         let new_uid =
             imap_draft_sync::sync_draft_to_imap(&account_config, &draft, &message_bytes, &self.db)
                 .await?;
@@ -144,6 +156,7 @@ impl ComposeService {
         Ok(())
     }
 
+    #[instrument(skip_all, fields(account_id = %account_id), err(Debug))]
     async fn load_account_config(&self, account_id: &str) -> Result<AccountConfig, AeroError> {
         let am = self.account_manager.read().await;
         am.get_account_config_with_refresh(account_id).await

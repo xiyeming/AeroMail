@@ -35,6 +35,9 @@ use services::translation::TranslationService;
 use std::path::PathBuf;
 use std::sync::Arc;
 use tauri::Manager;
+use tauri::image::Image;
+use tauri::menu::{MenuBuilder, MenuItemBuilder};
+use tauri::tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent};
 use tokio::sync::RwLock;
 
 pub struct AppState {
@@ -111,13 +114,66 @@ fn greet(name: &str) -> String {
 }
 
 #[allow(clippy::missing_errors_doc)]
+#[allow(clippy::too_many_lines)]
 pub fn run() {
     let run_result = tauri::Builder::default()
         .setup(|app| {
             let handle = app.handle().clone();
+
+            // System tray icon with show/quit menu.
+            let tray_menu_handle = app.handle();
+            let show_item =
+                MenuItemBuilder::with_id("show", "Show AeroMail").build(tray_menu_handle)?;
+            let quit_item = MenuItemBuilder::with_id("quit", "Quit").build(tray_menu_handle)?;
+            let menu = MenuBuilder::new(tray_menu_handle)
+                .items(&[&show_item, &quit_item])
+                .build()?;
+
+            let icon = Image::from_bytes(include_bytes!("../icons/icon.png"))?;
+
+            TrayIconBuilder::new()
+                .icon(icon)
+                .menu(&menu)
+                .on_menu_event(move |app, event| match event.id().as_ref() {
+                    "show" => {
+                        if let Some(window) = app.get_webview_window("main") {
+                            let _ = window.unminimize();
+                            let _ = window.show();
+                            let _ = window.set_focus();
+                        }
+                    }
+                    "quit" => {
+                        app.exit(0);
+                    }
+                    _ => {}
+                })
+                .on_tray_icon_event(|tray, event| {
+                    if let TrayIconEvent::Click {
+                        button: MouseButton::Left,
+                        button_state: MouseButtonState::Up,
+                        ..
+                    } = event
+                    {
+                        let app = tray.app_handle();
+                        if let Some(window) = app.get_webview_window("main") {
+                            let _ = window.unminimize();
+                            let _ = window.show();
+                            let _ = window.set_focus();
+                        }
+                    }
+                })
+                .build(app)?;
+
             tauri::async_runtime::spawn(async move {
                 match AppState::new(&handle) {
                     Ok(state) => {
+                        let system_title_bar = state
+                            .db
+                            .get_setting("app.systemTitleBar")
+                            .ok()
+                            .flatten()
+                            .is_none_or(|v| v == "system");
+
                         handle.manage(state);
 
                         std::panic::set_hook(Box::new(|info| {
@@ -125,6 +181,20 @@ pub fn run() {
                         }));
 
                         tracing::info!("AeroMail application state initialized");
+
+                        // Apply decorations from the backend as well, with a short delay to work
+                        // around Tauri v2 not always respecting runtime setDecorations on Linux.
+                        tokio::time::sleep(std::time::Duration::from_millis(200)).await;
+                        if let Some(window) = handle.get_webview_window("main") {
+                            if let Err(e) = window.set_decorations(system_title_bar) {
+                                tracing::warn!(error = %e, "failed to apply window decorations");
+                            } else {
+                                tracing::debug!(
+                                    system_title_bar,
+                                    "applied window decorations on startup"
+                                );
+                            }
+                        }
 
                         // Start automatic sync for all configured accounts.
                         let sync_service = handle.state::<AppState>().sync_service.clone();

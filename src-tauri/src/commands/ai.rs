@@ -1,4 +1,5 @@
 use tauri::State;
+use tracing::instrument;
 
 use crate::AppState;
 use crate::models::ai::{AiChatMessage, AiChatSession, AiProvider, AiProviderSummary};
@@ -11,6 +12,7 @@ use crate::services::ai::ChatMessage;
 ///
 /// Returns an error if the database query fails.
 #[tauri::command]
+#[instrument(skip(state), err(Debug))]
 pub async fn list_ai_providers(
     state: State<'_, AppState>,
 ) -> Result<Vec<AiProviderSummary>, ErrorPayload> {
@@ -24,6 +26,7 @@ pub async fn list_ai_providers(
 ///
 /// Returns an error if the database write fails.
 #[tauri::command]
+#[instrument(skip(state, provider), fields(provider_id = %provider.id), err(Debug))]
 pub async fn upsert_ai_provider(
     provider: AiProvider,
     state: State<'_, AppState>,
@@ -40,6 +43,7 @@ pub async fn upsert_ai_provider(
 ///
 /// Returns an error if the provider is not found or the database write fails.
 #[tauri::command]
+#[instrument(skip(state), fields(provider_id = %provider_id), err(Debug))]
 pub async fn delete_ai_provider(
     provider_id: String,
     state: State<'_, AppState>,
@@ -56,6 +60,7 @@ pub async fn delete_ai_provider(
 ///
 /// Returns an error if the provider is not found or the API request fails.
 #[tauri::command]
+#[instrument(skip(state), fields(provider_id = %provider_id), err(Debug))]
 pub async fn test_ai_provider(
     provider_id: String,
     state: State<'_, AppState>,
@@ -76,6 +81,7 @@ pub async fn test_ai_provider(
 ///
 /// Returns an error if the provider is not found or the database write fails.
 #[tauri::command]
+#[instrument(skip(state), fields(provider_id = %provider_id, context_mail_id = ?context_mail_id), err(Debug))]
 pub async fn create_chat_session(
     provider_id: String,
     context_mail_id: Option<String>,
@@ -110,6 +116,7 @@ pub async fn create_chat_session(
 /// Returns an error if the session is not found, the database operations fail,
 /// or the AI API request fails.
 #[tauri::command]
+#[instrument(skip(state, content), fields(session_id = %session_id, content_len = content.len()), err(Debug))]
 pub async fn send_chat_message(
     session_id: String,
     content: String,
@@ -127,6 +134,7 @@ pub async fn send_chat_message(
 ///
 /// Returns an error if the database query fails.
 #[tauri::command]
+#[instrument(skip(state), err(Debug))]
 pub async fn list_chat_sessions(
     state: State<'_, AppState>,
 ) -> Result<Vec<AiChatSession>, ErrorPayload> {
@@ -139,6 +147,7 @@ pub async fn list_chat_sessions(
 ///
 /// Returns an error if the database query fails.
 #[tauri::command]
+#[instrument(skip(state), fields(session_id = %session_id), err(Debug))]
 pub async fn get_chat_messages(
     session_id: String,
     state: State<'_, AppState>,
@@ -155,6 +164,7 @@ pub async fn get_chat_messages(
 ///
 /// Returns an error if the session is not found or the database write fails.
 #[tauri::command]
+#[instrument(skip(state), fields(session_id = %session_id), err(Debug))]
 pub async fn delete_chat_session(
     session_id: String,
     state: State<'_, AppState>,

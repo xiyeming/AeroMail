@@ -5,7 +5,7 @@ use std::time::Duration;
 use futures::StreamExt;
 use tokio::sync::{RwLock, mpsc};
 use tokio::time::sleep;
-use tracing::{error, info, warn};
+use tracing::{debug, error, info, instrument, warn};
 
 use crate::db::pool::Database;
 use crate::error::AeroError;
@@ -26,11 +26,13 @@ pub struct SyncWorker {
 
 impl SyncWorker {
     /// Runs the sync loop with exponential backoff on errors.
+    #[instrument(skip_all, fields(account_id = %self.account_id))]
     pub async fn run(&self) {
         let mut backoff = Duration::from_secs(1);
         let max_backoff = Duration::from_secs(300); // 5 minutes
 
         loop {
+            debug!("starting sync cycle");
             match self.sync_once().await {
                 Ok(()) => {
                     backoff = Duration::from_secs(1);
@@ -66,6 +68,7 @@ impl SyncWorker {
     }
 
     /// Performs a single sync cycle.
+    #[instrument(skip_all, fields(account_id = %self.account_id))]
     async fn sync_once(&self) -> Result<(), AeroError> {
         let mut config = self.account_config.read().await.clone();
         crate::services::oauth2::ensure_access_token(
@@ -79,6 +82,7 @@ impl SyncWorker {
             *guard = config.clone();
         }
 
+        debug!(host = %config.imap.host, port = config.imap.port, "connecting to IMAP server");
         let mut session = imap_client::connect_imap(&config).await?;
 
         let folder_names = Self::list_folders(&mut session).await?;
@@ -95,6 +99,7 @@ impl SyncWorker {
                 .iter()
                 .any(|excluded| excluded.eq_ignore_ascii_case(folder_name))
             {
+                debug!(folder = %folder_name, "skipping excluded folder");
                 continue;
             }
 
@@ -126,6 +131,7 @@ impl SyncWorker {
     }
 
     /// Lists available folders on the IMAP server.
+    #[instrument(skip_all)]
     async fn list_folders(
         session: &mut imap_client::ImapSession,
     ) -> Result<Vec<String>, AeroError> {
@@ -140,11 +146,13 @@ impl SyncWorker {
             folders.push(name.name().to_string());
         }
 
+        debug!(folder_count = folders.len(), "listed IMAP folders");
         Ok(folders)
     }
 
     /// Syncs a single folder.
     #[allow(clippy::too_many_lines, clippy::too_many_arguments)]
+    #[instrument(skip_all, fields(account_id = %self.account_id, folder_name = %folder_name))]
     async fn sync_folder(
         &self,
         session: &mut imap_client::ImapSession,
@@ -158,6 +166,11 @@ impl SyncWorker {
 
         let remote_uid_validity = mailbox.uid_validity.unwrap_or(0);
         let remote_exists = mailbox.exists;
+        debug!(
+            uid_validity = remote_uid_validity,
+            exists = remote_exists,
+            "selected folder"
+        );
 
         if remote_exists == 0 {
             return Ok(0);
@@ -186,6 +199,7 @@ impl SyncWorker {
             if max_uid == 0 {
                 (format!("1:{remote_exists}"), remote_exists)
             } else if max_uid >= remote_exists {
+                debug!(max_uid, "no new mails to sync");
                 return Ok(0);
             } else {
                 (format!("{}:*", max_uid + 1), remote_exists - max_uid)
@@ -204,6 +218,7 @@ impl SyncWorker {
             .await;
 
         let fetch_items = "UID BODY.PEEK[] FLAGS";
+        debug!(uids = %uids_to_fetch, "fetching mails from server");
         let mut fetch_stream = session
             .uid_fetch(&uids_to_fetch, fetch_items)
             .await
@@ -283,6 +298,7 @@ impl SyncWorker {
     }
 
     /// Saves parsed attachments to disk and records them in the database.
+    #[instrument(skip_all, fields(mail_id = %mail_id, count = attachments.len()))]
     fn save_attachments(
         mail_id: &str,
         attachments_dir: &Path,

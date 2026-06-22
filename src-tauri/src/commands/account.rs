@@ -10,13 +10,22 @@ use crate::models::error::ErrorPayload;
 ///
 /// Returns an error if the account configuration is invalid or the database write fails.
 #[tauri::command]
-#[tracing::instrument(skip(state), err(Debug))]
+#[tracing::instrument(skip(state, app), err(Debug))]
 pub async fn add_account(
     config: AccountConfig,
     state: State<'_, AppState>,
+    app: tauri::AppHandle,
 ) -> Result<String, ErrorPayload> {
     let manager = state.account_manager.read().await;
-    manager.add_account(config).map_err(|e| e.to_payload())
+    let id = manager.add_account(config).map_err(|e| e.to_payload())?;
+
+    drop(manager);
+
+    if let Err(e) = state.sync_service.read().await.start_sync(&id, app).await {
+        tracing::warn!(error = %e, account_id = %id, "failed to start sync for new account");
+    }
+
+    Ok(id)
 }
 
 /// Lists all configured email accounts.

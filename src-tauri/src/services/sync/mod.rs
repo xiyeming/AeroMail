@@ -8,7 +8,7 @@ use std::sync::Arc;
 use tauri::Emitter;
 use tokio::sync::{RwLock, mpsc};
 use tokio::task::JoinHandle;
-use tracing::info;
+use tracing::{debug, info, instrument};
 
 use crate::db::pool::Database;
 use crate::error::AeroError;
@@ -42,6 +42,7 @@ impl SyncService {
     /// # Errors
     ///
     /// Returns an error if the account is not found or sync cannot be started.
+    #[instrument(skip_all, fields(account_id = %account_id), err(Debug))]
     pub async fn start_sync(
         &self,
         account_id: &str,
@@ -98,6 +99,7 @@ impl SyncService {
     /// # Errors
     ///
     /// Returns an error if the stop operation fails.
+    #[instrument(skip_all, fields(account_id = %account_id), err(Debug))]
     pub async fn stop_sync(&self, account_id: &str) -> Result<(), AeroError> {
         let mut workers = self.workers.write().await;
         if let Some(handle) = workers.remove(account_id) {
@@ -114,6 +116,7 @@ impl SyncService {
     ///
     /// Returns an error if any account's sync cannot be started.
     #[allow(clippy::significant_drop_tightening)]
+    #[instrument(skip_all, err(Debug))]
     pub async fn start_all(&self, app_handle: tauri::AppHandle) -> Result<(), AeroError> {
         let accounts = {
             let conn = self.db.connection()?;
@@ -122,6 +125,11 @@ impl SyncService {
             rows.collect::<Result<Vec<_>, _>>()
                 .map_err(|e| AeroError::Database(e.to_string()))?
         };
+
+        info!(
+            account_count = accounts.len(),
+            "starting sync for all accounts"
+        );
 
         for account_id in accounts {
             if let Err(e) = self.start_sync(&account_id, app_handle.clone()).await {
@@ -133,6 +141,7 @@ impl SyncService {
     }
 
     /// Stops all running sync tasks.
+    #[instrument(skip_all)]
     pub async fn stop_all(&self) {
         let mut workers = self.workers.write().await;
         for (_, handle) in workers.drain() {
@@ -148,7 +157,9 @@ impl SyncService {
         clippy::cast_sign_loss,
         clippy::cast_lossless
     )]
+    #[instrument(skip_all, fields(account_id = %account_id), err(Debug))]
     fn load_account_config(&self, account_id: &str) -> Result<AccountConfig, AeroError> {
+        debug!("loading account config for sync worker");
         let conn = self.db.connection()?;
         conn.query_row(
             "SELECT id, name, email, provider, imap_host, imap_port, smtp_host, smtp_port,

@@ -1,5 +1,7 @@
 use std::collections::HashMap;
 
+use tracing::{debug, instrument};
+
 use crate::error::AeroError;
 use crate::models::translation::{TraditionalProviderKind, TranslationProvider};
 
@@ -8,6 +10,7 @@ use crate::models::translation::{TraditionalProviderKind, TranslationProvider};
 /// # Errors
 ///
 /// Returns an error if the provider type is unsupported or the API call fails.
+#[instrument(skip(provider), fields(provider_id = %match provider { TranslationProvider::Traditional { id, .. } | TranslationProvider::Ai { id, .. } => id.as_str() }, kind = ?match provider { TranslationProvider::Traditional { kind, .. } => Some(kind), TranslationProvider::Ai { .. } => None }), err(Debug))]
 pub fn translate(
     provider: &TranslationProvider,
     source_text: &str,
@@ -58,12 +61,14 @@ pub fn translate(
     }
 }
 
+#[instrument(skip(api_key), fields(text_len = text.len(), target_lang = %target_lang), err(Debug))]
 fn google_translate(api_key: &str, text: &str, target_lang: &str) -> Result<String, AeroError> {
     let url = format!("https://translation.googleapis.com/language/translate/v2?key={api_key}");
     let body = serde_json::json!({
         "q": text,
         "target": target_lang,
     });
+    debug!("calling Google Translate API");
     let resp = reqwest::blocking::Client::new()
         .post(&url)
         .json(&body)
@@ -85,6 +90,7 @@ fn google_translate(api_key: &str, text: &str, target_lang: &str) -> Result<Stri
         .ok_or_else(|| AeroError::TranslationApiError("unexpected response".to_string()))
 }
 
+#[instrument(skip(api_key), fields(text_len = text.len(), target_lang = %target_lang), err(Debug))]
 fn deepl_translate(
     api_key: &str,
     text: &str,
@@ -93,6 +99,7 @@ fn deepl_translate(
 ) -> Result<String, AeroError> {
     let base = endpoint.unwrap_or("https://api-free.deepl.com");
     let url = format!("{base}/v2/translate");
+    debug!("calling DeepL API");
     let resp = reqwest::blocking::Client::new()
         .post(&url)
         .header("Authorization", format!("DeepL-Auth-Key {api_key}"))
@@ -115,6 +122,7 @@ fn deepl_translate(
         .ok_or_else(|| AeroError::TranslationApiError("unexpected response".to_string()))
 }
 
+#[instrument(skip(api_key, extra), fields(text_len = text.len(), target_lang = %target_lang), err(Debug))]
 fn azure_translate(
     api_key: &str,
     text: &str,
@@ -127,6 +135,7 @@ fn azure_translate(
     let url = format!("{base}/translate?api-version=3.0&to={target}");
     let body = serde_json::json!([{ "Text": text }]);
 
+    debug!("calling Azure Translator API");
     let mut req = reqwest::blocking::Client::new()
         .post(&url)
         .header("Ocp-Apim-Subscription-Key", api_key)
@@ -156,6 +165,7 @@ fn azure_translate(
         .ok_or_else(|| AeroError::TranslationApiError("unexpected response".to_string()))
 }
 
+#[instrument(skip(api_key, extra), fields(text_len = text.len(), target_lang = %target_lang), err(Debug))]
 fn baidu_translate(
     api_key: &str,
     text: &str,
@@ -174,6 +184,7 @@ fn baidu_translate(
     let base = endpoint.unwrap_or("https://fanyi-api.baidu.com");
     let url = format!("{base}/api/trans/vip/translate");
 
+    debug!("calling Baidu Translate API");
     let resp = reqwest::blocking::Client::new()
         .post(&url)
         .form(&[
@@ -208,6 +219,7 @@ fn baidu_translate(
         .ok_or_else(|| AeroError::TranslationApiError("unexpected response".to_string()))
 }
 
+#[instrument(skip(api_key), fields(text_len = text.len(), target_lang = %target_lang), err(Debug))]
 fn custom_translate(
     api_key: &str,
     text: &str,
@@ -217,6 +229,7 @@ fn custom_translate(
     let url = endpoint.ok_or_else(|| {
         AeroError::TranslationApiError("Custom provider endpoint is required".to_string())
     })?;
+    debug!("calling custom translation API");
     let resp = reqwest::blocking::Client::new()
         .post(url)
         .header("Authorization", format!("Bearer {api_key}"))

@@ -2,6 +2,7 @@
 import { ref } from 'vue';
 import { useI18n } from 'vue-i18n';
 import { useAccountStore } from '@/stores/account';
+import BaseSelect from '@/components/BaseSelect.vue';
 import type { AccountConfig, MailProvider } from '@/types/account';
 
 const { t } = useI18n();
@@ -107,14 +108,12 @@ async function handleSubmit() {
 
     <div class="space-y-1.5">
       <label for="account-provider" class="text-sm text-secondary">{{ $t('account.provider') }}</label>
-      <select
+      <BaseSelect
         id="account-provider"
-        v-model="config.provider"
-        class="h-9 w-full rounded-md border border-border bg-base px-3 text-sm text-primary outline-none focus:border-accent"
-        @change="updateProvider(config.provider)"
-      >
-        <option v-for="p in providers" :key="p" :value="p">{{ p }}</option>
-      </select>
+        :model-value="config.provider"
+        :options="providers.map((p) => ({ value: p, label: p }))"
+        @update:model-value="updateProvider($event as MailProvider)"
+      />
     </div>
 
     <div class="space-y-1.5">

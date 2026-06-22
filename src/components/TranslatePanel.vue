@@ -2,6 +2,7 @@
 import { ref } from 'vue';
 import { useI18n } from 'vue-i18n';
 import { useTranslation } from '@/composables/useTranslation';
+import BaseSelect from '@/components/BaseSelect.vue';
 import type { TranslationProviderSummary } from '@/types/translation';
 
 const props = defineProps<{
@@ -44,22 +45,16 @@ loadProviders();
 
 <template>
   <div class="flex flex-wrap items-center gap-2 rounded-lg border border-border bg-elevated p-2">
-    <select
+    <BaseSelect
       v-model="targetLang"
-      class="h-8 rounded-md border border-border bg-base px-2 text-xs text-primary outline-none focus:border-accent"
-    >
-      <option v-for="lang in languages" :key="lang.value" :value="lang.value">
-        {{ $t(lang.label) }}
-      </option>
-    </select>
-    <select
+      size="sm"
+      :options="languages.map((lang) => ({ value: lang.value, label: $t(lang.label) }))"
+    />
+    <BaseSelect
       v-model="selectedProviderId"
-      class="h-8 rounded-md border border-border bg-base px-2 text-xs text-primary outline-none focus:border-accent"
-    >
-      <option v-for="p in providers" :key="p.id" :value="p.id">
-        {{ p.name }}
-      </option>
-    </select>
+      size="sm"
+      :options="providers.map((p) => ({ value: p.id, label: p.name }))"
+    />
     <button
       type="button"
       class="flex h-8 items-center rounded-md bg-accent px-3 text-xs font-medium text-white transition-colors hover:bg-accent-hover disabled:opacity-50 disabled:cursor-not-allowed"

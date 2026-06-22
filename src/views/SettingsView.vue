@@ -7,6 +7,7 @@ import { useTheme, type Theme } from '@/composables/useTheme';
 import { useAccountStore } from '@/stores/account';
 import { useAiStore } from '@/stores/ai';
 import AccountForm from '@/components/AccountForm.vue';
+import BaseSelect from '@/components/BaseSelect.vue';
 import type { AiProviderKind } from '@/types/ai';
 import type { TranslationProviderSummary, TraditionalProviderKind } from '@/types/translation';
 
@@ -176,26 +177,22 @@ async function removeTranslationProvider(id: string) {
       <div class="grid gap-4 sm:grid-cols-2">
         <div class="flex flex-col gap-1.5">
           <label for="locale-select" class="text-sm text-secondary">{{ $t('settings.language') }}</label>
-          <select
+          <BaseSelect
             id="locale-select"
             v-model="currentLocale"
-            class="h-9 rounded-md border border-border bg-base px-3 text-sm text-primary outline-none focus:border-accent"
-          >
-            <option v-for="loc in supportedLocales" :key="loc" :value="loc">
-              {{ localeLabels[loc] }}
-            </option>
-          </select>
+            :options="supportedLocales.map((loc) => ({ value: loc, label: localeLabels[loc] }))"
+          />
         </div>
         <div class="flex flex-col gap-1.5">
           <label for="theme-select" class="text-sm text-secondary">{{ $t('settings.theme') }}</label>
-          <select
+          <BaseSelect
             id="theme-select"
             v-model="currentTheme"
-            class="h-9 rounded-md border border-border bg-base px-3 text-sm text-primary outline-none focus:border-accent"
-          >
-            <option value="dark">{{ $t('settings.themeDark') }}</option>
-            <option value="light">{{ $t('settings.themeLight') }}</option>
-          </select>
+            :options="[
+              { value: 'dark', label: $t('settings.themeDark') },
+              { value: 'light', label: $t('settings.themeLight') },
+            ]"
+          />
         </div>
       </div>
     </section>
@@ -297,14 +294,11 @@ async function removeTranslationProvider(id: string) {
         </div>
         <div>
           <label class="mb-1 block text-sm text-secondary">{{ $t('settings.providerType') }}</label>
-          <select
+          <BaseSelect
             v-model="selectedKind"
-            class="h-9 w-full rounded-md border border-border bg-elevated px-3 text-sm text-primary outline-none focus:border-accent"
-          >
-            <option v-for="kind in providerKinds" :key="kind" :value="kind">
-              {{ kind }}
-            </option>
-          </select>
+            variant="elevated"
+            :options="providerKinds.map((kind) => ({ value: kind, label: kind }))"
+          />
         </div>
         <div>
           <label class="mb-1 block text-sm text-secondary">{{ $t('settings.accessKey') }}</label>
@@ -423,14 +417,11 @@ async function removeTranslationProvider(id: string) {
           </div>
           <div>
             <label class="mb-1 block text-sm text-secondary">{{ $t('settings.providerKind') }}</label>
-            <select
+            <BaseSelect
               v-model="tpKind"
-              class="h-9 w-full rounded-md border border-border bg-elevated px-3 text-sm text-primary outline-none focus:border-accent"
-            >
-              <option v-for="kind in traditionalKinds" :key="kind" :value="kind">
-                {{ kind }}
-              </option>
-            </select>
+              variant="elevated"
+              :options="traditionalKinds.map((kind) => ({ value: kind, label: kind }))"
+            />
           </div>
           <div>
             <label class="mb-1 block text-sm text-secondary">{{ $t('settings.accessKey') }}</label>
@@ -464,15 +455,17 @@ async function removeTranslationProvider(id: string) {
           </div>
           <div>
             <label class="mb-1 block text-sm text-secondary">{{ $t('settings.selectAiProvider') }}</label>
-            <select
+            <BaseSelect
               v-model="tpAiProviderId"
-              class="h-9 w-full rounded-md border border-border bg-elevated px-3 text-sm text-primary outline-none focus:border-accent"
-            >
-              <option value="" disabled>{{ $t('settings.selectAiProvider') }}</option>
-              <option v-for="ap in aiStore.providers" :key="ap.id" :value="ap.id">
-                {{ ap.name }} ({{ ap.kind }})
-              </option>
-            </select>
+              variant="elevated"
+              :placeholder="$t('settings.selectAiProvider')"
+              :options="
+                aiStore.providers.map((ap) => ({
+                  value: ap.id,
+                  label: `${ap.name} (${ap.kind})`,
+                }))
+              "
+            />
           </div>
         </template>
 

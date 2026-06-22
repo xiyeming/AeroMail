@@ -3,17 +3,15 @@
     <div class="flex items-center gap-3">
       <div class="flex flex-1 items-center gap-2">
         <label for="compose-account" class="text-sm text-secondary">{{ $t('compose.selectAccount') }}</label>
-        <select
-          id="compose-account"
-          :value="draft.accountId"
-          class="h-9 flex-1 rounded-md border border-border bg-base px-3 text-sm text-primary outline-none focus:border-accent"
-          @change="updateAccount(($event.target as HTMLSelectElement).value)"
-        >
-          <option value="" disabled>{{ $t('compose.selectAccount') }}</option>
-          <option v-for="acc in accounts" :key="acc.id" :value="acc.id">
-            {{ acc.name }}
-          </option>
-        </select>
+        <div class="flex-1">
+          <BaseSelect
+            id="compose-account"
+            :model-value="draft.accountId"
+            :placeholder="$t('compose.selectAccount')"
+            :options="accounts.map((acc) => ({ value: acc.id, label: acc.name }))"
+            @update:model-value="updateAccount"
+          />
+        </div>
       </div>
 
       <div class="relative">
@@ -77,6 +75,7 @@
 import { ref, computed, watch } from 'vue';
 import type { ComposeDraft } from '@/types/compose';
 import type { AccountSummary } from '@/types/account';
+import BaseSelect from '@/components/BaseSelect.vue';
 import RecipientInput from './RecipientInput.vue';
 
 const props = defineProps<{

@@ -1,7 +1,15 @@
+#![allow(
+    clippy::cast_lossless,
+    clippy::cast_possible_truncation,
+    clippy::cast_sign_loss,
+    clippy::doc_markdown,
+    clippy::significant_drop_tightening
+)]
+
 use std::path::PathBuf;
 use std::sync::Mutex;
 
-use rusqlite::Connection;
+use rusqlite::{params, Connection};
 use tauri::Manager;
 
 use super::migrations::run_migrations;
@@ -197,7 +205,10 @@ impl Database {
     /// # Errors
     ///
     /// Returns an error if the session is not found or the query fails.
-    pub fn get_chat_session(&self, id: &str) -> Result<crate::models::ai::AiChatSession, AeroError> {
+    pub fn get_chat_session(
+        &self,
+        id: &str,
+    ) -> Result<crate::models::ai::AiChatSession, AeroError> {
         let conn = self.connection()?;
         conn.query_row(
             "SELECT id, title, provider_id, model, context_mail_id, created_at, updated_at
@@ -250,7 +261,10 @@ impl Database {
     /// # Errors
     ///
     /// Returns an error if the database write fails.
-    pub fn upsert_chat_session(&self, s: &crate::models::ai::AiChatSession) -> Result<(), AeroError> {
+    pub fn upsert_chat_session(
+        &self,
+        s: &crate::models::ai::AiChatSession,
+    ) -> Result<(), AeroError> {
         let conn = self.connection()?;
         conn.execute(
             "INSERT INTO ai_chat_sessions (id, title, provider_id, model, context_mail_id, created_at, updated_at)
@@ -343,9 +357,7 @@ impl Database {
         &self,
     ) -> Result<Vec<crate::models::translation::TranslationProvider>, AeroError> {
         let conn = self.connection()?;
-        let mut stmt = conn.prepare(
-            "SELECT config_json FROM translation_providers",
-        )?;
+        let mut stmt = conn.prepare("SELECT config_json FROM translation_providers")?;
         let rows = stmt.query_map([], |row| {
             let config_json: String = row.get(0)?;
             let provider: crate::models::translation::TranslationProvider =
@@ -390,9 +402,9 @@ impl Database {
     ) -> Result<(), AeroError> {
         let conn = self.connection()?;
         let (id, name, provider_type) = match p {
-            crate::models::translation::TranslationProvider::Traditional {
-                id, name, ..
-            } => (id, name, "traditional"),
+            crate::models::translation::TranslationProvider::Traditional { id, name, .. } => {
+                (id, name, "traditional")
+            }
             crate::models::translation::TranslationProvider::Ai { id, name, .. } => {
                 (id, name, "ai")
             }
@@ -415,10 +427,7 @@ impl Database {
     /// Returns an error if the database write fails.
     pub fn delete_translation_provider(&self, id: &str) -> Result<(), AeroError> {
         let conn = self.connection()?;
-        conn.execute(
-            "DELETE FROM translation_providers WHERE id = ?1",
-            [id],
-        )?;
+        conn.execute("DELETE FROM translation_providers WHERE id = ?1", [id])?;
         drop(conn);
         Ok(())
     }
@@ -440,11 +449,7 @@ impl Database {
             "SELECT id, source_hash, target_lang, provider_id, translated_text, created_at
              FROM translations WHERE source_hash = ?1 AND target_lang = ?2 AND provider_id = ?3",
         )?;
-        let mut rows = stmt.query(rusqlite::params![
-            source_hash,
-            target_lang,
-            provider_id
-        ])?;
+        let mut rows = stmt.query(rusqlite::params![source_hash, target_lang, provider_id])?;
         if let Some(row) = rows.next()? {
             Ok(Some(crate::models::translation::CachedTranslation {
                 id: row.get(0)?,
@@ -737,14 +742,15 @@ impl Database {
         let now = chrono::Utc::now().timestamp();
         conn.execute(
             "INSERT INTO mails (id, account_id, folder_id, uid, subject, from_name, from_address,
-             to_addresses, cc_addresses, date, body_html, body_text, is_read, is_starred, flags, created_at)
-             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16)
+             to_addresses, cc_addresses, date, body_html, body_text, is_read, is_starred, flags, message_id, created_at)
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16, ?17)
              ON CONFLICT(id) DO UPDATE SET
                subject=excluded.subject, from_name=excluded.from_name, from_address=excluded.from_address,
                to_addresses=excluded.to_addresses, cc_addresses=excluded.cc_addresses,
                date=excluded.date, body_html=excluded.body_html, body_text=excluded.body_text,
-               is_read=excluded.is_read, is_starred=excluded.is_starred, flags=excluded.flags",
-            (
+               is_read=excluded.is_read, is_starred=excluded.is_starred, flags=excluded.flags,
+               message_id=excluded.message_id",
+            params![
                 &mail.id,
                 &mail.account_id,
                 &mail.folder_id,
@@ -760,8 +766,9 @@ impl Database {
                 mail.is_read,
                 mail.is_starred,
                 &mail.flags,
+                &mail.message_id,
                 now,
-            ),
+            ],
         )?;
         drop(conn);
         Ok(())
@@ -818,7 +825,7 @@ impl Database {
         let conn = self.connection()?;
         let mut stmt = conn.prepare(
             "SELECT id, account_id, folder_id, uid, subject, from_name, from_address,
-             to_addresses, cc_addresses, date, body_html, body_text, is_read, is_starred, flags
+             to_addresses, cc_addresses, date, body_html, body_text, is_read, is_starred, flags, message_id
              FROM mails WHERE id = ?1",
         )?;
         let mut rows = stmt.query([mail_id])?;
@@ -839,6 +846,7 @@ impl Database {
                 is_read: row.get::<_, i64>(12)? != 0,
                 is_starred: row.get::<_, i64>(13)? != 0,
                 flags: row.get(14)?,
+                message_id: row.get(15)?,
             }))
         } else {
             Ok(None)
@@ -887,8 +895,7 @@ impl Database {
     /// Returns an error if the database query fails.
     pub fn get_max_uid(&self, folder_id: &str) -> Result<Option<u32>, AeroError> {
         let conn = self.connection()?;
-        let mut stmt =
-            conn.prepare("SELECT MAX(uid) FROM mails WHERE folder_id = ?1")?;
+        let mut stmt = conn.prepare("SELECT MAX(uid) FROM mails WHERE folder_id = ?1")?;
         let mut rows = stmt.query([folder_id])?;
         if let Some(row) = rows.next()? {
             let max_uid: Option<i64> = row.get(0)?;
@@ -911,6 +918,22 @@ impl Database {
             |row| row.get(0),
         )?;
         Ok(count as u32)
+    }
+
+    /// Gets the account email address for the given account ID.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the database query fails.
+    pub fn get_account_email(&self, account_id: &str) -> Result<Option<String>, AeroError> {
+        let conn = self.connection()?;
+        let mut stmt = conn.prepare("SELECT email FROM accounts WHERE id = ?1")?;
+        let mut rows = stmt.query([account_id])?;
+        if let Some(row) = rows.next()? {
+            Ok(Some(row.get(0)?))
+        } else {
+            Ok(None)
+        }
     }
 
     /// Deletes a mail by ID.
@@ -1082,11 +1105,10 @@ impl Database {
         let mut rows = stmt.query([account_id])?;
         let mut result = Vec::new();
         while let Some(row) = rows.next()? {
-            let to: Vec<String> = serde_json::from_str(&row.get::<_, String>(3)?)
-                .unwrap_or_default();
+            let to: Vec<String> =
+                serde_json::from_str(&row.get::<_, String>(3)?).unwrap_or_default();
             let attachments: Vec<crate::models::compose::AttachmentDraft> =
-                serde_json::from_str(&row.get::<_, String>(5)?)
-                    .unwrap_or_default();
+                serde_json::from_str(&row.get::<_, String>(5)?).unwrap_or_default();
             result.push(crate::models::compose::ComposeDraftSummary {
                 id: row.get(0)?,
                 account_id: row.get(1)?,
@@ -1117,10 +1139,7 @@ impl Database {
     ///
     /// Returns an error if the database query fails.
     #[allow(clippy::significant_drop_tightening)]
-    pub fn get_draft_account_id(
-        &self,
-        draft_id: &str,
-    ) -> Result<Option<String>, AeroError> {
+    pub fn get_draft_account_id(&self, draft_id: &str) -> Result<Option<String>, AeroError> {
         let conn = self.connection()?;
         let mut stmt = conn.prepare("SELECT account_id FROM drafts WHERE id = ?1")?;
         let mut rows = stmt.query([draft_id])?;
@@ -1155,13 +1174,11 @@ impl Database {
     ///
     /// Returns an error if the database query fails.
     #[allow(clippy::significant_drop_tightening)]
-    pub fn get_unindexed_mails(
-        &self,
-    ) -> Result<Vec<crate::models::mail::MailDetail>, AeroError> {
+    pub fn get_unindexed_mails(&self) -> Result<Vec<crate::models::mail::MailDetail>, AeroError> {
         let conn = self.connection()?;
         let mut stmt = conn.prepare(
             "SELECT id, account_id, folder_id, uid, subject, from_name, from_address,
-             to_addresses, cc_addresses, date, body_html, body_text, is_read, is_starred, flags
+             to_addresses, cc_addresses, date, body_html, body_text, is_read, is_starred, flags, message_id
              FROM mails WHERE indexed_at IS NULL LIMIT 100",
         )?;
         let rows = stmt.query_map([], |row| {
@@ -1181,6 +1198,7 @@ impl Database {
                 is_read: row.get::<_, i64>(12)? != 0,
                 is_starred: row.get::<_, i64>(13)? != 0,
                 flags: row.get(14)?,
+                message_id: row.get(15)?,
             })
         })?;
         rows.collect::<Result<Vec<_>, _>>()

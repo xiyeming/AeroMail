@@ -6,7 +6,8 @@ use uuid::Uuid;
 
 use crate::db::pool::Database;
 use crate::error::AeroError;
-use crate::models::account::{AccountConfig, AccountSummary, AuthConfig, TlsMode};
+use crate::models::account::{AccountConfig, AccountSummary, AuthConfig};
+use crate::services::crypto;
 
 #[derive(Debug)]
 pub struct AccountManager {
@@ -18,6 +19,12 @@ impl AccountManager {
         Self { db }
     }
 
+    /// Returns a reference to the underlying database.
+    #[must_use]
+    pub fn db(&self) -> &Database {
+        self.db.as_ref()
+    }
+
     /// Adds a new email account with the given configuration.
     ///
     /// # Errors
@@ -27,7 +34,17 @@ impl AccountManager {
         let id = Uuid::new_v4().to_string();
         config.id.clone_from(&id);
 
-        let auth_json = serde_json::to_string(&config.auth)?;
+        let (auth_type, auth_credentials) = match &config.auth {
+            AuthConfig::Password { password_encrypted } => {
+                let encrypted = crypto::encrypt_password(password_encrypted)?;
+                ("Password", encrypted)
+            }
+            AuthConfig::OAuth2 { .. } => {
+                let json = serde_json::to_string(&config.auth)?;
+                ("OAuth2", json.into_bytes())
+            }
+        };
+
         let excluded_folders_json = serde_json::to_string(&config.excluded_folders)?;
         let now = Utc::now().timestamp();
 
@@ -50,11 +67,8 @@ impl AccountManager {
                 &config.smtp.host,
                 config.smtp.port,
                 serde_json::to_string(&config.imap.tls_mode)?,
-                match config.auth {
-                    AuthConfig::OAuth2 { .. } => "OAuth2",
-                    AuthConfig::Password { .. } => "Password",
-                },
-                auth_json.as_bytes(),
+                auth_type,
+                auth_credentials,
                 config.advanced.ca_cert_path,
                 config.advanced.verify_certificate,
                 config.advanced.connect_timeout_secs,
@@ -166,9 +180,14 @@ impl AccountManager {
                 let auth_type: String = row.get(9)?;
                 let auth_credentials: Option<Vec<u8>> = row.get(10)?;
                 let auth = match auth_type.as_str() {
-                    "Password" => AuthConfig::Password {
-                        password_encrypted: auth_credentials.unwrap_or_default(),
-                    },
+                    "Password" => {
+                        let encrypted = auth_credentials.unwrap_or_default();
+                        let plaintext = crypto::decrypt_password(&encrypted)
+                            .map_err(|e| rusqlite::Error::InvalidParameterName(e.to_string()))?;
+                        AuthConfig::Password {
+                            password_encrypted: plaintext,
+                        }
+                    }
                     "OAuth2" => {
                         let creds_bytes = auth_credentials.unwrap_or_default();
                         let creds_json = String::from_utf8_lossy(&creds_bytes);
@@ -188,8 +207,8 @@ impl AccountManager {
 
                 Ok(AccountConfig {
                     id: row.get(0)?,
-                    name: name.clone(),
-                    email: email.or(Some(name)),
+                    name,
+                    email,
                     provider,
                     imap: crate::models::account::ServerConfig {
                         host: row.get(4)?,
@@ -222,13 +241,32 @@ impl AccountManager {
         })
     }
 
+    /// Retrieves a full account configuration by ID and refreshes an `OAuth2`
+    /// access token if it is expired.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`AeroError::AccountNotFound`] if no account with the given ID exists.
+    pub async fn get_account_config_with_refresh(
+        &self,
+        account_id: &str,
+    ) -> Result<AccountConfig, AeroError> {
+        let mut config = self.get_account_config(account_id)?;
+        crate::services::oauth2::ensure_access_token(
+            Some(account_id),
+            &mut config,
+            Some(self.db.as_ref()),
+        )
+        .await?;
+        Ok(config)
+    }
+
     /// Tests the connection to an email server using the provided configuration.
     ///
     /// # Errors
     ///
-    /// Returns an error if the configuration is invalid.
+    /// Returns an error if the configuration is invalid or the connection fails.
     pub async fn test_connection(&self, config: &AccountConfig) -> Result<String, AeroError> {
-        // Phase 1 placeholder: validate config and simulate a connection test.
         if config.imap.host.is_empty() {
             return Err(AeroError::InvalidConfig(
                 "IMAP host cannot be empty".to_string(),
@@ -239,14 +277,16 @@ impl AccountManager {
                 "IMAP port cannot be zero".to_string(),
             ));
         }
-        if matches!(config.imap.tls_mode, TlsMode::None) && config.imap.port != 143 {
-            return Ok(format!(
-                "Connection test passed (no encryption on port {})",
-                config.imap.port
-            ));
-        }
 
-        tokio::time::sleep(tokio::time::Duration::from_millis(200)).await;
+        let mut config = config.clone();
+        crate::services::oauth2::ensure_access_token(None, &mut config, None).await?;
+
+        let mut session = crate::services::imap_client::connect_imap(&config).await?;
+        session
+            .logout()
+            .await
+            .map_err(|e| AeroError::ConnectionTestFailed(e.to_string()))?;
+
         Ok(format!(
             "Connection test passed for {}:{}",
             config.imap.host, config.imap.port

@@ -9,6 +9,8 @@ export interface MailHeader {
   date: number | null;
   isRead: boolean;
   isStarred: boolean;
+  isArchived: boolean;
+  isSpam: boolean;
   hasAttachments: boolean;
 }
 

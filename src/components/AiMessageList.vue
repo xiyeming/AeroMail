@@ -22,7 +22,7 @@ defineProps<{
       </div>
       <div
         :class="[
-          'max-w-[80%] rounded-lg px-3 py-2 text-sm',
+          'max-w-xl rounded-lg px-3 py-2 text-sm',
           msg.role === 'user' ? 'bg-accent text-white' : 'bg-raised text-primary',
         ]"
       >

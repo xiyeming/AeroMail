@@ -3,13 +3,14 @@
     <div
       v-for="att in attachments"
       :key="att.id"
-      class="flex items-center gap-2 rounded-lg border border-border bg-panel px-3 py-1.5 text-sm"
+      class="flex h-8 items-center gap-2 rounded-lg border border-border bg-elevated px-3 text-sm"
     >
-      <span class="text-text">{{ att.filename }}</span>
-      <span class="text-xs text-muted">{{ formatSize(att.size) }}</span>
+      <span class="text-primary">{{ att.filename }}</span>
+      <span class="text-xs text-tertiary">{{ formatSize(att.size) }}</span>
       <button
         type="button"
-        class="text-text-secondary hover:text-danger"
+        class="text-secondary transition-colors hover:text-danger"
+        :aria-label="$t('common.delete')"
         @click="$emit('remove', att.id)"
       >
         ×

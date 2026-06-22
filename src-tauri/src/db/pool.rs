@@ -9,6 +9,7 @@
 use std::path::PathBuf;
 use std::sync::Mutex;
 
+use chrono::Utc;
 use rusqlite::{Connection, params};
 use tauri::Manager;
 
@@ -707,6 +708,37 @@ impl Database {
         }
     }
 
+    /// Gets a folder by its local ID.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the database query fails.
+    pub fn get_folder_by_id(
+        &self,
+        folder_id: &str,
+    ) -> Result<Option<crate::models::mail::FolderInfo>, AeroError> {
+        let conn = self.connection()?;
+        let mut stmt = conn.prepare(
+            "SELECT id, account_id, name, path, unread_count, total_count, uid_validity, last_sync_at
+             FROM folders WHERE id = ?1",
+        )?;
+        let mut rows = stmt.query([folder_id])?;
+        if let Some(row) = rows.next()? {
+            Ok(Some(crate::models::mail::FolderInfo {
+                id: row.get(0)?,
+                account_id: row.get(1)?,
+                name: row.get(2)?,
+                path: row.get(3)?,
+                unread_count: row.get(4)?,
+                total_count: row.get(5)?,
+                uid_validity: row.get(6)?,
+                last_sync_at: row.get(7)?,
+            }))
+        } else {
+            Ok(None)
+        }
+    }
+
     /// Updates folder sync metadata after a successful sync.
     ///
     /// # Errors
@@ -742,8 +774,8 @@ impl Database {
         let now = chrono::Utc::now().timestamp();
         conn.execute(
             "INSERT INTO mails (id, account_id, folder_id, uid, subject, from_name, from_address,
-             to_addresses, cc_addresses, date, body_html, body_text, is_read, is_starred, flags, message_id, created_at)
-             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16, ?17)
+             to_addresses, cc_addresses, date, body_html, body_text, is_read, is_starred, is_archived, is_spam, flags, message_id, created_at)
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16, ?17, ?18, ?19)
              ON CONFLICT(id) DO UPDATE SET
                subject=excluded.subject, from_name=excluded.from_name, from_address=excluded.from_address,
                to_addresses=excluded.to_addresses, cc_addresses=excluded.cc_addresses,
@@ -765,6 +797,8 @@ impl Database {
                 &mail.body_text,
                 mail.is_read,
                 mail.is_starred,
+                mail.is_archived,
+                mail.is_spam,
                 &mail.flags,
                 &mail.message_id,
                 now,
@@ -789,7 +823,8 @@ impl Database {
         let conn = self.connection()?;
         let mut stmt = conn.prepare(
             "SELECT id, account_id, folder_id, uid, subject, from_name, from_address,
-             date, is_read, is_starred, 0 as has_attachments
+             date, is_read, is_starred, is_archived, is_spam,
+             EXISTS(SELECT 1 FROM attachments WHERE mail_id = mails.id) as has_attachments
              FROM mails WHERE folder_id = ?1
              ORDER BY date DESC, uid DESC
              LIMIT ?2 OFFSET ?3",
@@ -806,7 +841,9 @@ impl Database {
                 date: row.get(7)?,
                 is_read: row.get::<_, i64>(8)? != 0,
                 is_starred: row.get::<_, i64>(9)? != 0,
-                has_attachments: row.get::<_, i64>(10)? != 0,
+                is_archived: row.get::<_, i64>(10)? != 0,
+                is_spam: row.get::<_, i64>(11)? != 0,
+                has_attachments: row.get::<_, i64>(12)? != 0,
             })
         })?;
         rows.collect::<Result<Vec<_>, _>>()
@@ -825,7 +862,7 @@ impl Database {
         let conn = self.connection()?;
         let mut stmt = conn.prepare(
             "SELECT id, account_id, folder_id, uid, subject, from_name, from_address,
-             to_addresses, cc_addresses, date, body_html, body_text, is_read, is_starred, flags, message_id
+             to_addresses, cc_addresses, date, body_html, body_text, is_read, is_starred, is_archived, is_spam, flags, message_id
              FROM mails WHERE id = ?1",
         )?;
         let mut rows = stmt.query([mail_id])?;
@@ -845,8 +882,10 @@ impl Database {
                 body_text: row.get(11)?,
                 is_read: row.get::<_, i64>(12)? != 0,
                 is_starred: row.get::<_, i64>(13)? != 0,
-                flags: row.get(14)?,
-                message_id: row.get(15)?,
+                is_archived: row.get::<_, i64>(14)? != 0,
+                is_spam: row.get::<_, i64>(15)? != 0,
+                flags: row.get(16)?,
+                message_id: row.get(17)?,
             }))
         } else {
             Ok(None)
@@ -888,6 +927,165 @@ impl Database {
         Ok(new_state != 0)
     }
 
+    /// Sets the archived status of a mail and returns the new state.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the database write fails.
+    pub fn set_mail_archived(&self, mail_id: &str, archived: bool) -> Result<bool, AeroError> {
+        let conn = self.connection()?;
+        conn.execute(
+            "UPDATE mails SET is_archived = ?1 WHERE id = ?2",
+            (archived as i64, mail_id),
+        )?;
+        drop(conn);
+        Ok(archived)
+    }
+
+    /// Sets the spam status of a mail and returns the new state.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the database write fails.
+    pub fn set_mail_spam(&self, mail_id: &str, spam: bool) -> Result<bool, AeroError> {
+        let conn = self.connection()?;
+        conn.execute(
+            "UPDATE mails SET is_spam = ?1 WHERE id = ?2",
+            (spam as i64, mail_id),
+        )?;
+        drop(conn);
+        Ok(spam)
+    }
+
+    /// Returns a comma-separated list of SQL-safe quoted strings for use in an
+    /// `IN` clause. Input strings are assumed to be static lowercase names.
+    fn quoted_in_list(values: &[&str]) -> String {
+        values
+            .iter()
+            .map(|v| format!("'{}'", v.replace('\'', "''")))
+            .collect::<Vec<_>>()
+            .join(", ")
+    }
+
+    fn sent_folder_condition() -> String {
+        let names =
+            Self::quoted_in_list(&["sent", "sent items", "sent messages", "[gmail]/sent mail"]);
+        format!("LOWER(f.path) IN ({names}) OR LOWER(f.name) IN ({names})")
+    }
+
+    fn spam_folder_condition() -> String {
+        let names = Self::quoted_in_list(&["spam", "junk", "[gmail]/spam", "[gmail]/junk"]);
+        format!("LOWER(f.path) IN ({names}) OR LOWER(f.name) IN ({names})")
+    }
+
+    /// Lists mails for a virtual folder.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the database query fails or the virtual folder is unknown.
+    #[allow(clippy::significant_drop_tightening)]
+    pub fn list_virtual_mails(
+        &self,
+        virtual_folder: &str,
+        limit: u32,
+        offset: u32,
+    ) -> Result<Vec<crate::models::mail::MailHeader>, AeroError> {
+        let conn = self.connection()?;
+        let sql = match virtual_folder {
+            "starred" => "SELECT id, account_id, folder_id, uid, subject, from_name, from_address,
+                 date, is_read, is_starred, is_archived, is_spam,
+                 EXISTS(SELECT 1 FROM attachments WHERE mail_id = mails.id) as has_attachments
+                 FROM mails WHERE is_starred = 1
+                 ORDER BY date DESC, uid DESC
+                 LIMIT ?1 OFFSET ?2"
+                .to_string(),
+            "archived" => "SELECT id, account_id, folder_id, uid, subject, from_name, from_address,
+                 date, is_read, is_starred, is_archived, is_spam,
+                 EXISTS(SELECT 1 FROM attachments WHERE mail_id = mails.id) as has_attachments
+                 FROM mails WHERE is_archived = 1
+                 ORDER BY date DESC, uid DESC
+                 LIMIT ?1 OFFSET ?2"
+                .to_string(),
+            "sent" => {
+                let condition = Self::sent_folder_condition();
+                format!(
+                    "SELECT m.id, m.account_id, m.folder_id, m.uid, m.subject, m.from_name, m.from_address,
+                     m.date, m.is_read, m.is_starred, m.is_archived, m.is_spam,
+                     EXISTS(SELECT 1 FROM attachments WHERE mail_id = m.id) as has_attachments
+                     FROM mails m JOIN folders f ON m.folder_id = f.id
+                     WHERE {condition}
+                     ORDER BY m.date DESC, m.uid DESC
+                     LIMIT ?1 OFFSET ?2"
+                )
+            }
+            "spam" => {
+                let condition = Self::spam_folder_condition();
+                format!(
+                    "SELECT m.id, m.account_id, m.folder_id, m.uid, m.subject, m.from_name, m.from_address,
+                     m.date, m.is_read, m.is_starred, m.is_archived, m.is_spam,
+                     EXISTS(SELECT 1 FROM attachments WHERE mail_id = m.id) as has_attachments
+                     FROM mails m JOIN folders f ON m.folder_id = f.id
+                     WHERE (m.is_spam = 1 OR {condition})
+                     ORDER BY m.date DESC, m.uid DESC
+                     LIMIT ?1 OFFSET ?2"
+                )
+            }
+            _ => {
+                return Err(AeroError::InvalidConfig(format!(
+                    "Unknown virtual folder: {virtual_folder}"
+                )));
+            }
+        };
+
+        let mut stmt = conn.prepare(&sql)?;
+        let rows = stmt.query_map(rusqlite::params![limit, offset], |row| {
+            Ok(crate::models::mail::MailHeader {
+                id: row.get(0)?,
+                account_id: row.get(1)?,
+                folder_id: row.get(2)?,
+                uid: row.get::<_, i64>(3)? as u32,
+                subject: row.get(4)?,
+                from_name: row.get(5)?,
+                from_address: row.get(6)?,
+                date: row.get(7)?,
+                is_read: row.get::<_, i64>(8)? != 0,
+                is_starred: row.get::<_, i64>(9)? != 0,
+                is_archived: row.get::<_, i64>(10)? != 0,
+                is_spam: row.get::<_, i64>(11)? != 0,
+                has_attachments: row.get::<_, i64>(12)? != 0,
+            })
+        })?;
+        rows.collect::<Result<Vec<_>, _>>()
+            .map_err(|e| AeroError::Database(e.to_string()))
+    }
+
+    /// Counts unread mails in a virtual folder.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the database query fails.
+    pub fn count_virtual_unread(&self, virtual_folder: &str) -> Result<u32, AeroError> {
+        let conn = self.connection()?;
+        let sql = match virtual_folder {
+            "starred" => {
+                "SELECT COUNT(*) FROM mails WHERE is_read = 0 AND is_starred = 1".to_string()
+            }
+            "spam" => {
+                let condition = Self::spam_folder_condition();
+                format!(
+                    "SELECT COUNT(*) FROM mails m JOIN folders f ON m.folder_id = f.id
+                     WHERE m.is_read = 0 AND (m.is_spam = 1 OR {condition})"
+                )
+            }
+            "archived" => {
+                "SELECT COUNT(*) FROM mails WHERE is_read = 0 AND is_archived = 1".to_string()
+            }
+            _ => return Ok(0),
+        };
+        let count: i64 = conn.query_row(&sql, [], |row| row.get(0))?;
+        Ok(count as u32)
+    }
+
     /// Gets the maximum UID in a folder.
     ///
     /// # Errors
@@ -900,6 +1098,27 @@ impl Database {
         if let Some(row) = rows.next()? {
             let max_uid: Option<i64> = row.get(0)?;
             Ok(max_uid.map(|v| v as u32))
+        } else {
+            Ok(None)
+        }
+    }
+
+    /// Gets a mail ID by its folder and IMAP UID.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the database query fails.
+    pub fn get_mail_id_by_uid(
+        &self,
+        folder_id: &str,
+        uid: u32,
+    ) -> Result<Option<String>, AeroError> {
+        let conn = self.connection()?;
+        let mut stmt =
+            conn.prepare("SELECT id FROM mails WHERE folder_id = ?1 AND uid = ?2 LIMIT 1")?;
+        let mut rows = stmt.query(rusqlite::params![folder_id, uid as i64])?;
+        if let Some(row) = rows.next()? {
+            Ok(Some(row.get(0)?))
         } else {
             Ok(None)
         }
@@ -936,6 +1155,27 @@ impl Database {
         }
     }
 
+    /// Updates the encrypted OAuth2 / password credentials for an account.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the account is not found or the write fails.
+    pub fn update_account_auth_credentials(
+        &self,
+        account_id: &str,
+        credentials: &[u8],
+    ) -> Result<(), AeroError> {
+        let conn = self.connection()?;
+        let rows = conn.execute(
+            "UPDATE accounts SET auth_credentials_encrypted = ?1, updated_at = ?2 WHERE id = ?3",
+            rusqlite::params![credentials, Utc::now().timestamp(), account_id],
+        )?;
+        if rows == 0 {
+            return Err(AeroError::AccountNotFound(account_id.to_string()));
+        }
+        Ok(())
+    }
+
     /// Deletes a mail by ID.
     ///
     /// # Errors
@@ -958,6 +1198,56 @@ impl Database {
         conn.execute(
             "UPDATE mails SET folder_id = ?1 WHERE id = ?2",
             (target_folder_id, mail_id),
+        )?;
+        drop(conn);
+        Ok(())
+    }
+
+    /// Deletes all attachment records for a mail.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the database write fails.
+    pub fn delete_attachments(&self, mail_id: &str) -> Result<(), AeroError> {
+        let conn = self.connection()?;
+        conn.execute("DELETE FROM attachments WHERE mail_id = ?1", [mail_id])?;
+        drop(conn);
+        Ok(())
+    }
+
+    /// Inserts a single attachment record.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the database write fails.
+    pub fn insert_attachment(
+        &self,
+        mail_id: &str,
+        attachment: &crate::models::mail::ParsedAttachment,
+        local_path: &std::path::Path,
+    ) -> Result<(), AeroError> {
+        let conn = self.connection()?;
+        let id = uuid::Uuid::new_v4().to_string();
+        let filename = attachment
+            .filename
+            .clone()
+            .filter(|n| !n.trim().is_empty())
+            .unwrap_or_else(|| "unnamed".to_string());
+        let size =
+            i64::try_from(attachment.size).map_err(|e| AeroError::Internal(e.to_string()))?;
+        conn.execute(
+            "INSERT INTO attachments (id, mail_id, filename, mime_type, size, content_id, local_path, is_inline)
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8)",
+            (
+                &id,
+                mail_id,
+                filename,
+                &attachment.mime_type,
+                size,
+                &attachment.content_id,
+                local_path.to_str(),
+                attachment.is_inline as i64,
+            ),
         )?;
         drop(conn);
         Ok(())
@@ -991,6 +1281,22 @@ impl Database {
         })?;
         rows.collect::<Result<Vec<_>, _>>()
             .map_err(|e| AeroError::Database(e.to_string()))
+    }
+
+    /// Gets the local filesystem path for an attachment by ID.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the database query fails.
+    pub fn get_attachment_path(&self, attachment_id: &str) -> Result<Option<String>, AeroError> {
+        let conn = self.connection()?;
+        let mut stmt = conn.prepare("SELECT local_path FROM attachments WHERE id = ?1")?;
+        let mut rows = stmt.query([attachment_id])?;
+        if let Some(row) = rows.next()? {
+            Ok(row.get(0)?)
+        } else {
+            Ok(None)
+        }
     }
 
     // ---- Draft CRUD ----
@@ -1178,7 +1484,7 @@ impl Database {
         let conn = self.connection()?;
         let mut stmt = conn.prepare(
             "SELECT id, account_id, folder_id, uid, subject, from_name, from_address,
-             to_addresses, cc_addresses, date, body_html, body_text, is_read, is_starred, flags, message_id
+             to_addresses, cc_addresses, date, body_html, body_text, is_read, is_starred, is_archived, is_spam, flags, message_id
              FROM mails WHERE indexed_at IS NULL LIMIT 100",
         )?;
         let rows = stmt.query_map([], |row| {
@@ -1197,8 +1503,10 @@ impl Database {
                 body_text: row.get(11)?,
                 is_read: row.get::<_, i64>(12)? != 0,
                 is_starred: row.get::<_, i64>(13)? != 0,
-                flags: row.get(14)?,
-                message_id: row.get(15)?,
+                is_archived: row.get::<_, i64>(14)? != 0,
+                is_spam: row.get::<_, i64>(15)? != 0,
+                flags: row.get(16)?,
+                message_id: row.get(17)?,
             })
         })?;
         rows.collect::<Result<Vec<_>, _>>()

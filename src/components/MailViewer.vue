@@ -7,7 +7,7 @@ import {
   Star,
   Trash2,
   Expand,
-  Compress,
+  Minimize2,
   Mail,
   Paperclip,
   Reply,
@@ -240,14 +240,14 @@ watch(currentMailId, (newMailId) => {
       </div>
       <div class="mt-4 flex gap-4 text-xs text-tertiary">
         <span
-          ><kbd class="rounded bg-raised px-1.5 py-0.5">J</kbd> /
-          <kbd class="rounded bg-raised px-1.5 py-0.5">K</kbd> {{ $t('mail.navigate') }}</span
+          ><kbd class="rounded bg-raised px-2 py-0.5">J</kbd> /
+          <kbd class="rounded bg-raised px-2 py-0.5">K</kbd> {{ $t('mail.navigate') }}</span
         >
         <span
-          ><kbd class="rounded bg-raised px-1.5 py-0.5">Enter</kbd> {{ $t('mail.open') }}</span
+          ><kbd class="rounded bg-raised px-2 py-0.5">Enter</kbd> {{ $t('mail.open') }}</span
         >
         <span
-          ><kbd class="rounded bg-raised px-1.5 py-0.5">Esc</kbd> {{ $t('mail.close') }}</span
+          ><kbd class="rounded bg-raised px-2 py-0.5">Esc</kbd> {{ $t('mail.close') }}</span
         >
       </div>
     </div>
@@ -319,7 +319,7 @@ watch(currentMailId, (newMailId) => {
             :title="mailStore.isReadingMode ? t('mail.exitReadingMode') : t('mail.readingMode')"
             @click="mailStore.toggleReadingMode()"
           >
-            <Compress v-if="mailStore.isReadingMode" class="h-4 w-4" />
+            <Minimize2 v-if="mailStore.isReadingMode" class="h-4 w-4" />
             <Expand v-else class="h-4 w-4" />
           </button>
           <button
@@ -357,7 +357,7 @@ watch(currentMailId, (newMailId) => {
       <!-- Translation display -->
       <div
         v-if="translatedText && showTranslation"
-        class="flex items-center justify-between border-b border-border bg-accent-subtle px-4 py-1.5"
+        class="flex h-9 items-center justify-between border-b border-border bg-accent-subtle px-4"
       >
         <span class="text-xs text-accent">
           {{ t('translation.translatedTo', { lang: translatedLang ?? 'target' }) }}
@@ -483,14 +483,14 @@ watch(currentMailId, (newMailId) => {
           <div class="mt-4 flex justify-end gap-2">
             <button
               type="button"
-              class="rounded-md border border-border px-3 py-1.5 text-sm text-secondary transition-colors hover:bg-raised"
+              class="flex h-9 items-center justify-center rounded-md border border-border px-3 text-sm text-secondary transition-colors hover:bg-raised"
               @click="cancelDelete"
             >
               {{ t('common.cancel') }}
             </button>
             <button
               type="button"
-              class="rounded-md bg-danger px-3 py-1.5 text-sm text-white transition-colors hover:bg-danger/90"
+              class="flex h-9 items-center justify-center rounded-md bg-danger px-3 text-sm text-white transition-colors hover:bg-danger-hover"
               @click="confirmDelete"
             >
               {{ t('common.delete') }}

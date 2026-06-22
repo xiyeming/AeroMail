@@ -5,6 +5,8 @@ import type { MailHeader, MailDetail, FolderInfo } from '@/types/mail';
 
 const PAGE_SIZE = 50;
 
+const VIRTUAL_FOLDERS = ['starred', 'sent', 'archived', 'spam'];
+
 export const useMailStore = defineStore('mail', () => {
   const mails = ref<MailHeader[]>([]);
   const selectedMailId = ref<string | null>(null);
@@ -48,11 +50,15 @@ export const useMailStore = defineStore('mail', () => {
 
       currentFolderId.value = folderId;
       const offset = reset ? 0 : mails.value.length;
-      const newMails = await invoke<MailHeader[]>('get_mail_list', {
-        folderId,
-        limit: PAGE_SIZE,
-        offset,
-      });
+      const isVirtual = VIRTUAL_FOLDERS.includes(folderId);
+      const newMails = await invoke<MailHeader[]>(
+        isVirtual ? 'get_virtual_mail_list' : 'get_mail_list',
+        {
+          folderId,
+          limit: PAGE_SIZE,
+          offset,
+        }
+      );
 
       if (reset) {
         mails.value = newMails;
@@ -110,6 +116,55 @@ export const useMailStore = defineStore('mail', () => {
       }
       if (selectedMail.value?.id === mailId) {
         selectedMail.value.isStarred = newStarred;
+      }
+    } catch (e) {
+      error.value = e instanceof Error ? e.message : String(e);
+    }
+  }
+
+  async function archiveMail(mailId: string) {
+    try {
+      await invoke('archive_mail', { mailId });
+      const mail = mails.value.find((m) => m.id === mailId);
+      if (mail) {
+        mail.isArchived = true;
+      }
+      if (selectedMail.value?.id === mailId) {
+        selectedMail.value.isArchived = true;
+      }
+      if (currentFolderId.value !== 'archived') {
+        const index = mails.value.findIndex((m) => m.id === mailId);
+        if (index !== -1) {
+          mails.value.splice(index, 1);
+        }
+        if (selectedMailId.value === mailId) {
+          clearSelection();
+        }
+      }
+    } catch (e) {
+      error.value = e instanceof Error ? e.message : String(e);
+    }
+  }
+
+  async function toggleSpam(mailId: string) {
+    try {
+      const newSpam = await invoke<boolean>('toggle_mail_spam', { mailId });
+      const mail = mails.value.find((m) => m.id === mailId);
+      if (mail) {
+        mail.isSpam = newSpam;
+      }
+      if (selectedMail.value?.id === mailId) {
+        selectedMail.value.isSpam = newSpam;
+      }
+      // Remove from list if it no longer belongs in the current virtual folder.
+      if (currentFolderId.value === 'spam' && !newSpam) {
+        const index = mails.value.findIndex((m) => m.id === mailId);
+        if (index !== -1) {
+          mails.value.splice(index, 1);
+        }
+        if (selectedMailId.value === mailId) {
+          clearSelection();
+        }
       }
     } catch (e) {
       error.value = e instanceof Error ? e.message : String(e);
@@ -252,6 +307,8 @@ export const useMailStore = defineStore('mail', () => {
     selectMail,
     markRead,
     toggleStar,
+    archiveMail,
+    toggleSpam,
     deleteMail,
     toggleReadingMode,
     selectNextMail,

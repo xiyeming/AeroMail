@@ -100,7 +100,7 @@ watch(
         <div class="mt-4 flex justify-end">
           <button
             type="button"
-            class="rounded-md border border-border px-3 py-1.5 text-sm text-secondary transition-colors hover:bg-raised"
+            class="flex h-9 items-center justify-center rounded-md border border-border px-3 text-sm text-secondary transition-colors hover:bg-raised"
             @click="emit('close')"
           >
             {{ t('common.cancel') }}

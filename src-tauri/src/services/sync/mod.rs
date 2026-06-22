@@ -2,6 +2,7 @@ mod mail_parser;
 mod worker;
 
 use std::collections::HashMap;
+use std::path::PathBuf;
 use std::sync::Arc;
 
 use tauri::Emitter;
@@ -19,6 +20,8 @@ use self::worker::SyncWorker;
 /// Manages background sync tasks for all email accounts.
 pub struct SyncService {
     db: Arc<Database>,
+    /// Directory where attachment files are stored.
+    attachments_dir: PathBuf,
     /// Map of `account_id` -> (`JoinHandle`, progress receiver)
     workers: Arc<RwLock<HashMap<String, JoinHandle<()>>>>,
 }
@@ -26,9 +29,10 @@ pub struct SyncService {
 impl SyncService {
     /// Creates a new `SyncService`.
     #[must_use]
-    pub fn new(db: Arc<Database>) -> Self {
+    pub fn new(db: Arc<Database>, attachments_dir: PathBuf) -> Self {
         Self {
             db,
+            attachments_dir,
             workers: Arc::new(RwLock::new(HashMap::new())),
         }
     }
@@ -70,9 +74,10 @@ impl SyncService {
         // Create and start worker
         let worker = SyncWorker {
             account_id: account_id.to_string(),
-            account_config,
+            account_config: Arc::new(RwLock::new(account_config)),
             db: Arc::clone(&self.db),
             progress_tx,
+            attachments_dir: self.attachments_dir.clone(),
         };
 
         let handle = tokio::spawn(async move {
@@ -167,9 +172,14 @@ impl SyncService {
                 let auth_credentials: Option<Vec<u8>> = row.get(10)?;
 
                 let auth = match auth_type.as_str() {
-                    "Password" => crate::models::account::AuthConfig::Password {
-                        password_encrypted: auth_credentials.unwrap_or_default(),
-                    },
+                    "Password" => {
+                        let encrypted = auth_credentials.unwrap_or_default();
+                        let plaintext = crate::services::crypto::decrypt_password(&encrypted)
+                            .map_err(|e| rusqlite::Error::InvalidParameterName(e.to_string()))?;
+                        crate::models::account::AuthConfig::Password {
+                            password_encrypted: plaintext,
+                        }
+                    }
                     "OAuth2" => {
                         // Parse OAuth2 credentials from JSON
                         let creds_bytes = auth_credentials.unwrap_or_default();
@@ -190,8 +200,8 @@ impl SyncService {
 
                 Ok(AccountConfig {
                     id: row.get(0)?,
-                    name: name.clone(),
-                    email: email.or(Some(name)),
+                    name,
+                    email,
                     provider,
                     imap: crate::models::account::ServerConfig {
                         host: row.get(4)?,

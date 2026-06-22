@@ -205,10 +205,6 @@ function isSelected(mailId: string): boolean {
   return mailStore.selectedMailIds.has(mailId);
 }
 
-function selectAll() {
-  mailStore.selectAll();
-}
-
 function deselectAll() {
   mailStore.clearBulkSelection();
 }

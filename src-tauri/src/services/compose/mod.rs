@@ -132,7 +132,8 @@ impl ComposeService {
         )?;
 
         let new_uid =
-            imap_draft_sync::sync_draft_to_imap(&account_config, &draft, &message_bytes, &self.db)?;
+            imap_draft_sync::sync_draft_to_imap(&account_config, &draft, &message_bytes, &self.db)
+                .await?;
 
         // Update synced_at and remote_uid
         let mut updated = draft;
@@ -145,6 +146,6 @@ impl ComposeService {
 
     async fn load_account_config(&self, account_id: &str) -> Result<AccountConfig, AeroError> {
         let am = self.account_manager.read().await;
-        am.get_account_config(account_id)
+        am.get_account_config_with_refresh(account_id).await
     }
 }

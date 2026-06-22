@@ -135,16 +135,17 @@ mod tests {
     }
 
     #[test]
-    fn builds_text_html_message() {
+    fn builds_text_html_message() -> Result<(), Box<dyn std::error::Error>> {
         let draft = sample_draft();
-        let bytes = build_message(&draft, "from@example.com", "Sender", &[]).unwrap();
-        let text = String::from_utf8(bytes).unwrap();
+        let bytes = build_message(&draft, "from@example.com", "Sender", &[])?;
+        let text = String::from_utf8(bytes)?;
         assert!(text.contains("Hello"));
         assert!(text.contains("to@example.com"));
+        Ok(())
     }
 
     #[test]
-    fn builds_message_with_attachment() {
+    fn builds_message_with_attachment() -> Result<(), Box<dyn std::error::Error>> {
         let mut draft = sample_draft();
         draft.attachments.push(AttachmentDraft {
             id: "att1".to_string(),
@@ -161,23 +162,24 @@ mod tests {
             "from@example.com",
             "Sender",
             &[("att1".to_string(), b"hello".to_vec())],
-        )
-        .unwrap();
-        let text = String::from_utf8(bytes).unwrap();
+        )?;
+        let text = String::from_utf8(bytes)?;
         assert!(text.contains("note.txt"));
         assert!(text.contains("hello"));
+        Ok(())
     }
 
     #[test]
-    fn builds_reply_with_in_reply_to() {
+    fn builds_reply_with_in_reply_to() -> Result<(), Box<dyn std::error::Error>> {
         let mut draft = sample_draft();
         draft.reply_context = Some(crate::models::compose::ReplyContext {
             original_mail_id: "m1".to_string(),
             original_message_id: Some("<abc@example.com>".to_string()),
             kind: crate::models::compose::ReplyKind::Reply,
         });
-        let bytes = build_message(&draft, "from@example.com", "Sender", &[]).unwrap();
-        let text = String::from_utf8(bytes).unwrap();
+        let bytes = build_message(&draft, "from@example.com", "Sender", &[])?;
+        let text = String::from_utf8(bytes)?;
         assert!(text.contains("In-Reply-To: <abc@example.com>"));
+        Ok(())
     }
 }

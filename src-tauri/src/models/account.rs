@@ -48,6 +48,9 @@ pub enum AuthConfig {
         access_token: String,
         refresh_token: String,
         expires_at: i64,
+        token_url: Option<String>,
+        client_id: Option<String>,
+        client_secret: Option<String>,
     },
     Password {
         password_encrypted: Vec<u8>,

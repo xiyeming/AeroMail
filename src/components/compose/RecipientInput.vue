@@ -1,19 +1,19 @@
 <template>
-  <div class="recipient-input flex flex-col gap-1">
-    <label class="text-xs text-muted">{{ label }}</label>
+  <div class="recipient-input flex flex-col gap-1.5">
+    <label class="text-sm text-secondary">{{ label }}</label>
     <div
-      class="flex flex-wrap gap-1 rounded-lg border border-border bg-panel p-2 transition-colors focus-within:border-primary"
+      class="flex flex-wrap gap-1 rounded-lg border border-border bg-base p-2 transition-colors focus-within:border-accent"
       @click="focusInput"
     >
       <span
         v-for="(email, idx) in modelValue"
         :key="idx"
-        class="inline-flex items-center gap-1 rounded-md bg-primary/20 px-2 py-0.5 text-sm text-text"
+        class="inline-flex items-center gap-1 rounded-md bg-accent-subtle px-2 py-0.5 text-sm text-primary"
       >
         {{ email }}
         <button
           type="button"
-          class="text-text-secondary hover:text-danger"
+          class="text-secondary transition-colors hover:text-danger"
           @click.stop="removeEmail(idx)"
         >
           ×
@@ -23,7 +23,7 @@
         ref="inputRef"
         v-model="inputValue"
         type="text"
-        class="min-w-[120px] flex-1 bg-transparent px-1 py-0.5 text-sm text-text outline-none placeholder:text-muted"
+        class="min-w-28 flex-1 bg-transparent px-1 py-0.5 text-sm text-primary outline-none placeholder:text-tertiary"
         :placeholder="modelValue.length === 0 ? placeholder : ''"
         @keydown.enter.prevent="addEmail"
         @keydown.tab.prevent="addEmail"

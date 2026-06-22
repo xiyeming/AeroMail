@@ -1,6 +1,9 @@
 pub mod account_manager;
 pub mod ai;
 pub mod compose;
+pub mod crypto;
+pub mod imap_client;
+pub mod oauth2;
 pub mod search;
 pub mod sync;
 pub mod translation;

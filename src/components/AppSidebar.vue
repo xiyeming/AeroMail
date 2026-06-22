@@ -129,7 +129,7 @@ function closePopoverOnBlur(event: FocusEvent) {
             </div>
             <span
               v-if="folder.count"
-              class="flex h-5 min-w-5 items-center justify-center rounded-full bg-accent px-1.5 text-xs font-medium text-white"
+              class="flex h-5 min-w-5 items-center justify-center rounded-full bg-accent px-2 text-xs font-medium text-white"
             >
               {{ folder.count }}
             </span>
@@ -141,8 +141,8 @@ function closePopoverOnBlur(event: FocusEvent) {
     <div class="border-t border-border p-2">
       <div class="relative">
         <button
-          type="button"
           id="account-switcher"
+          type="button"
           aria-haspopup="true"
           :aria-expanded="popoverOpen"
           class="flex h-9 w-full items-center gap-2 rounded-md px-2 text-sm transition-colors hover:bg-raised"

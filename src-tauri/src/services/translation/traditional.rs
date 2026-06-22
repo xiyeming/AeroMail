@@ -1,3 +1,5 @@
+use std::collections::HashMap;
+
 use crate::error::AeroError;
 use crate::models::translation::{TraditionalProviderKind, TranslationProvider};
 
@@ -16,6 +18,7 @@ pub fn translate(
             kind,
             api_key_encrypted,
             endpoint,
+            extra,
             ..
         } => {
             let api_key = String::from_utf8(api_key_encrypted.clone())
@@ -26,6 +29,23 @@ pub fn translate(
                 }
                 TraditionalProviderKind::DeepL => {
                     deepl_translate(&api_key, source_text, target_lang, endpoint.as_deref())
+                }
+                TraditionalProviderKind::AzureTranslator => azure_translate(
+                    &api_key,
+                    source_text,
+                    target_lang,
+                    endpoint.as_deref(),
+                    extra,
+                ),
+                TraditionalProviderKind::Baidu => baidu_translate(
+                    &api_key,
+                    source_text,
+                    target_lang,
+                    endpoint.as_deref(),
+                    extra,
+                ),
+                TraditionalProviderKind::Custom => {
+                    custom_translate(&api_key, source_text, target_lang, endpoint.as_deref())
                 }
                 _ => Err(AeroError::TranslationApiError(
                     "provider not yet implemented".to_string(),
@@ -93,4 +113,172 @@ fn deepl_translate(
         .as_str()
         .map(String::from)
         .ok_or_else(|| AeroError::TranslationApiError("unexpected response".to_string()))
+}
+
+fn azure_translate(
+    api_key: &str,
+    text: &str,
+    target_lang: &str,
+    endpoint: Option<&str>,
+    extra: &HashMap<String, String>,
+) -> Result<String, AeroError> {
+    let base = endpoint.unwrap_or("https://api.cognitive.microsofttranslator.com");
+    let target = normalize_azure_lang(target_lang);
+    let url = format!("{base}/translate?api-version=3.0&to={target}");
+    let body = serde_json::json!([{ "Text": text }]);
+
+    let mut req = reqwest::blocking::Client::new()
+        .post(&url)
+        .header("Ocp-Apim-Subscription-Key", api_key)
+        .header("Content-Type", "application/json")
+        .json(&body);
+
+    if let Some(region) = extra.get("region") {
+        req = req.header("Ocp-Apim-Subscription-Region", region);
+    }
+
+    let resp = req
+        .send()
+        .map_err(|e| AeroError::TranslationApiError(e.to_string()))?;
+    if !resp.status().is_success() {
+        let status = resp.status();
+        let body = resp.text().unwrap_or_default();
+        return Err(AeroError::TranslationApiError(format!(
+            "HTTP {status}: {body}"
+        )));
+    }
+    let data: serde_json::Value = resp
+        .json()
+        .map_err(|e| AeroError::TranslationApiError(e.to_string()))?;
+    data[0]["translations"][0]["text"]
+        .as_str()
+        .map(String::from)
+        .ok_or_else(|| AeroError::TranslationApiError("unexpected response".to_string()))
+}
+
+fn baidu_translate(
+    api_key: &str,
+    text: &str,
+    target_lang: &str,
+    endpoint: Option<&str>,
+    extra: &HashMap<String, String>,
+) -> Result<String, AeroError> {
+    let app_id = extra.get("app_id").ok_or_else(|| {
+        AeroError::TranslationApiError("Baidu app_id is required in extra config".to_string())
+    })?;
+    let secret = api_key;
+    let salt = rand::random::<u64>().to_string();
+    let sign_input = format!("{app_id}{text}{salt}{secret}");
+    let sign = format!("{:x}", md5::compute(sign_input));
+    let target = normalize_baidu_lang(target_lang);
+    let base = endpoint.unwrap_or("https://fanyi-api.baidu.com");
+    let url = format!("{base}/api/trans/vip/translate");
+
+    let resp = reqwest::blocking::Client::new()
+        .post(&url)
+        .form(&[
+            ("q", text),
+            ("from", "auto"),
+            ("to", target),
+            ("appid", app_id),
+            ("salt", &salt),
+            ("sign", &sign),
+        ])
+        .send()
+        .map_err(|e| AeroError::TranslationApiError(e.to_string()))?;
+    if !resp.status().is_success() {
+        let status = resp.status();
+        let body = resp.text().unwrap_or_default();
+        return Err(AeroError::TranslationApiError(format!(
+            "HTTP {status}: {body}"
+        )));
+    }
+    let data: serde_json::Value = resp
+        .json()
+        .map_err(|e| AeroError::TranslationApiError(e.to_string()))?;
+    if let Some(error_code) = data["error_code"].as_str() {
+        let error_msg = data["error_msg"].as_str().unwrap_or("unknown error");
+        return Err(AeroError::TranslationApiError(format!(
+            "Baidu {error_code}: {error_msg}"
+        )));
+    }
+    data["trans_result"][0]["dst"]
+        .as_str()
+        .map(String::from)
+        .ok_or_else(|| AeroError::TranslationApiError("unexpected response".to_string()))
+}
+
+fn custom_translate(
+    api_key: &str,
+    text: &str,
+    target_lang: &str,
+    endpoint: Option<&str>,
+) -> Result<String, AeroError> {
+    let url = endpoint.ok_or_else(|| {
+        AeroError::TranslationApiError("Custom provider endpoint is required".to_string())
+    })?;
+    let resp = reqwest::blocking::Client::new()
+        .post(url)
+        .header("Authorization", format!("Bearer {api_key}"))
+        .form(&[
+            ("q", text),
+            ("source", "auto"),
+            ("target", target_lang),
+            ("api_key", api_key),
+        ])
+        .send()
+        .map_err(|e| AeroError::TranslationApiError(e.to_string()))?;
+    if !resp.status().is_success() {
+        let status = resp.status();
+        let body = resp.text().unwrap_or_default();
+        return Err(AeroError::TranslationApiError(format!(
+            "HTTP {status}: {body}"
+        )));
+    }
+    let data: serde_json::Value = resp
+        .json()
+        .map_err(|e| AeroError::TranslationApiError(e.to_string()))?;
+
+    // LibreTranslate returns [{"translatedText": "..."}]
+    if let Some(text) = data[0]["translatedText"].as_str() {
+        return Ok(text.to_string());
+    }
+    // Generic fallback: { "translatedText": "..." }
+    if let Some(text) = data["translatedText"].as_str() {
+        return Ok(text.to_string());
+    }
+    Err(AeroError::TranslationApiError(
+        "unexpected response".to_string(),
+    ))
+}
+
+fn normalize_azure_lang(lang: &str) -> &str {
+    match lang.to_lowercase().as_str() {
+        "zh-cn" | "zh" | "zh-hans" => "zh-Hans",
+        "zh-tw" | "zh-hant" => "zh-Hant",
+        _ => lang,
+    }
+}
+
+fn normalize_baidu_lang(lang: &str) -> &str {
+    match lang.to_lowercase().as_str() {
+        "zh-cn" | "zh" | "zh-hans" => "zh",
+        "zh-tw" | "zh-hant" => "cht",
+        "en" => "en",
+        "ja" | "jp" => "jp",
+        "ko" => "kor",
+        "fr" => "fra",
+        "es" => "spa",
+        "de" => "de",
+        "ru" => "ru",
+        "it" => "it",
+        "pt" => "pt",
+        "ar" => "ara",
+        "th" => "th",
+        "vi" => "vie",
+        "id" => "id",
+        "ms" => "may",
+        "tr" => "tr",
+        _ => lang,
+    }
 }

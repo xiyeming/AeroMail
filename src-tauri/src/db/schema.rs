@@ -53,6 +53,8 @@ CREATE TABLE IF NOT EXISTS mails (
     body_text TEXT,
     is_read INTEGER DEFAULT 0,
     is_starred INTEGER DEFAULT 0,
+    is_archived INTEGER DEFAULT 0,
+    is_spam INTEGER DEFAULT 0,
     flags TEXT,
     message_id TEXT,
     created_at INTEGER,

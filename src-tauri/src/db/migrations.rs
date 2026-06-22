@@ -54,8 +54,16 @@ fn run_draft_migrations(tx: &rusqlite::Transaction) -> Result<(), AeroError> {
 }
 
 fn run_mail_migrations(tx: &rusqlite::Transaction) -> Result<(), AeroError> {
-    if !column_exists(tx, "mails", "message_id")? {
-        tx.execute("ALTER TABLE mails ADD COLUMN message_id TEXT", [])?;
+    let columns = [
+        "message_id TEXT",
+        "is_archived INTEGER DEFAULT 0",
+        "is_spam INTEGER DEFAULT 0",
+    ];
+    for column_def in &columns {
+        let column_name = column_def.split_whitespace().next().unwrap_or(column_def);
+        if !column_exists(tx, "mails", column_name)? {
+            tx.execute(&format!("ALTER TABLE mails ADD COLUMN {column_def}"), [])?;
+        }
     }
     Ok(())
 }

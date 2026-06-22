@@ -1,9 +1,8 @@
-use std::fmt::Write as _;
 use std::path::Path;
 use std::sync::Arc;
 
 use tantivy::collector::TopDocs;
-use tantivy::query::QueryParser;
+use tantivy::query::{BooleanQuery, Occur, QueryParser, TermQuery};
 use tantivy::schema::{Field, INDEXED, STORED, STRING, Schema, TEXT, Value};
 use tantivy::{Index, IndexReader, ReloadPolicy};
 
@@ -170,28 +169,51 @@ impl SearchService {
     pub fn search(&self, query: &SearchQuery) -> Result<Vec<SearchResult>, AeroError> {
         let searcher = self.reader.searcher();
 
-        // 构建查询字符串
-        let mut query_str = query.query.clone();
-
-        // 添加过滤条件
-        if let Some(ref account_id) = query.account_id {
-            let _ = write!(query_str, " account_id:{account_id}");
-        }
-        if let Some(ref folder_id) = query.folder_id {
-            let _ = write!(query_str, " folder_id:{folder_id}");
-        }
-
         let query_parser = QueryParser::for_index(
             &self.index,
             vec![self.subject_field, self.body_field, self.from_field],
         );
 
-        let query = query_parser
-            .parse_query(&query_str)
-            .map_err(|e| AeroError::SearchQueryError(e.to_string()))?;
+        // Parse the free-text portion of the query.
+        let user_query = if query.query.trim().is_empty() {
+            // Match all documents when no text query is provided.
+            Box::new(tantivy::query::AllQuery) as Box<dyn tantivy::query::Query>
+        } else {
+            query_parser
+                .parse_query(&query.query)
+                .map_err(|e| AeroError::SearchQueryError(e.to_string()))?
+        };
+
+        // Build filter queries for account and folder using TermQuery to avoid
+        // query-string injection.
+        let mut clauses: Vec<(Occur, Box<dyn tantivy::query::Query>)> =
+            vec![(Occur::Must, user_query)];
+
+        if let Some(ref account_id) = query.account_id {
+            let term = tantivy::Term::from_field_text(self.account_id_field, account_id);
+            clauses.push((
+                Occur::Must,
+                Box::new(TermQuery::new(
+                    term,
+                    tantivy::schema::IndexRecordOption::Basic,
+                )),
+            ));
+        }
+        if let Some(ref folder_id) = query.folder_id {
+            let term = tantivy::Term::from_field_text(self.folder_id_field, folder_id);
+            clauses.push((
+                Occur::Must,
+                Box::new(TermQuery::new(
+                    term,
+                    tantivy::schema::IndexRecordOption::Basic,
+                )),
+            ));
+        }
+
+        let final_query = BooleanQuery::new(clauses);
 
         let top_docs = searcher
-            .search(&query, &TopDocs::with_limit(100).order_by_score())
+            .search(&final_query, &TopDocs::with_limit(100).order_by_score())
             .map_err(|e| AeroError::SearchIndexError(e.to_string()))?;
 
         let mut results = Vec::new();
@@ -201,8 +223,8 @@ impl SearchService {
                 .map_err(|e| AeroError::SearchIndexError(e.to_string()))?;
 
             if let Some(mail_id) = doc.get_first(self.mail_id_field).and_then(|v| v.as_str()) {
-                // 生成摘要
-                let snippet = self.generate_snippet(&doc, &query_str);
+                // Generate snippet using the original free-text query only.
+                let snippet = self.generate_snippet(&doc, &query.query);
 
                 results.push(SearchResult {
                     mail_id: mail_id.to_string(),
@@ -237,19 +259,51 @@ impl SearchService {
 
     /// Highlights search terms in text.
     fn highlight_text(text: &str, query: &str, max_length: usize) -> String {
-        let query_lower = query.to_lowercase();
-        let text_lower = text.to_lowercase();
+        let query_trimmed = query.trim();
+        if query_trimmed.is_empty() {
+            return String::new();
+        }
 
-        text_lower
-            .find(&query_lower)
-            .map_or_else(String::new, |pos| {
-                let start = pos.saturating_sub(50);
-                let end = std::cmp::min(text.len(), pos + query.len() + 150);
-                let end = std::cmp::min(end, start + max_length);
+        let Some((start, end)) = Self::find_case_insensitive(text, query_trimmed) else {
+            return String::new();
+        };
 
-                let snippet = &text[start..end];
-                format!("...{snippet}...")
-            })
+        let snippet_start = start.saturating_sub(50);
+        let snippet_end = std::cmp::min(text.len(), end + 150);
+        let snippet_end = std::cmp::min(snippet_end, snippet_start + max_length);
+
+        // Ensure slice boundaries fall on UTF-8 char boundaries.
+        let snippet = text
+            .char_indices()
+            .skip_while(|(idx, _)| *idx < snippet_start)
+            .take_while(|(idx, _)| *idx < snippet_end)
+            .map(|(_, c)| c)
+            .collect::<String>();
+        format!("...{snippet}...")
+    }
+
+    /// Finds the first case-insensitive occurrence of `needle` in `haystack`
+    /// and returns its byte range in the original text.
+    fn find_case_insensitive(haystack: &str, needle: &str) -> Option<(usize, usize)> {
+        if needle.is_empty() {
+            return None;
+        }
+        let needle_lower = needle.to_lowercase();
+        let haystack_chars: Vec<(usize, char)> = haystack.char_indices().collect();
+        let needle_len = needle_lower.chars().count();
+
+        for i in 0..haystack_chars.len().saturating_sub(needle_len - 1) {
+            let window = &haystack_chars[i..i + needle_len];
+            let window_lower: String = window.iter().flat_map(|(_, c)| c.to_lowercase()).collect();
+            if window_lower == needle_lower {
+                let start = window.first().map_or(0, |(idx, _)| *idx);
+                let end = haystack_chars
+                    .get(i + needle_len)
+                    .map_or(haystack.len(), |(idx, _)| *idx);
+                return Some((start, end));
+            }
+        }
+        None
     }
 
     /// Returns search index statistics.

@@ -90,10 +90,10 @@ pub async fn send_message(
     drop(conn);
 
     Ok(AiChatMessage {
-        id: user_id,
+        id: assistant_id,
         session_id: session_id.to_string(),
-        role: "user".to_string(),
-        content: user_content.to_string(),
+        role: "assistant".to_string(),
+        content: reply,
         created_at: now,
     })
 }

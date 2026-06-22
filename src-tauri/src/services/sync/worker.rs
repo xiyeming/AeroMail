@@ -1,26 +1,27 @@
-use std::net::TcpStream;
+use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use std::time::Duration;
 
-use imap::Session;
-use native_tls::TlsStream;
-use tokio::sync::mpsc;
+use futures::StreamExt;
+use tokio::sync::{RwLock, mpsc};
 use tokio::time::sleep;
 use tracing::{error, info, warn};
 
 use crate::db::pool::Database;
 use crate::error::AeroError;
-use crate::models::account::{AccountConfig, AuthConfig};
-use crate::models::mail::{SyncProgress, SyncStatus};
+use crate::models::account::AccountConfig;
+use crate::models::mail::{ParsedAttachment, SyncProgress, SyncStatus};
+use crate::services::imap_client;
 
 use super::mail_parser;
 
 /// Background sync worker for a single email account.
 pub struct SyncWorker {
     pub account_id: String,
-    pub account_config: AccountConfig,
+    pub account_config: Arc<RwLock<AccountConfig>>,
     pub db: Arc<Database>,
     pub progress_tx: mpsc::Sender<SyncProgress>,
+    pub attachments_dir: PathBuf,
 }
 
 impl SyncWorker {
@@ -66,144 +67,93 @@ impl SyncWorker {
 
     /// Performs a single sync cycle.
     async fn sync_once(&self) -> Result<(), AeroError> {
-        let account_id = self.account_id.clone();
-        let account_config = self.account_config.clone();
-        let db = Arc::clone(&self.db);
-        let progress_tx = self.progress_tx.clone();
+        let mut config = self.account_config.read().await.clone();
+        crate::services::oauth2::ensure_access_token(
+            Some(&self.account_id),
+            &mut config,
+            Some(self.db.as_ref()),
+        )
+        .await?;
+        {
+            let mut guard = self.account_config.write().await;
+            *guard = config.clone();
+        }
 
-        // Run synchronous IMAP operations in a blocking thread
-        tokio::task::spawn_blocking(move || {
-            Self::sync_blocking(&account_id, &account_config, &db, &progress_tx)
-        })
-        .await
-        .map_err(|e| AeroError::SyncError(e.to_string()))?
-    }
+        let mut session = imap_client::connect_imap(&config).await?;
 
-    /// Performs synchronous IMAP sync (runs in a blocking thread).
-    fn sync_blocking(
-        account_id: &str,
-        config: &AccountConfig,
-        db: &Arc<Database>,
-        progress_tx: &mpsc::Sender<SyncProgress>,
-    ) -> Result<(), AeroError> {
-        // Connect to IMAP server
-        let mut session = Self::connect_blocking(config)?;
-
-        // Discover and sync folders
-        let folder_names = Self::list_folders_blocking(&mut session)?;
+        let folder_names = Self::list_folders(&mut session).await?;
         info!(
             "Account {}: Found {} folders",
-            account_id,
+            self.account_id,
             folder_names.len()
         );
 
+        let excluded_folders = self.account_config.read().await.excluded_folders.clone();
+
         for folder_name in &folder_names {
-            // Skip excluded folders
-            if config
-                .excluded_folders
+            if excluded_folders
                 .iter()
                 .any(|excluded| excluded.eq_ignore_ascii_case(folder_name))
             {
                 continue;
             }
 
-            match Self::sync_folder_blocking(account_id, &mut session, folder_name, db, progress_tx)
+            match self
+                .sync_folder(&mut session, folder_name, &self.attachments_dir)
+                .await
             {
                 Ok(count) => {
                     info!(
                         "Account {}: Synced {} new mails in {}",
-                        account_id, count, folder_name
+                        self.account_id, count, folder_name
                     );
                 }
                 Err(e) => {
                     warn!(
                         "Account {}: Failed to sync folder {}: {}",
-                        account_id, folder_name, e
+                        self.account_id, folder_name, e
                     );
                 }
             }
         }
 
-        // Logout
-        let _ = session.logout();
+        session
+            .logout()
+            .await
+            .map_err(|e| AeroError::ImapConnectionFailed(e.to_string()))?;
 
         Ok(())
     }
 
-    /// Connects to the IMAP server (synchronous).
-    fn connect_blocking(
-        config: &AccountConfig,
-    ) -> Result<Session<TlsStream<TcpStream>>, AeroError> {
-        // Build TLS connector
-        let mut tls_builder = native_tls::TlsConnector::builder();
-        if !config.advanced.verify_certificate {
-            tls_builder.danger_accept_invalid_certs(true);
-        }
-        if let Some(ref cert_path) = config.advanced.ca_cert_path {
-            tls_builder.add_root_certificate(
-                native_tls::Certificate::from_pem(
-                    &std::fs::read(cert_path)
-                        .map_err(|e| AeroError::ImapConnectionFailed(e.to_string()))?,
-                )
-                .map_err(|e| AeroError::ImapConnectionFailed(e.to_string()))?,
-            );
-        }
-        let tls = tls_builder
-            .build()
-            .map_err(|e| AeroError::ImapConnectionFailed(e.to_string()))?;
-
-        // Create IMAP client with TLS
-        let client = imap::connect(
-            format!("{}:{}", config.imap.host, config.imap.port),
-            &config.imap.host,
-            &tls,
-        )
-        .map_err(|e| AeroError::ImapConnectionFailed(e.to_string()))?;
-
-        // Authenticate
-        let session = match &config.auth {
-            AuthConfig::Password { password_encrypted } => {
-                // TODO: Decrypt the password. For now, treat as plain text.
-                let password = String::from_utf8_lossy(password_encrypted);
-                let login_user = config.email.as_deref().unwrap_or(&config.name);
-                client
-                    .login(login_user, &password)
-                    .map_err(|e| AeroError::ImapAuthFailed(e.0.to_string()))?
-            }
-            AuthConfig::OAuth2 { .. } => {
-                return Err(AeroError::InvalidConfig(
-                    "OAuth2 authentication not yet implemented".into(),
-                ));
-            }
-        };
-
-        Ok(session)
-    }
-
-    /// Lists available folders on the IMAP server (synchronous).
-    fn list_folders_blocking(
-        session: &mut Session<TlsStream<TcpStream>>,
+    /// Lists available folders on the IMAP server.
+    async fn list_folders(
+        session: &mut imap_client::ImapSession,
     ) -> Result<Vec<String>, AeroError> {
-        let mailboxes = session
+        let mut stream = session
             .list(None, Some("*"))
+            .await
             .map_err(|e| AeroError::ImapConnectionFailed(e.to_string()))?;
 
-        let folders: Vec<String> = mailboxes.iter().map(|m| m.name().to_string()).collect();
+        let mut folders = Vec::new();
+        while let Some(name_res) = stream.next().await {
+            let name = name_res.map_err(|e| AeroError::ImapConnectionFailed(e.to_string()))?;
+            folders.push(name.name().to_string());
+        }
 
         Ok(folders)
     }
 
-    /// Syncs a single folder (synchronous).
-    fn sync_folder_blocking(
-        account_id: &str,
-        session: &mut Session<TlsStream<TcpStream>>,
+    /// Syncs a single folder.
+    #[allow(clippy::too_many_lines, clippy::too_many_arguments)]
+    async fn sync_folder(
+        &self,
+        session: &mut imap_client::ImapSession,
         folder_name: &str,
-        db: &Arc<Database>,
-        progress_tx: &mpsc::Sender<SyncProgress>,
+        attachments_dir: &Path,
     ) -> Result<u32, AeroError> {
-        // SELECT the folder
         let mailbox = session
             .select(folder_name)
+            .await
             .map_err(|e| AeroError::ImapConnectionFailed(e.to_string()))?;
 
         let remote_uid_validity = mailbox.uid_validity.unwrap_or(0);
@@ -213,74 +163,78 @@ impl SyncWorker {
             return Ok(0);
         }
 
-        // Ensure folder exists in local DB
-        let folder_id = db.upsert_folder(
-            account_id,
+        let folder_id = self.db.upsert_folder(
+            &self.account_id,
             folder_name,
             folder_name,
             Some(i64::from(remote_uid_validity)),
         )?;
 
-        // Check local UIDVALIDITY
-        let local_folder = db.get_folder_by_path(account_id, folder_name)?;
+        let local_folder = self.db.get_folder_by_path(&self.account_id, folder_name)?;
         let needs_full_sync = local_folder
             .as_ref()
             .is_none_or(|f| f.uid_validity != Some(i64::from(remote_uid_validity)));
 
         let (uids_to_fetch, total_count) = if needs_full_sync {
-            // Full sync: fetch all UIDs
             info!(
                 "Account {}: Full sync for {} (UIDVALIDITY changed)",
-                account_id, folder_name
+                self.account_id, folder_name
             );
             (format!("1:{remote_exists}"), remote_exists)
         } else {
-            // Incremental sync: fetch only new UIDs
-            let max_uid = db.get_max_uid(&folder_id)?.unwrap_or(0);
+            let max_uid = self.db.get_max_uid(&folder_id)?.unwrap_or(0);
             if max_uid == 0 {
                 (format!("1:{remote_exists}"), remote_exists)
             } else if max_uid >= remote_exists {
-                // No new mails
                 return Ok(0);
             } else {
                 (format!("{}:*", max_uid + 1), remote_exists - max_uid)
             }
         };
 
-        // Emit syncing status
-        let _ = progress_tx.blocking_send(SyncProgress {
-            account_id: account_id.to_string(),
-            status: SyncStatus::Syncing,
-            synced_count: 0,
-            total_count,
-            last_sync_time: None,
-        });
+        let _ = self
+            .progress_tx
+            .send(SyncProgress {
+                account_id: self.account_id.clone(),
+                status: SyncStatus::Syncing,
+                synced_count: 0,
+                total_count,
+                last_sync_time: None,
+            })
+            .await;
 
-        // Fetch mail UIDs and data
-        let fetch_items = "UID BODY.PEEK[HEADER] FLAGS";
-        let messages = session
+        let fetch_items = "UID BODY.PEEK[] FLAGS";
+        let mut fetch_stream = session
             .uid_fetch(&uids_to_fetch, fetch_items)
+            .await
             .map_err(|e| AeroError::ImapConnectionFailed(e.to_string()))?;
 
         let mut synced_count: u32 = 0;
 
-        for fetch_result in &messages {
-            let uid = fetch_result.uid.unwrap_or(0);
+        while let Some(fetch_res) = fetch_stream.next().await {
+            let fetch = fetch_res.map_err(|e| AeroError::ImapConnectionFailed(e.to_string()))?;
+
+            let uid = fetch.uid.unwrap_or(0);
             if uid == 0 {
                 continue;
             }
 
-            // Get the raw header
-            let header_bytes = fetch_result.body().unwrap_or(&[]);
+            let raw_message = fetch.body().unwrap_or(&[]);
+            let parsed = mail_parser::parse_mail(raw_message)?;
 
-            // Parse the header to extract subject, from, date
-            let parsed = mail_parser::parse_mail(header_bytes)?;
+            let mail_id = self
+                .db
+                .get_mail_id_by_uid(&folder_id, uid)?
+                .unwrap_or_else(|| uuid::Uuid::new_v4().to_string());
 
-            // Create mail detail
-            let mail_id = uuid::Uuid::new_v4().to_string();
+            let is_spam = is_spam_folder(folder_name);
+            let is_seen = imap_client::is_seen_flag(fetch.flags());
+            let is_flagged = imap_client::is_flagged_flag(fetch.flags());
+            let flag_strings = imap_client::collect_flags(fetch.flags());
+
             let mail = crate::models::mail::MailDetail {
-                id: mail_id,
-                account_id: account_id.to_string(),
+                id: mail_id.clone(),
+                account_id: self.account_id.clone(),
                 folder_id: folder_id.clone(),
                 uid,
                 subject: parsed.subject,
@@ -289,32 +243,36 @@ impl SyncWorker {
                 to_addresses: parsed.to_addresses,
                 cc_addresses: parsed.cc_addresses,
                 date: parsed.date,
-                body_html: None, // Will be fetched on demand
-                body_text: None, // Will be fetched on demand
-                is_read: false,
-                is_starred: false,
-                flags: Some(serde_json::to_string(&parsed.flags).unwrap_or_default()),
+                body_html: parsed.body_html,
+                body_text: parsed.body_text,
+                is_read: is_seen,
+                is_starred: is_flagged,
+                is_archived: false,
+                is_spam,
+                flags: Some(serde_json::to_string(&flag_strings).unwrap_or_default()),
                 message_id: parsed.message_id,
             };
 
-            db.upsert_mail(&mail)?;
+            self.db.upsert_mail(&mail)?;
+            Self::save_attachments(&mail_id, attachments_dir, &self.db, &parsed.attachments)?;
             synced_count += 1;
 
-            // Emit progress periodically
             if synced_count % 10 == 0 {
-                let _ = progress_tx.blocking_send(SyncProgress {
-                    account_id: account_id.to_string(),
-                    status: SyncStatus::Syncing,
-                    synced_count,
-                    total_count,
-                    last_sync_time: None,
-                });
+                let _ = self
+                    .progress_tx
+                    .send(SyncProgress {
+                        account_id: self.account_id.clone(),
+                        status: SyncStatus::Syncing,
+                        synced_count,
+                        total_count,
+                        last_sync_time: None,
+                    })
+                    .await;
             }
         }
 
-        // Update folder sync metadata
-        let unread = i64::from(db.count_unread(account_id)?);
-        db.update_folder_sync(
+        let unread = i64::from(self.db.count_unread(&self.account_id)?);
+        self.db.update_folder_sync(
             &folder_id,
             i64::from(remote_uid_validity),
             unread,
@@ -323,4 +281,88 @@ impl SyncWorker {
 
         Ok(synced_count)
     }
+
+    /// Saves parsed attachments to disk and records them in the database.
+    fn save_attachments(
+        mail_id: &str,
+        attachments_dir: &Path,
+        db: &Arc<Database>,
+        attachments: &[ParsedAttachment],
+    ) -> Result<(), AeroError> {
+        if attachments.is_empty() {
+            return Ok(());
+        }
+
+        let mail_dir = attachments_dir.join(mail_id);
+        std::fs::create_dir_all(&mail_dir)
+            .map_err(|e| AeroError::Internal(format!("failed to create attachment dir: {e}")))?;
+
+        db.delete_attachments(mail_id)?;
+
+        let mut used_names: std::collections::HashSet<String> = std::collections::HashSet::new();
+
+        for (idx, attachment) in attachments.iter().enumerate() {
+            let base_name = attachment
+                .filename
+                .clone()
+                .filter(|n| !n.trim().is_empty())
+                .unwrap_or_else(|| format!("attachment-{idx}"));
+            let safe_name = sanitize_filename(&base_name);
+            let unique_name = unique_filename(&safe_name, &used_names);
+            used_names.insert(unique_name.clone());
+
+            let local_path = mail_dir.join(&unique_name);
+            std::fs::write(&local_path, &attachment.data).map_err(|e| {
+                AeroError::Internal(format!("failed to write attachment {unique_name}: {e}"))
+            })?;
+
+            db.insert_attachment(mail_id, attachment, &local_path)?;
+        }
+
+        Ok(())
+    }
+}
+
+fn is_spam_folder(folder_name: &str) -> bool {
+    let lower = folder_name.to_ascii_lowercase();
+    matches!(
+        lower.as_str(),
+        "spam" | "junk" | "[gmail]/spam" | "[gmail]/junk"
+    ) || lower.contains("spam")
+        || lower.contains("junk")
+}
+
+/// Sanitizes a filename so it is safe to store on the local filesystem.
+fn sanitize_filename(name: &str) -> String {
+    let trimmed = name.trim();
+    let without_separators: String = trimmed
+        .chars()
+        .map(|c| match c {
+            '/' | '\\' | ':' | '*' | '?' | '"' | '<' | '>' | '|' | '\0' => '_',
+            _ => c,
+        })
+        .collect();
+    let without_separators = without_separators.trim_start_matches('.');
+    if without_separators.is_empty() {
+        "unnamed".to_string()
+    } else {
+        without_separators.to_string()
+    }
+}
+
+/// Generates a unique filename within a mail by appending a counter if needed.
+fn unique_filename(name: &str, used: &std::collections::HashSet<String>) -> String {
+    if !used.contains(name) {
+        return name.to_string();
+    }
+    let dot = name.rfind('.').unwrap_or(name.len());
+    let stem = &name[..dot];
+    let ext = &name[dot..];
+    for i in 1..=9999 {
+        let candidate = format!("{stem}_{i}{ext}");
+        if !used.contains(&candidate) {
+            return candidate;
+        }
+    }
+    format!("{}_{}", name, uuid::Uuid::new_v4())
 }

@@ -18,7 +18,12 @@ function renderHtml() {
     <!DOCTYPE html>
     <html>
     <head>
+      <meta charset="utf-8">
+      <meta http-equiv="Content-Security-Policy" content="default-src 'none'; img-src 'self' data: cid:; style-src 'unsafe-inline' 'self';">
       <style>
+        :root {
+          color-scheme: light;
+        }
         body {
           font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
           font-size: 14px;
@@ -28,6 +33,7 @@ function renderHtml() {
           padding: 8px;
           word-wrap: break-word;
           overflow-wrap: break-word;
+          background: #fff;
         }
         img {
           max-width: 100%;
@@ -36,6 +42,7 @@ function renderHtml() {
         a {
           color: #0066cc;
           text-decoration: none;
+          pointer-events: none;
         }
         a:hover {
           text-decoration: underline;

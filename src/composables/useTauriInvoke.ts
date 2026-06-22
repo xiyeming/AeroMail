@@ -39,11 +39,17 @@ function parseErrorPayload(raw: unknown): ErrorPayload {
 
   if (raw && typeof raw === 'object') {
     const obj = raw as Record<string, unknown>;
-    return {
-      code: typeof obj.code === 'string' ? obj.code : 'UNKNOWN_ERROR',
-      args: Array.isArray(obj.args) ? (obj.args as string[]) : [],
-    };
+    const code = typeof obj.code === 'string' ? obj.code : 'UNKNOWN_ERROR';
+    let args: string[] = [];
+    if (Array.isArray(obj.args)) {
+      args = obj.args as string[];
+    } else if (typeof obj.message === 'string') {
+      args = [obj.message];
+    } else if (typeof obj.error === 'string') {
+      args = [obj.error];
+    }
+    return { code, args };
   }
 
-  return { code: 'UNKNOWN_ERROR', args: [] };
+  return { code: 'UNKNOWN_ERROR', args: [String(raw)] };
 }

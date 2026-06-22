@@ -2,6 +2,7 @@ use serde::{Deserialize, Serialize};
 
 /// A slim mail header for list views.
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[allow(clippy::struct_excessive_bools)]
 pub struct MailHeader {
     pub id: String,
     pub account_id: String,
@@ -13,11 +14,14 @@ pub struct MailHeader {
     pub date: Option<i64>,
     pub is_read: bool,
     pub is_starred: bool,
+    pub is_archived: bool,
+    pub is_spam: bool,
     pub has_attachments: bool,
 }
 
 /// Full mail detail for the viewer.
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[allow(clippy::struct_excessive_bools)]
 pub struct MailDetail {
     pub id: String,
     pub account_id: String,
@@ -33,6 +37,8 @@ pub struct MailDetail {
     pub body_text: Option<String>,
     pub is_read: bool,
     pub is_starred: bool,
+    pub is_archived: bool,
+    pub is_spam: bool,
     pub flags: Option<String>,
     pub message_id: Option<String>,
 }
@@ -84,6 +90,18 @@ pub struct ParsedMail {
     pub has_attachments: bool,
     pub flags: Vec<String>,
     pub message_id: Option<String>,
+    pub attachments: Vec<ParsedAttachment>,
+}
+
+/// A parsed attachment extracted from a MIME message.
+#[derive(Debug, Clone)]
+pub struct ParsedAttachment {
+    pub filename: Option<String>,
+    pub mime_type: String,
+    pub size: usize,
+    pub content_id: Option<String>,
+    pub is_inline: bool,
+    pub data: Vec<u8>,
 }
 
 /// Attachment information for a mail.

@@ -14,8 +14,9 @@ use commands::compose::{
     sync_draft_to_imap,
 };
 use commands::mail::{
-    delete_mail, get_attachments, get_mail_detail, get_mail_list, get_unread_count, list_folders,
-    mark_mail_read, move_mail, toggle_mail_star,
+    archive_mail, delete_mail, get_attachment_content, get_attachments, get_mail_detail,
+    get_mail_list, get_unread_count, get_virtual_mail_list, get_virtual_unread_count, list_folders,
+    mark_mail_read, move_mail, toggle_mail_spam, toggle_mail_star,
 };
 use commands::search::{get_search_stats, index_pending_mails, search_mails};
 use commands::settings::{get_setting, set_setting};
@@ -56,13 +57,20 @@ impl AppState {
         let account_manager = Arc::new(RwLock::new(AccountManager::new(Arc::clone(&db))));
         let ai_service = Arc::new(RwLock::new(AiService::new(Arc::clone(&db))));
         let translation_service = TranslationService::new(Arc::clone(&db));
-        let sync_service = Arc::new(RwLock::new(SyncService::new(Arc::clone(&db))));
 
         // Initialize search service
         let app_dir = app_handle
             .path()
             .app_data_dir()
             .map_err(|e| crate::error::AeroError::Internal(e.to_string()))?;
+        let attachments_dir = app_dir.join("attachments");
+        std::fs::create_dir_all(&attachments_dir)
+            .map_err(|e| crate::error::AeroError::Internal(e.to_string()))?;
+        let sync_service = Arc::new(RwLock::new(SyncService::new(
+            Arc::clone(&db),
+            attachments_dir,
+        )));
+
         let index_path = app_dir.join("tantivy_index");
         let search_service = Arc::new(RwLock::new(SearchService::new(
             Arc::clone(&db),
@@ -93,15 +101,21 @@ fn greet(name: &str) -> String {
     format!("Hello, {name}! You've been greeted from Rust.")
 }
 
-#[allow(clippy::expect_used, clippy::missing_panics_doc)]
+#[allow(clippy::missing_errors_doc)]
 pub fn run() {
-    tauri::Builder::default()
+    let run_result = tauri::Builder::default()
         .setup(|app| {
             let handle = app.handle().clone();
             tauri::async_runtime::spawn(async move {
                 match AppState::new(&handle) {
                     Ok(state) => {
                         handle.manage(state);
+
+                        // Start automatic sync for all configured accounts.
+                        let sync_service = handle.state::<AppState>().sync_service.clone();
+                        if let Err(e) = sync_service.read().await.start_all(handle.clone()).await {
+                            eprintln!("failed to start automatic sync: {e}");
+                        }
                     }
                     Err(e) => {
                         eprintln!("failed to initialize app state: {e}");
@@ -136,14 +150,19 @@ pub fn run() {
             start_sync,
             stop_sync,
             get_mail_list,
+            get_virtual_mail_list,
             get_mail_detail,
             mark_mail_read,
             toggle_mail_star,
+            archive_mail,
+            toggle_mail_spam,
             list_folders,
             get_unread_count,
+            get_virtual_unread_count,
             delete_mail,
             move_mail,
             get_attachments,
+            get_attachment_content,
             search_mails,
             index_pending_mails,
             get_search_stats,
@@ -156,6 +175,9 @@ pub fn run() {
             sync_draft_to_imap,
             save_attachment,
         ])
-        .run(tauri::generate_context!())
-        .expect("error while running tauri application");
+        .run(tauri::generate_context!());
+
+    if let Err(e) = run_result {
+        eprintln!("error while running tauri application: {e}");
+    }
 }

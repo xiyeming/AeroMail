@@ -1,7 +1,7 @@
-use mail_parser::MessageParser;
+use mail_parser::{MessageParser, MimeHeaders};
 
 use crate::error::AeroError;
-use crate::models::mail::ParsedMail;
+use crate::models::mail::{ParsedAttachment, ParsedMail};
 
 /// Parses a raw MIME email into a [`ParsedMail`] struct.
 ///
@@ -32,6 +32,7 @@ pub fn parse_mail(raw: &[u8]) -> Result<ParsedMail, AeroError> {
     let body_text = message.body_text(0).map(String::from);
 
     let has_attachments = message.attachment_count() > 0;
+    let attachments = parse_attachments(&message);
 
     // Convert IMAP flags to strings
     let flags: Vec<String> = Vec::new(); // Flags are tracked separately via IMAP
@@ -50,7 +51,41 @@ pub fn parse_mail(raw: &[u8]) -> Result<ParsedMail, AeroError> {
         has_attachments,
         flags,
         message_id,
+        attachments,
     })
+}
+
+/// Extracts attachments from a parsed message.
+fn parse_attachments(message: &mail_parser::Message<'_>) -> Vec<ParsedAttachment> {
+    let mut attachments = Vec::new();
+
+    for part in message.attachments() {
+        let filename = part.attachment_name().map(String::from);
+        let mime_type = part.content_type().map_or_else(
+            || "application/octet-stream".to_string(),
+            |ct| {
+                let subtype = ct.c_subtype.as_deref().unwrap_or("octet-stream");
+                format!("{}/{subtype}", ct.c_type)
+            },
+        );
+        let content_id = part.content_id().map(String::from);
+        let is_inline = part
+            .content_disposition()
+            .is_some_and(|cd| cd.c_type.eq_ignore_ascii_case("inline"));
+        let data = part.contents().to_vec();
+        let size = data.len();
+
+        attachments.push(ParsedAttachment {
+            filename,
+            mime_type,
+            size,
+            content_id,
+            is_inline,
+            data,
+        });
+    }
+
+    attachments
 }
 
 /// Formats an address list into a JSON string representation.

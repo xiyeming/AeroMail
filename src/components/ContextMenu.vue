@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, onMounted, onUnmounted, computed, nextTick } from 'vue';
+import { ref, onMounted, onUnmounted, computed, nextTick, type ComponentPublicInstance } from 'vue';
 import { useI18n } from 'vue-i18n';
 import {
   Star,
@@ -141,7 +141,7 @@ function handleMove() {
   emit('close');
 }
 
-function setItemRef(el: Element | ComponentPublicInstance | null, index: number) {
+function _setItemRef(el: Element | ComponentPublicInstance | null, index: number) {
   if (el instanceof HTMLButtonElement) {
     itemRefs.value[index] = el;
   }
@@ -154,11 +154,11 @@ function setItemRef(el: Element | ComponentPublicInstance | null, index: number)
       ref="menuRef"
       role="menu"
       aria-orientation="vertical"
-      class="fixed z-50 min-w-[180px] rounded-lg border border-border bg-elevated py-1 shadow-lg"
+      class="fixed z-50 min-w-44 rounded-lg border border-border bg-elevated py-1 shadow-lg"
       :style="menuStyle"
     >
       <button
-        ref="(el) => setItemRef(el, 0)"
+        ref="(el) => _setItemRef(el, 0)"
         type="button"
         role="menuitem"
         class="flex w-full items-center gap-3 px-3 py-2 text-sm text-secondary transition-colors hover:bg-raised"
@@ -169,7 +169,7 @@ function setItemRef(el: Element | ComponentPublicInstance | null, index: number)
       </button>
 
       <button
-        ref="(el) => setItemRef(el, 1)"
+        ref="(el) => _setItemRef(el, 1)"
         type="button"
         role="menuitem"
         class="flex w-full items-center gap-3 px-3 py-2 text-sm text-secondary transition-colors hover:bg-raised"
@@ -181,7 +181,7 @@ function setItemRef(el: Element | ComponentPublicInstance | null, index: number)
 
       <button
         v-if="!isArchived"
-        ref="(el) => setItemRef(el, 2)"
+        ref="(el) => _setItemRef(el, 2)"
         type="button"
         role="menuitem"
         class="flex w-full items-center gap-3 px-3 py-2 text-sm text-secondary transition-colors hover:bg-raised"
@@ -192,7 +192,7 @@ function setItemRef(el: Element | ComponentPublicInstance | null, index: number)
       </button>
 
       <button
-        ref="(el) => setItemRef(el, 3)"
+        ref="(el) => _setItemRef(el, 3)"
         type="button"
         role="menuitem"
         class="flex w-full items-center gap-3 px-3 py-2 text-sm text-secondary transition-colors hover:bg-raised"
@@ -203,7 +203,7 @@ function setItemRef(el: Element | ComponentPublicInstance | null, index: number)
       </button>
 
       <button
-        ref="(el) => setItemRef(el, 4)"
+        ref="(el) => _setItemRef(el, 4)"
         type="button"
         role="menuitem"
         class="flex w-full items-center gap-3 px-3 py-2 text-sm text-secondary transition-colors hover:bg-raised"
@@ -217,7 +217,7 @@ function setItemRef(el: Element | ComponentPublicInstance | null, index: number)
       <div class="my-1 h-px bg-border" />
 
       <button
-        ref="(el) => setItemRef(el, 5)"
+        ref="(el) => _setItemRef(el, 5)"
         type="button"
         role="menuitem"
         class="flex w-full items-center gap-3 px-3 py-2 text-sm text-secondary transition-colors hover:bg-raised"
@@ -230,7 +230,7 @@ function setItemRef(el: Element | ComponentPublicInstance | null, index: number)
       <div class="my-1 h-px bg-border" />
 
       <button
-        ref="(el) => setItemRef(el, 6)"
+        ref="(el) => _setItemRef(el, 6)"
         type="button"
         role="menuitem"
         class="flex w-full items-center gap-3 px-3 py-2 text-sm text-danger transition-colors hover:bg-danger-subtle"

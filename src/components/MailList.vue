@@ -6,6 +6,7 @@ import { Star, Archive, Paperclip } from 'lucide-vue-next';
 import { useMailStore } from '@/stores/mail';
 import { useAccountStore } from '@/stores/account';
 import { useToastStore } from '@/stores/toast';
+import { useStatusStore } from '@/stores/status';
 import ContextMenu from '@/components/ContextMenu.vue';
 import MoveMailDialog from '@/components/MoveMailDialog.vue';
 import type { MailHeader } from '@/types/mail';
@@ -15,6 +16,7 @@ const route = useRoute();
 const mailStore = useMailStore();
 const accountStore = useAccountStore();
 const toastStore = useToastStore();
+const statusStore = useStatusStore();
 
 const VIRTUAL_FOLDER_IDS = ['starred', 'sent', 'archived', 'spam'];
 
@@ -71,6 +73,21 @@ watch(
     }
   },
   { immediate: true }
+);
+
+watch(
+  () => statusStore.syncingAccounts,
+  async (syncing, previous) => {
+    if (previous && previous > 0 && syncing === 0) {
+      const accountId = mailStore.currentAccountId || accountStore.accounts[0]?.id;
+      if (accountId) {
+        await mailStore.loadFolders(accountId);
+      }
+      if (currentFolderId.value) {
+        await mailStore.loadMails(currentFolderId.value);
+      }
+    }
+  }
 );
 
 const displayedMails = computed(() => {

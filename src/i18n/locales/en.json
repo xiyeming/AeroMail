@@ -205,6 +205,8 @@
     "unread": "{count} unread",
     "lastSync": "Last sync: {time}",
     "never": "Never",
+    "todayAt": "Today {time}",
+    "yesterdayAt": "Yesterday {time}",
     "online": "Online",
     "offline": "Offline",
     "version": "Version {version}"

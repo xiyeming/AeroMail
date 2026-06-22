@@ -205,6 +205,8 @@
     "unread": "{count} 封未读",
     "lastSync": "最后同步：{time}",
     "never": "从未",
+    "todayAt": "今天 {time}",
+    "yesterdayAt": "昨天 {time}",
     "online": "在线",
     "offline": "离线",
     "version": "版本 {version}"

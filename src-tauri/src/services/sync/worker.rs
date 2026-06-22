@@ -223,9 +223,9 @@ impl SyncWorker {
 
         // Check local UIDVALIDITY
         let local_folder = db.get_folder_by_path(account_id, folder_name)?;
-        let needs_full_sync = local_folder.as_ref().is_none_or(|f| {
-            f.uid_validity != Some(i64::from(remote_uid_validity))
-        });
+        let needs_full_sync = local_folder
+            .as_ref()
+            .is_none_or(|f| f.uid_validity != Some(i64::from(remote_uid_validity)));
 
         let (uids_to_fetch, total_count) = if needs_full_sync {
             // Full sync: fetch all UIDs

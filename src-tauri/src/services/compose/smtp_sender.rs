@@ -61,11 +61,7 @@ pub async fn send_message(config: &AccountConfig, message_bytes: Vec<u8>) -> Res
 }
 
 fn build_credentials(config: &AccountConfig) -> Credentials {
-    let username = config
-        .email
-        .as_deref()
-        .unwrap_or(&config.name)
-        .to_string();
+    let username = config.email.as_deref().unwrap_or(&config.name).to_string();
     match &config.auth {
         AuthConfig::Password { password_encrypted } => {
             let password = String::from_utf8_lossy(password_encrypted);
@@ -73,7 +69,7 @@ fn build_credentials(config: &AccountConfig) -> Credentials {
         }
         AuthConfig::OAuth2 { access_token, .. } => {
             // XOAUTH2 SASL initial response: base64("user={user}\x01auth=Bearer {token}\x01\x01")
-            let xoauth2 = format!("user={}\x01auth=Bearer {}\x01\x01", username, access_token);
+            let xoauth2 = format!("user={username}\x01auth=Bearer {access_token}\x01\x01");
             Credentials::new(username, xoauth2)
         }
     }

@@ -9,7 +9,7 @@
 use std::path::PathBuf;
 use std::sync::Mutex;
 
-use rusqlite::{params, Connection};
+use rusqlite::{Connection, params};
 use tauri::Manager;
 
 use super::migrations::run_migrations;

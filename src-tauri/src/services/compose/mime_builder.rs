@@ -23,10 +23,7 @@ pub fn build_message(
     // Set In-Reply-To when replying to a mail with a known Message-ID
     if let Some(ref reply_context) = draft.reply_context {
         if let Some(ref original_message_id) = reply_context.original_message_id {
-            let id = original_message_id
-                .trim()
-                .trim_start_matches('<')
-                .trim_end_matches('>');
+            let id = original_message_id.trim();
             builder = builder.in_reply_to(id.to_string());
         }
     }

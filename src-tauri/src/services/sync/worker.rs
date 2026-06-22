@@ -193,11 +193,11 @@ impl SyncWorker {
                 "Account {}: Full sync for {} (UIDVALIDITY changed)",
                 self.account_id, folder_name
             );
-            (format!("1:{remote_exists}"), remote_exists)
+            ("1:*".to_string(), remote_exists)
         } else {
             let max_uid = self.db.get_max_uid(&folder_id)?.unwrap_or(0);
             if max_uid == 0 {
-                (format!("1:{remote_exists}"), remote_exists)
+                ("1:*".to_string(), remote_exists)
             } else if max_uid >= remote_exists {
                 debug!(max_uid, "no new mails to sync");
                 return Ok(0);
@@ -217,7 +217,7 @@ impl SyncWorker {
             })
             .await;
 
-        let fetch_items = "UID BODY.PEEK[] FLAGS";
+        let fetch_items = "(UID BODY.PEEK[] FLAGS)";
         debug!(uids = %uids_to_fetch, "fetching mails from server");
         let mut fetch_stream = session
             .uid_fetch(&uids_to_fetch, fetch_items)
@@ -231,10 +231,17 @@ impl SyncWorker {
 
             let uid = fetch.uid.unwrap_or(0);
             if uid == 0 {
+                debug!("skipping fetched item without UID");
                 continue;
             }
 
             let raw_message = fetch.body().unwrap_or(&[]);
+            if raw_message.is_empty() {
+                debug!(uid, "skipping fetched item with empty body");
+                continue;
+            }
+
+            debug!(uid, bytes = raw_message.len(), "fetched mail from server");
             let parsed = mail_parser::parse_mail(raw_message)?;
 
             let mail_id = self

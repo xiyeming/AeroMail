@@ -2,6 +2,7 @@ use serde::{Deserialize, Serialize};
 
 /// A slim mail header for list views.
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
 #[allow(clippy::struct_excessive_bools)]
 pub struct MailHeader {
     pub id: String,
@@ -21,6 +22,7 @@ pub struct MailHeader {
 
 /// Full mail detail for the viewer.
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
 #[allow(clippy::struct_excessive_bools)]
 pub struct MailDetail {
     pub id: String,
@@ -45,6 +47,7 @@ pub struct MailDetail {
 
 /// IMAP folder metadata.
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct FolderInfo {
     pub id: String,
     pub account_id: String,
@@ -58,6 +61,7 @@ pub struct FolderInfo {
 
 /// Sync progress event emitted to the frontend.
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct SyncProgress {
     pub account_id: String,
     pub status: SyncStatus,

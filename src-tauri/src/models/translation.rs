@@ -35,6 +35,7 @@ pub enum TraditionalProviderKind {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct TranslationProviderSummary {
     pub id: String,
     pub name: String,

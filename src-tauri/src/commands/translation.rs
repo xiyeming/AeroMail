@@ -1,8 +1,8 @@
 use tauri::State;
 
+use crate::AppState;
 use crate::models::error::ErrorPayload;
 use crate::models::translation::{TranslationProvider, TranslationProviderSummary};
-use crate::AppState;
 
 /// Lists all configured translation providers as summaries.
 ///

@@ -38,14 +38,8 @@ pub fn translate(
     }
 }
 
-fn google_translate(
-    api_key: &str,
-    text: &str,
-    target_lang: &str,
-) -> Result<String, AeroError> {
-    let url = format!(
-        "https://translation.googleapis.com/language/translate/v2?key={api_key}"
-    );
+fn google_translate(api_key: &str, text: &str, target_lang: &str) -> Result<String, AeroError> {
+    let url = format!("https://translation.googleapis.com/language/translate/v2?key={api_key}");
     let body = serde_json::json!({
         "q": text,
         "target": target_lang,

@@ -91,7 +91,9 @@ const traditionalKinds: TraditionalProviderKind[] = [
 ];
 
 async function loadTranslationProviders() {
-  translationProviders.value = await invoke<TranslationProviderSummary[]>('list_translation_providers');
+  translationProviders.value = await invoke<TranslationProviderSummary[]>(
+    'list_translation_providers'
+  );
 }
 
 function resetTranslationForm() {
@@ -158,7 +160,10 @@ async function removeTranslationProvider(id: string) {
         </button>
       </div>
 
-      <div v-if="aiStore.providers.length === 0 && !showAddForm" class="py-4 text-center text-sm text-muted">
+      <div
+        v-if="aiStore.providers.length === 0 && !showAddForm"
+        class="py-4 text-center text-sm text-muted"
+      >
         {{ $t('settings.noProviders') }}
       </div>
 
@@ -172,10 +177,7 @@ async function removeTranslationProvider(id: string) {
           <span class="rounded bg-panel px-1.5 py-0.5 text-xs text-muted">{{ p.kind }}</span>
           <span class="text-xs text-muted">{{ p.model }}</span>
         </div>
-        <button
-          class="text-xs text-danger hover:text-danger-hover"
-          @click="removeProvider(p.id)"
-        >
+        <button class="text-xs text-danger hover:text-danger-hover" @click="removeProvider(p.id)">
           {{ $t('account.delete') }}
         </button>
       </div>
@@ -241,13 +243,19 @@ async function removeTranslationProvider(id: string) {
         <h2 class="text-lg font-medium text-text">{{ $t('settings.translationProviders') }}</h2>
         <button
           class="rounded-md px-3 py-1.5 text-sm text-primary transition-colors hover:bg-primary/10"
-          @click="showTranslationForm = !showTranslationForm; resetTranslationForm()"
+          @click="
+            showTranslationForm = !showTranslationForm;
+            resetTranslationForm();
+          "
         >
           {{ showTranslationForm ? $t('common.cancel') : $t('settings.addTranslationProvider') }}
         </button>
       </div>
 
-      <div v-if="translationProviders.length === 0 && !showTranslationForm" class="py-4 text-center text-sm text-muted">
+      <div
+        v-if="translationProviders.length === 0 && !showTranslationForm"
+        class="py-4 text-center text-sm text-muted"
+      >
         {{ $t('settings.noTranslationProviders') }}
       </div>
 
@@ -258,7 +266,9 @@ async function removeTranslationProvider(id: string) {
       >
         <div class="flex items-center gap-2">
           <span class="text-sm text-text">{{ tp.name }}</span>
-          <span class="rounded bg-panel px-1.5 py-0.5 text-xs text-muted">{{ tp.providerType }}</span>
+          <span class="rounded bg-panel px-1.5 py-0.5 text-xs text-muted">{{
+            tp.providerType
+          }}</span>
         </div>
         <button
           class="text-xs text-danger hover:text-danger-hover"
@@ -268,20 +278,37 @@ async function removeTranslationProvider(id: string) {
         </button>
       </div>
 
-      <div v-if="showTranslationForm" class="mt-4 space-y-3 rounded-md border border-border bg-panel p-4">
+      <div
+        v-if="showTranslationForm"
+        class="mt-4 space-y-3 rounded-md border border-border bg-panel p-4"
+      >
         <!-- Type selector -->
         <div class="flex gap-2">
           <button
             class="rounded-md px-3 py-1.5 text-sm"
-            :class="translationFormType === 'traditional' ? 'bg-primary text-white' : 'bg-card text-text border border-border'"
-            @click="translationFormType = 'traditional'; resetTranslationForm()"
+            :class="
+              translationFormType === 'traditional'
+                ? 'bg-primary text-white'
+                : 'bg-card text-text border border-border'
+            "
+            @click="
+              translationFormType = 'traditional';
+              resetTranslationForm();
+            "
           >
             {{ $t('settings.traditionalProvider') }}
           </button>
           <button
             class="rounded-md px-3 py-1.5 text-sm"
-            :class="translationFormType === 'ai' ? 'bg-primary text-white' : 'bg-card text-text border border-border'"
-            @click="translationFormType = 'ai'; resetTranslationForm()"
+            :class="
+              translationFormType === 'ai'
+                ? 'bg-primary text-white'
+                : 'bg-card text-text border border-border'
+            "
+            @click="
+              translationFormType = 'ai';
+              resetTranslationForm();
+            "
           >
             {{ $t('settings.aiTranslationProvider') }}
           </button>
@@ -338,7 +365,9 @@ async function removeTranslationProvider(id: string) {
             />
           </div>
           <div>
-            <label class="mb-1 block text-xs text-muted">{{ $t('settings.selectAiProvider') }}</label>
+            <label class="mb-1 block text-xs text-muted">{{
+              $t('settings.selectAiProvider')
+            }}</label>
             <select
               v-model="tpAiProviderId"
               class="w-full rounded-md border border-border bg-card px-3 py-1.5 text-sm text-text outline-none focus:border-primary"
@@ -353,7 +382,11 @@ async function removeTranslationProvider(id: string) {
 
         <button
           class="mt-2 flex h-8 w-full items-center justify-center rounded-md bg-primary text-sm font-medium text-white hover:bg-primary-hover disabled:opacity-50"
-          :disabled="translationFormType === 'traditional' ? (!tpName || !tpApiKey) : (!tpAiName || !tpAiProviderId)"
+          :disabled="
+            translationFormType === 'traditional'
+              ? !tpName || !tpApiKey
+              : !tpAiName || !tpAiProviderId
+          "
           @click="addTranslationProvider"
         >
           {{ $t('settings.saveProvider') }}

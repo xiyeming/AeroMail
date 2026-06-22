@@ -10,7 +10,8 @@ use commands::ai::{
     list_ai_providers, list_chat_sessions, send_chat_message, test_ai_provider, upsert_ai_provider,
 };
 use commands::compose::{
-    delete_draft, get_draft, get_drafts, prepare_reply, save_draft, send_mail, sync_draft_to_imap,
+    delete_draft, get_draft, get_drafts, prepare_reply, save_attachment, save_draft, send_mail,
+    sync_draft_to_imap,
 };
 use commands::mail::{
     delete_mail, get_attachments, get_mail_detail, get_mail_list, get_unread_count, list_folders,
@@ -63,18 +64,17 @@ impl AppState {
             .app_data_dir()
             .map_err(|e| crate::error::AeroError::Internal(e.to_string()))?;
         let index_path = app_dir.join("tantivy_index");
-        let search_service = Arc::new(RwLock::new(
-            SearchService::new(Arc::clone(&db), index_path)?,
-        ));
+        let search_service = Arc::new(RwLock::new(SearchService::new(
+            Arc::clone(&db),
+            &index_path,
+        )?));
 
         let drafts_dir = app_dir.join("drafts");
-        let compose_service = Arc::new(RwLock::new(
-            crate::services::compose::ComposeService::new(
-                Arc::clone(&db),
-                drafts_dir,
-                Arc::clone(&account_manager),
-            ),
-        ));
+        let compose_service = Arc::new(RwLock::new(crate::services::compose::ComposeService::new(
+            Arc::clone(&db),
+            drafts_dir,
+            Arc::clone(&account_manager),
+        )));
 
         Ok(Self {
             account_manager,
@@ -154,6 +154,7 @@ pub fn run() {
             send_mail,
             prepare_reply,
             sync_draft_to_imap,
+            save_attachment,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

@@ -32,9 +32,7 @@ pub fn build_messages(
             .ok_or(AeroError::AiContextMailNotFound)?;
         messages.push(ChatMessage {
             role: "system".to_string(),
-            content: format!(
-                "[Current Email Context]\nSubject: {subject}\nFrom: {from}\n\n{body}"
-            ),
+            content: format!("[Current Email Context]\nSubject: {subject}\nFrom: {from}\n\n{body}"),
         });
     }
 

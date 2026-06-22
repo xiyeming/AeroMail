@@ -4,30 +4,59 @@ import { useI18n } from 'vue-i18n';
 import { Search } from 'lucide-vue-next';
 import { useLocale } from '@/composables/useLocale';
 import { useAiStore } from '@/stores/ai';
+import { useMailStore } from '@/stores/mail';
+import { useSearch } from '@/composables/useSearch';
 
 const { t } = useI18n();
 const { setLocale } = useLocale();
 const aiStore = useAiStore();
+const mailStore = useMailStore();
+const { search, results: searchResults, isSearching, searchHistory } = useSearch();
 
 const isOpen = ref(false);
 const query = ref('');
 const highlightedIndex = ref(0);
 
-const mockResults = [
-  { id: '1', title: 'GitHub Security Alert' },
-  { id: '2', title: 'Invoice May 2026' },
-  { id: '3', title: 'Meeting Notes' },
-];
+interface TextSegment {
+  text: string;
+  highlight: boolean;
+}
+
+// 高亮匹配文本，返回分段数组以避免 v-html
+function highlightSegments(text: string, searchTerm: string): TextSegment[] {
+  if (!searchTerm || !text) return [{ text, highlight: false }];
+
+  const regex = new RegExp(`(${searchTerm.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')})`, 'gi');
+  const segments: TextSegment[] = [];
+  let lastIndex = 0;
+
+  for (const match of text.matchAll(regex)) {
+    const index = match.index ?? 0;
+    if (index > lastIndex) {
+      segments.push({ text: text.slice(lastIndex, index), highlight: false });
+    }
+    segments.push({ text: match[0], highlight: true });
+    lastIndex = index + match[0].length;
+  }
+
+  if (lastIndex < text.length) {
+    segments.push({ text: text.slice(lastIndex), highlight: false });
+  }
+
+  return segments;
+}
 
 const languageCommands = computed(() => [
   {
     id: 'switch-lang-en',
     title: t('commandPalette.switchToEnglish'),
+    type: 'command' as const,
     action: () => setLocale('en'),
   },
   {
     id: 'switch-lang-zh',
     title: t('commandPalette.switchToChinese'),
+    type: 'command' as const,
     action: () => setLocale('zh-CN'),
   },
 ]);
@@ -36,32 +65,74 @@ const aiCommands = computed(() => [
   {
     id: 'open-ai-assistant',
     title: t('commandPalette.openAiAssistant'),
+    type: 'command' as const,
     action: () => aiStore.togglePanel(),
   },
 ]);
 
-const allItems = computed(() => [...mockResults, ...languageCommands.value, ...aiCommands.value]);
+// 搜索邮件结果
+const mailResults = computed(() =>
+  searchResults.value.map((r) => ({
+    id: r.mailId,
+    title: r.snippet || r.mailId,
+    type: 'mail' as const,
+    score: r.score,
+    action: () => mailStore.selectMail(r.mailId),
+  }))
+);
+
+// 搜索历史
+const historyItems = computed(() =>
+  searchHistory.value.map((h) => ({
+    id: `history-${h}`,
+    title: h,
+    type: 'history' as const,
+    action: () => {
+      query.value = h;
+      search({ query: h });
+    },
+  }))
+);
+
+// 所有结果
+const allItems = computed(() => [
+  ...historyItems.value,
+  ...mailResults.value,
+  ...languageCommands.value,
+  ...aiCommands.value,
+]);
 
 const results = ref(allItems.value);
 
-watch(allItems, (val) => {
-  if (!query.value) {
-    results.value = val;
-  } else {
-    results.value = val.filter((r) =>
-      r.title.toLowerCase().includes(query.value.toLowerCase())
-    );
-  }
-});
+// 当查询变化时执行搜索
+let searchTimeout: ReturnType<typeof setTimeout> | null = null;
 
 watch(query, (val) => {
+  if (searchTimeout) {
+    clearTimeout(searchTimeout);
+  }
+
   if (!val) {
     results.value = allItems.value;
     return;
   }
-  results.value = allItems.value.filter((r) =>
-    r.title.toLowerCase().includes(val.toLowerCase())
-  );
+
+  // 延迟搜索
+  searchTimeout = setTimeout(() => {
+    search({ query: val });
+  }, 300);
+});
+
+watch(allItems, (val) => {
+  if (!query.value) {
+    results.value = val;
+  }
+});
+
+watch(searchResults, () => {
+  if (query.value) {
+    results.value = allItems.value;
+  }
 });
 
 function open() {
@@ -79,10 +150,7 @@ function highlightPrev() {
 }
 
 function highlightNext() {
-  highlightedIndex.value = Math.min(
-    results.value.length - 1,
-    highlightedIndex.value + 1
-  );
+  highlightedIndex.value = Math.min(results.value.length - 1, highlightedIndex.value + 1);
 }
 
 function handleKeydown(e: KeyboardEvent) {
@@ -119,6 +187,9 @@ onMounted(() => {
 
 onUnmounted(() => {
   window.removeEventListener('keydown', handleKeydown);
+  if (searchTimeout) {
+    clearTimeout(searchTimeout);
+  }
 });
 
 defineExpose({ open, close });
@@ -134,10 +205,7 @@ defineExpose({ open, close });
       leave-from-class="opacity-100 translate-y-0"
       leave-to-class="opacity-0 -translate-y-2"
     >
-      <div
-        v-if="isOpen"
-        class="fixed inset-0 z-50 flex items-start justify-center pt-[20vh]"
-      >
+      <div v-if="isOpen" class="fixed inset-0 z-50 flex items-start justify-center pt-[20vh]">
         <div class="absolute inset-0 bg-overlay" @click="close" />
         <div
           class="relative w-[560px] max-h-[400px] overflow-hidden rounded-xl bg-panel shadow-modal"
@@ -149,6 +217,10 @@ defineExpose({ open, close });
               type="text"
               class="flex-1 bg-transparent text-base text-text placeholder-muted outline-none"
               :placeholder="t('commandPalette.placeholder')"
+            />
+            <div
+              v-if="isSearching"
+              class="h-4 w-4 animate-spin rounded-full border-2 border-primary border-t-transparent"
             />
           </div>
           <div class="max-h-[340px] overflow-y-auto">
@@ -162,9 +234,36 @@ defineExpose({ open, close });
                   : 'border-l-[3px] border-transparent',
               ]"
               @mouseenter="highlightedIndex = index"
-              @click="() => { if ('action' in item && typeof item.action === 'function') item.action(); close(); }"
+              @click="
+                () => {
+                  if ('action' in item && typeof item.action === 'function') item.action();
+                  close();
+                }
+              "
             >
-              {{ item.title }}
+              <span class="truncate">
+                <span
+                  v-for="(segment, sIdx) in highlightSegments(item.title, query)"
+                  :key="sIdx"
+                  :class="{
+                    'rounded bg-yellow-200 px-0.5 dark:bg-yellow-800': segment.highlight,
+                  }"
+                >
+                  {{ segment.text }}
+                </span>
+              </span>
+              <span v-if="item.type === 'mail'" class="ml-auto flex-shrink-0 text-xs text-muted">
+                {{ t('commandPalette.mail') }}
+              </span>
+              <span v-if="item.type === 'history'" class="ml-auto flex-shrink-0 text-xs text-muted">
+                {{ t('commandPalette.history') }}
+              </span>
+            </div>
+            <div
+              v-if="results.length === 0 && query"
+              class="flex h-12 items-center px-4 text-sm text-muted"
+            >
+              {{ t('commandPalette.noResults') }}
             </div>
           </div>
         </div>

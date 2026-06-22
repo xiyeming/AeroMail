@@ -28,7 +28,7 @@ pub fn sync_draft_to_imap(
     // (e.g., the old draft may have already been removed server-side).
     if let Some(uid) = draft.remote_uid {
         if let Err(e) = delete_uid(&mut session, &drafts_folder, uid) {
-            warn!("Failed to delete old IMAP draft {} in {}: {}", uid, drafts_folder, e);
+            warn!("Failed to delete old IMAP draft {uid} in {drafts_folder}: {e}");
         }
     }
 
@@ -49,9 +49,7 @@ pub fn sync_draft_to_imap(
     Ok(0)
 }
 
-fn connect_blocking(
-    config: &AccountConfig,
-) -> Result<Session<TlsStream<TcpStream>>, AeroError> {
+fn connect_blocking(config: &AccountConfig) -> Result<Session<TlsStream<TcpStream>>, AeroError> {
     let mut tls_builder = native_tls::TlsConnector::builder();
     if !config.advanced.verify_certificate {
         tls_builder.danger_accept_invalid_certs(true);
@@ -93,14 +91,18 @@ fn connect_blocking(
     Ok(session)
 }
 
-fn find_drafts_folder(
-    session: &mut Session<TlsStream<TcpStream>>,
-) -> Result<String, AeroError> {
+fn find_drafts_folder(session: &mut Session<TlsStream<TcpStream>>) -> Result<String, AeroError> {
     let mailboxes = session
         .list(None, Some("*"))
         .map_err(|e| AeroError::ImapConnectionFailed(e.to_string()))?;
 
-    let candidates = ["Drafts", "Draft", "[Gmail]/Drafts", "草稿箱", "\\u8349\\u7a3f"];
+    let candidates = [
+        "Drafts",
+        "Draft",
+        "[Gmail]/Drafts",
+        "草稿箱",
+        "\\u8349\\u7a3f",
+    ];
     for candidate in &candidates {
         if let Some(mb) = mailboxes
             .iter()
@@ -110,7 +112,7 @@ fn find_drafts_folder(
         }
     }
     // Fallback to first drafts-like folder
-    for mb in mailboxes.iter() {
+    for mb in &mailboxes {
         if mb.name().to_lowercase().contains("draft") {
             return Ok(mb.name().to_string());
         }

@@ -65,6 +65,7 @@ pub enum AeroError {
 impl AeroError {
     /// Converts this error into an [`ErrorPayload`] suitable for the frontend.
     #[must_use]
+    #[allow(clippy::too_many_lines)]
     pub fn to_payload(&self) -> ErrorPayload {
         match self {
             Self::Database(_) => ErrorPayload {

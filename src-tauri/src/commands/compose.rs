@@ -1,11 +1,11 @@
+#![allow(clippy::missing_errors_doc)]
+
 use tauri::State;
 
-use crate::error::AeroError;
-use crate::models::compose::{
-    ComposeDraft, ComposeDraftSummary, ReplyKind, SendMailRequest,
-};
-use crate::models::error::ErrorPayload;
 use crate::AppState;
+use crate::error::AeroError;
+use crate::models::compose::{ComposeDraft, ComposeDraftSummary, ReplyKind, SendMailRequest};
+use crate::models::error::ErrorPayload;
 
 #[tauri::command]
 pub async fn save_draft(
@@ -22,7 +22,9 @@ pub async fn get_drafts(
     state: State<'_, AppState>,
 ) -> Result<Vec<ComposeDraftSummary>, ErrorPayload> {
     let compose = state.compose_service.read().await;
-    compose.list_drafts(account_id.as_deref()).map_err(|e| e.to_payload())
+    compose
+        .list_drafts(account_id.as_deref())
+        .map_err(|e| e.to_payload())
 }
 
 #[tauri::command]
@@ -83,5 +85,23 @@ pub async fn sync_draft_to_imap(
     compose
         .sync_draft_to_imap(&draft_id)
         .await
+        .map_err(|e| e.to_payload())
+}
+
+#[tauri::command]
+pub async fn save_attachment(
+    draft_id: String,
+    attachment: crate::models::compose::AttachmentDraft,
+    data: Vec<u8>,
+    state: State<'_, AppState>,
+) -> Result<(), ErrorPayload> {
+    let compose = state.compose_service.read().await;
+    if draft_id.is_empty() {
+        return Err(AeroError::DraftNotFound("empty".to_string()).to_payload());
+    }
+    compose
+        .draft_service
+        .write_attachment(&draft_id, &attachment, &data)
+        .map(|_| ())
         .map_err(|e| e.to_payload())
 }

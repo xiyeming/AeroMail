@@ -12,10 +12,7 @@ defineProps<{
     <div
       v-for="msg in messages"
       :key="msg.id"
-      :class="[
-        'flex gap-2',
-        msg.role === 'user' ? 'justify-end' : 'justify-start',
-      ]"
+      :class="['flex gap-2', msg.role === 'user' ? 'justify-end' : 'justify-start']"
     >
       <div
         v-if="msg.role === 'assistant'"
@@ -26,9 +23,7 @@ defineProps<{
       <div
         :class="[
           'max-w-[80%] rounded-lg px-3 py-2 text-sm',
-          msg.role === 'user'
-            ? 'bg-primary text-white'
-            : 'bg-card text-text',
+          msg.role === 'user' ? 'bg-primary text-white' : 'bg-card text-text',
         ]"
       >
         <pre class="whitespace-pre-wrap font-sans">{{ msg.content }}</pre>

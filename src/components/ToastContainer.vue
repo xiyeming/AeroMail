@@ -48,7 +48,10 @@ function iconComponent(type: ToastType) {
         <button
           v-if="toast.action"
           class="text-sm font-medium text-primary hover:text-primary-hover"
-          @click="toast.action.callback(); toastStore.remove(toast.id)"
+          @click="
+            toast.action.callback();
+            toastStore.remove(toast.id);
+          "
         >
           {{ toast.action.label }}
         </button>

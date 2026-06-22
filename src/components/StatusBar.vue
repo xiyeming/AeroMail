@@ -60,16 +60,15 @@ onUnmounted(() => {
     <div class="mx-3 h-3 w-px bg-border" />
     <span>{{ t('statusBar.unread', { count: statusStore.unreadCount }) }}</span>
     <div class="mx-3 h-3 w-px bg-border" />
-    <span>{{ t('statusBar.lastSync', { time: statusStore.lastSyncTime ?? t('statusBar.never') }) }}</span>
+    <span>{{
+      t('statusBar.lastSync', { time: statusStore.lastSyncTime ?? t('statusBar.never') })
+    }}</span>
     <div class="mx-3 h-3 w-px bg-border" />
     <span :class="statusStore.isOnline ? 'text-success' : 'text-warning'">
       {{ statusStore.isOnline ? t('statusBar.online') : t('statusBar.offline') }}
     </span>
     <div class="relative ml-auto lang-switcher">
-      <button
-        class="text-xs text-muted hover:text-text"
-        @click="showLangMenu = !showLangMenu"
-      >
+      <button class="text-xs text-muted hover:text-text" @click="showLangMenu = !showLangMenu">
         {{ t('statusBar.language', { lang: labels[locale as Locale] }) }}
       </button>
       <div

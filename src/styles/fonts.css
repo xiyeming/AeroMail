@@ -1,6 +1,5 @@
 :root {
-  --font-sans: 'Inter', 'MiSans', 'HarmonyOS Sans', system-ui, -apple-system,
-    sans-serif;
+  --font-sans: 'Inter', 'MiSans', 'HarmonyOS Sans', system-ui, -apple-system, sans-serif;
   --font-mono: 'JetBrains Mono', 'Fira Code', 'SF Mono', monospace;
 }
 

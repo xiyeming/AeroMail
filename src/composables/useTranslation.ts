@@ -15,7 +15,7 @@ export function useTranslation() {
   async function translateMail(
     mailId: string,
     targetLang: string,
-    providerId: string,
+    providerId: string
   ): Promise<string> {
     isTranslating.value = true;
     error.value = null;

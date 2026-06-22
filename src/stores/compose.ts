@@ -2,11 +2,7 @@ import { ref, computed } from 'vue';
 import { defineStore } from 'pinia';
 import { useDebounceFn } from '@vueuse/core';
 import { useTauriInvoke } from '@/composables/useTauriInvoke';
-import type {
-  ComposeDraft,
-  ComposeDraftSummary,
-  ReplyKind,
-} from '@/types/compose';
+import type { ComposeDraft, ComposeDraftSummary, ReplyKind } from '@/types/compose';
 import { useToastStore } from './toast';
 import router from '@/router';
 
@@ -38,10 +34,7 @@ export const useComposeStore = defineStore('compose', () => {
     draft.value = value;
   }
 
-  function updateField<K extends keyof ComposeDraft>(
-    key: K,
-    value: ComposeDraft[K]
-  ) {
+  function updateField<K extends keyof ComposeDraft>(key: K, value: ComposeDraft[K]) {
     draft.value[key] = value;
     triggerAutosave();
   }
@@ -52,7 +45,9 @@ export const useComposeStore = defineStore('compose', () => {
     triggerAutosave();
   }
 
-  const saveToBackend = useDebounceFn(async () => {
+  const saveToBackend = useDebounceFn(saveNow, 2000);
+
+  async function saveNow() {
     if (!draft.value.accountId) return;
     saving.value = true;
     try {
@@ -73,7 +68,7 @@ export const useComposeStore = defineStore('compose', () => {
     } finally {
       saving.value = false;
     }
-  }, 2000);
+  }
 
   const triggerAutosave = () => {
     saveToBackend();
@@ -181,6 +176,7 @@ export const useComposeStore = defineStore('compose', () => {
     setDraft,
     updateField,
     updateBody,
+    saveNow,
     loadDraft,
     loadDrafts,
     deleteDraft,

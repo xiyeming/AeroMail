@@ -1,9 +1,9 @@
 use tauri::State;
 
+use crate::AppState;
 use crate::models::ai::{AiChatMessage, AiChatSession, AiProvider, AiProviderSummary};
 use crate::models::error::ErrorPayload;
 use crate::services::ai::ChatMessage;
-use crate::AppState;
 
 /// Lists all configured AI providers as summaries.
 ///
@@ -29,7 +29,8 @@ pub async fn upsert_ai_provider(
     state: State<'_, AppState>,
 ) -> Result<String, ErrorPayload> {
     let db = &state.db;
-    db.upsert_ai_provider(&provider).map_err(|e| e.to_payload())?;
+    db.upsert_ai_provider(&provider)
+        .map_err(|e| e.to_payload())?;
     Ok(provider.id)
 }
 

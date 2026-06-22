@@ -13,8 +13,7 @@ const emit = defineEmits<{
 }>();
 
 const { t } = useI18n();
-const { translateMail, listProviders, getDefaultTargetLang, isTranslating } =
-  useTranslation();
+const { translateMail, listProviders, getDefaultTargetLang, isTranslating } = useTranslation();
 
 const providers = ref<TranslationProviderSummary[]>([]);
 const selectedProviderId = ref('');
@@ -29,11 +28,7 @@ async function loadProviders() {
 
 async function handleTranslate() {
   if (!selectedProviderId.value) return;
-  const translated = await translateMail(
-    props.mailId,
-    targetLang.value,
-    selectedProviderId.value,
-  );
+  const translated = await translateMail(props.mailId, targetLang.value, selectedProviderId.value);
   emit('translated', translated);
 }
 

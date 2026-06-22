@@ -15,7 +15,10 @@ pub fn set_setting(
     value: String,
     state: State<'_, AppState>,
 ) -> Result<(), ErrorPayload> {
-    state.db.set_setting(&key, &value).map_err(|e| e.to_payload())
+    state
+        .db
+        .set_setting(&key, &value)
+        .map_err(|e| e.to_payload())
 }
 
 /// Retrieves a configuration setting by key.

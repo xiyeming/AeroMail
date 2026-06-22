@@ -6,14 +6,8 @@ import AiMessageList from '@/components/AiMessageList.vue';
 import { useAiStore } from '@/stores/ai';
 
 const aiStore = useAiStore();
-const {
-  messages,
-  isLoading,
-  activeSessionId,
-  loadSessions,
-  createSession,
-  sendMessage,
-} = useAiChat();
+const { messages, isLoading, activeSessionId, loadSessions, createSession, sendMessage } =
+  useAiChat();
 
 const input = ref('');
 const messagesContainer = ref<HTMLElement>();
@@ -38,9 +32,13 @@ function scrollToBottom() {
   }
 }
 
-watch(messages, () => {
-  void nextTick(scrollToBottom);
-}, { deep: true });
+watch(
+  messages,
+  () => {
+    void nextTick(scrollToBottom);
+  },
+  { deep: true }
+);
 </script>
 
 <template>
@@ -55,7 +53,10 @@ watch(messages, () => {
       </button>
     </div>
 
-    <div v-if="!activeSessionId" class="flex flex-1 flex-col items-center justify-center p-4 text-center">
+    <div
+      v-if="!activeSessionId"
+      class="flex flex-1 flex-col items-center justify-center p-4 text-center"
+    >
       <p class="mb-4 text-sm text-muted">{{ $t('aiAssistant.selectProvider') }}</p>
       <div class="flex flex-wrap justify-center gap-2">
         <button

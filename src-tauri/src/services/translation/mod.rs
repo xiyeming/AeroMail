@@ -36,7 +36,10 @@ impl TranslationService {
 
         let source_hash = sha256_hex(source_text);
 
-        if let Some(cached) = self.db.get_translation(&source_hash, target_lang, provider_id)? {
+        if let Some(cached) = self
+            .db
+            .get_translation(&source_hash, target_lang, provider_id)?
+        {
             return Ok(cached.translated_text);
         }
 

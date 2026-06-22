@@ -42,7 +42,9 @@ pub async fn delete_account(
     state: State<'_, AppState>,
 ) -> Result<(), ErrorPayload> {
     let manager = state.account_manager.read().await;
-    manager.delete_account(&account_id).map_err(|e| e.to_payload())
+    manager
+        .delete_account(&account_id)
+        .map_err(|e| e.to_payload())
 }
 
 /// Tests the connection to an email account.
@@ -56,5 +58,8 @@ pub async fn test_account_connection(
     state: State<'_, AppState>,
 ) -> Result<String, ErrorPayload> {
     let manager = state.account_manager.read().await;
-    manager.test_connection(&config).await.map_err(|e| e.to_payload())
+    manager
+        .test_connection(&config)
+        .await
+        .map_err(|e| e.to_payload())
 }

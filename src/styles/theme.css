@@ -1,4 +1,4 @@
-@import "tailwindcss";
+@import 'tailwindcss';
 
 @theme {
   --color-background: var(--background);
@@ -73,7 +73,7 @@
   --glass: rgba(18, 24, 33, 0.85);
 }
 
-[data-theme="light"] {
+[data-theme='light'] {
   --background: #f8fafc;
   --panel: #ffffff;
   --card: #f1f5f9;
@@ -123,17 +123,17 @@ select option {
   color: var(--text);
 }
 
-[data-theme="light"] select {
+[data-theme='light'] select {
   color-scheme: light;
 }
 
-[data-theme="light"] select option {
+[data-theme='light'] select option {
   background-color: var(--panel);
   color: var(--text);
 }
 
 @media (prefers-color-scheme: light) {
-  :root:not([data-theme="dark"]) {
+  :root:not([data-theme='dark']) {
     --background: #f8fafc;
     --panel: #ffffff;
     --card: #f1f5f9;

@@ -9,10 +9,7 @@ export interface ErrorPayload {
 export function useTauriInvoke() {
   const { t } = useI18n();
 
-  async function call<T>(
-    command: string,
-    args?: Record<string, unknown>
-  ): Promise<T> {
+  async function call<T>(command: string, args?: Record<string, unknown>): Promise<T> {
     try {
       return await invoke<T>(command, args);
     } catch (raw) {

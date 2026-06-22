@@ -1,10 +1,22 @@
 <script setup lang="ts">
-import { ref, onMounted } from 'vue';
+import { computed, ref, onMounted } from 'vue';
 import { invoke } from '@tauri-apps/api/core';
-import LocaleSwitch from '@/components/LocaleSwitch.vue';
+import { useLocale, type Locale } from '@/composables/useLocale';
 import { useAiStore } from '@/stores/ai';
 import type { AiProviderKind } from '@/types/ai';
 import type { TranslationProviderSummary, TraditionalProviderKind } from '@/types/translation';
+
+const { locale, setLocale, supportedLocales } = useLocale();
+
+const currentLocale = computed({
+  get: () => locale.value as Locale,
+  set: (value: Locale) => setLocale(value),
+});
+
+const localeLabels: Record<Locale, string> = {
+  en: 'English',
+  'zh-CN': '简体中文',
+};
 
 // --- AI Providers ---
 const aiStore = useAiStore();
@@ -141,12 +153,23 @@ async function removeTranslationProvider(id: string) {
 </script>
 
 <template>
-  <div class="flex h-full flex-col overflow-y-auto bg-background p-6">
-    <h1 class="mb-6 text-h1 font-semibold text-text">{{ $t('nav.settings') }}</h1>
+  <div class="flex h-full flex-col overflow-y-auto bg-base p-6 text-primary">
+    <h1 class="mb-6 text-2xl font-semibold">{{ $t('nav.settings') }}</h1>
 
-    <section class="rounded-lg border border-border bg-card p-5">
-      <h2 class="mb-4 text-lg font-medium text-text">{{ $t('settings.language') }}</h2>
-      <LocaleSwitch />
+    <section aria-labelledby="general-heading" class="space-y-4 rounded-lg border border-border bg-elevated p-5">
+      <h2 id="general-heading" class="text-lg font-semibold">{{ $t('settings.language') }}</h2>
+      <div class="flex items-center gap-3">
+        <label for="locale-select" class="text-sm text-secondary">{{ $t('settings.language') }}</label>
+        <select
+          id="locale-select"
+          v-model="currentLocale"
+          class="h-8 rounded-md border border-border bg-raised px-2 text-sm text-primary outline-none focus:border-accent"
+        >
+          <option v-for="loc in supportedLocales" :key="loc" :value="loc">
+            {{ localeLabels[loc] }}
+          </option>
+        </select>
+      </div>
     </section>
 
     <section class="mt-6 rounded-lg border border-border bg-card p-5">

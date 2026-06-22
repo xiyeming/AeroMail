@@ -3,7 +3,9 @@ import { computed, ref, onMounted } from 'vue';
 import { invoke } from '@tauri-apps/api/core';
 import { Trash2 } from 'lucide-vue-next';
 import { useLocale, type Locale } from '@/composables/useLocale';
+import { useLogConfig } from '@/composables/useLogConfig';
 import { useTheme, type Theme } from '@/composables/useTheme';
+import { useWindowFrame, type Decorations } from '@/composables/useWindowFrame';
 import { useAccountStore } from '@/stores/account';
 import { useAiStore } from '@/stores/ai';
 import AccountForm from '@/components/AccountForm.vue';
@@ -13,16 +15,33 @@ import type { TranslationProviderSummary, TraditionalProviderKind } from '@/type
 
 const { locale, setLocale, supportedLocales } = useLocale();
 const { theme, setTheme } = useTheme();
+const { decorations, setDecorations } = useWindowFrame();
 
 const currentLocale = computed({
   get: () => locale.value as Locale,
-  set: (value: Locale) => setLocale(value),
+  set: (value: Locale) => void setLocale(value),
 });
 
 const currentTheme = computed({
   get: () => theme.value,
-  set: (value: Theme) => setTheme(value),
+  set: (value: Theme) => void setTheme(value),
 });
+
+const systemTitleBarEnabled = computed({
+  get: () => decorations.value === 'system',
+  set: (value: boolean) => void setDecorations(value ? 'system' : ('none' as Decorations)),
+});
+
+const { config: logConfig, loadConfig: loadLogConfig, saveConfig: saveLogConfig } = useLogConfig();
+
+const logEnabled = computed({
+  get: () => logConfig.value.enabled,
+  set: (value: boolean) => void saveLogConfig({ ...logConfig.value, enabled: value }),
+});
+
+async function handleLogDirChange(dir: string) {
+  await saveLogConfig({ ...logConfig.value, dir });
+}
 
 const localeLabels: Record<Locale, string> = {
   en: 'English',
@@ -57,6 +76,7 @@ onMounted(() => {
   void accountStore.loadAccounts();
   void aiStore.loadProviders();
   void loadTranslationProviders();
+  void loadLogConfig();
 });
 
 function resetForm() {
@@ -176,7 +196,9 @@ async function removeTranslationProvider(id: string) {
       <h2 id="general-heading" class="text-lg font-medium">{{ $t('settings.general') }}</h2>
       <div class="grid gap-4 sm:grid-cols-2">
         <div class="flex flex-col gap-1.5">
-          <label for="locale-select" class="text-sm text-secondary">{{ $t('settings.language') }}</label>
+          <label for="locale-select" class="text-sm text-secondary">{{
+            $t('settings.language')
+          }}</label>
           <BaseSelect
             id="locale-select"
             v-model="currentLocale"
@@ -184,7 +206,9 @@ async function removeTranslationProvider(id: string) {
           />
         </div>
         <div class="flex flex-col gap-1.5">
-          <label for="theme-select" class="text-sm text-secondary">{{ $t('settings.theme') }}</label>
+          <label for="theme-select" class="text-sm text-secondary">{{
+            $t('settings.theme')
+          }}</label>
           <BaseSelect
             id="theme-select"
             v-model="currentTheme"
@@ -194,10 +218,57 @@ async function removeTranslationProvider(id: string) {
             ]"
           />
         </div>
+        <div class="mt-4 flex items-center gap-2">
+          <input
+            id="system-title-bar"
+            v-model="systemTitleBarEnabled"
+            type="checkbox"
+            class="h-4 w-4 rounded border-border bg-base text-accent outline-none focus:ring-2 focus:ring-accent focus:ring-offset-0"
+          />
+          <label for="system-title-bar" class="text-sm text-secondary">
+            {{ $t('settings.systemTitleBar') }}
+          </label>
+        </div>
       </div>
     </section>
 
-    <section aria-labelledby="accounts-heading" class="mt-6 rounded-lg border border-border bg-elevated p-5">
+    <section
+      aria-labelledby="log-heading"
+      class="mt-6 rounded-lg border border-border bg-elevated p-5"
+    >
+      <h2 id="log-heading" class="mb-4 text-lg font-medium">{{ $t('settings.log') }}</h2>
+      <div class="space-y-4">
+        <div class="flex items-center gap-2">
+          <input
+            id="log-enabled"
+            v-model="logEnabled"
+            type="checkbox"
+            class="h-4 w-4 rounded border-border bg-base text-accent outline-none focus:ring-2 focus:ring-accent focus:ring-offset-0"
+          />
+          <label for="log-enabled" class="text-sm text-secondary">
+            {{ $t('settings.logEnabled') }}
+          </label>
+        </div>
+        <div>
+          <label for="log-dir" class="mb-1 block text-sm text-secondary">
+            {{ $t('settings.logDirectory') }}
+          </label>
+          <input
+            id="log-dir"
+            type="text"
+            :value="logConfig.dir"
+            :placeholder="$t('settings.logDirectoryPlaceholder')"
+            class="h-9 w-full rounded-md border border-border bg-base px-3 text-sm text-primary outline-none placeholder:text-tertiary focus:border-accent"
+            @change="handleLogDirChange(($event.target as HTMLInputElement).value)"
+          />
+        </div>
+      </div>
+    </section>
+
+    <section
+      aria-labelledby="accounts-heading"
+      class="mt-6 rounded-lg border border-border bg-elevated p-5"
+    >
       <h2 id="accounts-heading" class="mb-4 text-lg font-medium">{{ $t('settings.accounts') }}</h2>
 
       <div v-if="accountStore.loading" class="py-6 text-center text-sm text-secondary">
@@ -310,7 +381,9 @@ async function removeTranslationProvider(id: string) {
           />
         </div>
         <div>
-          <label class="mb-1 block text-sm text-secondary">{{ $t('settings.serverAddress') }}</label>
+          <label class="mb-1 block text-sm text-secondary">{{
+            $t('settings.serverAddress')
+          }}</label>
           <input
             v-model="newBaseUrl"
             type="text"
@@ -344,7 +417,10 @@ async function removeTranslationProvider(id: string) {
         <button
           type="button"
           class="flex h-9 items-center justify-center rounded-md border border-border bg-base px-3 text-sm text-primary transition-colors hover:bg-raised"
-          @click="showTranslationForm = !showTranslationForm; resetTranslationForm();"
+          @click="
+            showTranslationForm = !showTranslationForm;
+            resetTranslationForm();
+          "
         >
           {{ showTranslationForm ? $t('common.cancel') : $t('settings.addTranslationProvider') }}
         </button>
@@ -365,7 +441,9 @@ async function removeTranslationProvider(id: string) {
         >
           <div class="flex items-center gap-2">
             <span class="text-sm text-primary">{{ tp.name }}</span>
-            <span class="rounded bg-raised px-2 py-0.5 text-xs text-secondary">{{ tp.providerType }}</span>
+            <span class="rounded bg-raised px-2 py-0.5 text-xs text-secondary">{{
+              tp.providerType
+            }}</span>
           </div>
           <button
             type="button"
@@ -377,7 +455,10 @@ async function removeTranslationProvider(id: string) {
         </li>
       </ul>
 
-      <div v-if="showTranslationForm" class="mt-4 space-y-3 rounded-md border border-border bg-base p-4">
+      <div
+        v-if="showTranslationForm"
+        class="mt-4 space-y-3 rounded-md border border-border bg-base p-4"
+      >
         <div class="flex gap-2">
           <button
             type="button"
@@ -387,7 +468,10 @@ async function removeTranslationProvider(id: string) {
                 ? 'bg-accent text-white'
                 : 'border border-border bg-elevated text-primary hover:bg-raised'
             "
-            @click="translationFormType = 'traditional'; resetTranslationForm();"
+            @click="
+              translationFormType = 'traditional';
+              resetTranslationForm();
+            "
           >
             {{ $t('settings.traditionalProvider') }}
           </button>
@@ -399,7 +483,10 @@ async function removeTranslationProvider(id: string) {
                 ? 'bg-accent text-white'
                 : 'border border-border bg-elevated text-primary hover:bg-raised'
             "
-            @click="translationFormType = 'ai'; resetTranslationForm();"
+            @click="
+              translationFormType = 'ai';
+              resetTranslationForm();
+            "
           >
             {{ $t('settings.aiTranslationProvider') }}
           </button>
@@ -407,7 +494,9 @@ async function removeTranslationProvider(id: string) {
 
         <template v-if="translationFormType === 'traditional'">
           <div>
-            <label class="mb-1 block text-sm text-secondary">{{ $t('settings.providerName') }}</label>
+            <label class="mb-1 block text-sm text-secondary">{{
+              $t('settings.providerName')
+            }}</label>
             <input
               v-model="tpName"
               type="text"
@@ -416,7 +505,9 @@ async function removeTranslationProvider(id: string) {
             />
           </div>
           <div>
-            <label class="mb-1 block text-sm text-secondary">{{ $t('settings.providerKind') }}</label>
+            <label class="mb-1 block text-sm text-secondary">{{
+              $t('settings.providerKind')
+            }}</label>
             <BaseSelect
               v-model="tpKind"
               variant="elevated"
@@ -445,7 +536,9 @@ async function removeTranslationProvider(id: string) {
 
         <template v-else>
           <div>
-            <label class="mb-1 block text-sm text-secondary">{{ $t('settings.providerName') }}</label>
+            <label class="mb-1 block text-sm text-secondary">{{
+              $t('settings.providerName')
+            }}</label>
             <input
               v-model="tpAiName"
               type="text"
@@ -454,7 +547,9 @@ async function removeTranslationProvider(id: string) {
             />
           </div>
           <div>
-            <label class="mb-1 block text-sm text-secondary">{{ $t('settings.selectAiProvider') }}</label>
+            <label class="mb-1 block text-sm text-secondary">{{
+              $t('settings.selectAiProvider')
+            }}</label>
             <BaseSelect
               v-model="tpAiProviderId"
               variant="elevated"

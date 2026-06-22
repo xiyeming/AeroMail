@@ -3,6 +3,7 @@ pub mod ai;
 pub mod compose;
 pub mod crypto;
 pub mod imap_client;
+pub mod logging;
 pub mod oauth2;
 pub mod search;
 pub mod sync;

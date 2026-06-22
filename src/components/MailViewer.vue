@@ -25,6 +25,7 @@ import TranslatePanel from '@/components/TranslatePanel.vue';
 import { useAiChat } from '@/composables/useAiChat';
 import { useAiStore } from '@/stores/ai';
 import { useMailStore } from '@/stores/mail';
+import { useToastStore } from '@/stores/toast';
 import type { AttachmentInfo } from '@/types/mail';
 
 const { t } = useI18n();
@@ -32,6 +33,7 @@ const router = useRouter();
 const { createSession, sendMessage } = useAiChat();
 const aiStore = useAiStore();
 const mailStore = useMailStore();
+const toast = useToastStore();
 
 const translatedText = ref<string | null>(null);
 const translatedLang = ref<string | null>(null);
@@ -90,8 +92,16 @@ async function handleQuickAction(promptKey: keyof typeof PROMPTS) {
   if (!aiStore.isPanelOpen) aiStore.togglePanel();
   const provider = aiStore.providers[0];
   if (!provider) return;
-  const session = await createSession(provider.id, currentMailId.value);
-  await sendMessage(session.id, PROMPTS[promptKey]);
+  try {
+    const session = await createSession(provider.id, currentMailId.value);
+    await sendMessage(session.id, PROMPTS[promptKey]);
+  } catch (e) {
+    toast.add({
+      type: 'error',
+      message: e instanceof Error ? e.message : String(e),
+      duration: 5000,
+    });
+  }
 }
 
 function handleTranslated(payload: { text: string; lang: string }) {
@@ -174,8 +184,7 @@ function formatAddresses(addresses: string | null): string {
 
 // Focus trap for delete dialog
 function getFocusableElements(container: HTMLElement): HTMLElement[] {
-  const selector =
-    'button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])';
+  const selector = 'button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])';
   return Array.from(container.querySelectorAll(selector)).filter(
     (el) => !el.hasAttribute('disabled') && (el as HTMLElement).offsetParent !== null
   ) as HTMLElement[];
@@ -206,9 +215,7 @@ function handleDeleteKeyDown(e: KeyboardEvent) {
 watch(showDeleteConfirm, async (show) => {
   if (show) {
     await nextTick();
-    const focusable = deleteDialogRef.value
-      ? getFocusableElements(deleteDialogRef.value)
-      : [];
+    const focusable = deleteDialogRef.value ? getFocusableElements(deleteDialogRef.value) : [];
     focusable[0]?.focus();
   }
 });
@@ -243,12 +250,8 @@ watch(currentMailId, (newMailId) => {
           ><kbd class="rounded bg-raised px-2 py-0.5">J</kbd> /
           <kbd class="rounded bg-raised px-2 py-0.5">K</kbd> {{ $t('mail.navigate') }}</span
         >
-        <span
-          ><kbd class="rounded bg-raised px-2 py-0.5">Enter</kbd> {{ $t('mail.open') }}</span
-        >
-        <span
-          ><kbd class="rounded bg-raised px-2 py-0.5">Esc</kbd> {{ $t('mail.close') }}</span
-        >
+        <span><kbd class="rounded bg-raised px-2 py-0.5">Enter</kbd> {{ $t('mail.open') }}</span>
+        <span><kbd class="rounded bg-raised px-2 py-0.5">Esc</kbd> {{ $t('mail.close') }}</span>
       </div>
     </div>
 
@@ -455,7 +458,9 @@ watch(currentMailId, (newMailId) => {
     <!-- Loading state -->
     <div v-else-if="currentMailId" class="flex flex-1 items-center justify-center text-secondary">
       <div class="flex items-center gap-2">
-        <div class="h-4 w-4 animate-spin rounded-full border-2 border-accent border-t-transparent" />
+        <div
+          class="h-4 w-4 animate-spin rounded-full border-2 border-accent border-t-transparent"
+        />
         {{ t('mail.loading') }}
       </div>
     </div>
@@ -478,8 +483,12 @@ watch(currentMailId, (newMailId) => {
           @keydown="handleDeleteKeyDown"
           @click.stop
         >
-          <h3 id="delete-title" class="text-lg font-medium text-primary">{{ t('mail.deleteConfirmTitle') }}</h3>
-          <p id="delete-message" class="mt-2 text-sm text-secondary">{{ t('mail.deleteConfirmMessage') }}</p>
+          <h3 id="delete-title" class="text-lg font-medium text-primary">
+            {{ t('mail.deleteConfirmTitle') }}
+          </h3>
+          <p id="delete-message" class="mt-2 text-sm text-secondary">
+            {{ t('mail.deleteConfirmMessage') }}
+          </p>
           <div class="mt-4 flex justify-end gap-2">
             <button
               type="button"

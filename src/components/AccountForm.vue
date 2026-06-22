@@ -96,9 +96,15 @@ async function handleSubmit() {
   if (!config.value.email) {
     config.value.email = config.value.name;
   }
-  await accountStore.addAccount(config.value);
-  if (!accountStore.error) {
-    password.value = '';
+
+  accountStore.error = null;
+  try {
+    await accountStore.addAccount(config.value);
+    if (!accountStore.error) {
+      password.value = '';
+    }
+  } catch {
+    // Error is already surfaced by accountStore.error; no need to rethrow.
   }
 }
 </script>
@@ -111,7 +117,9 @@ async function handleSubmit() {
     <h2 class="text-lg font-medium text-primary">{{ $t('account.addAccount') }}</h2>
 
     <div class="space-y-1.5">
-      <label for="account-provider" class="text-sm text-secondary">{{ $t('account.provider') }}</label>
+      <label for="account-provider" class="text-sm text-secondary">{{
+        $t('account.provider')
+      }}</label>
       <BaseSelect
         id="account-provider"
         :model-value="config.provider"
@@ -132,7 +140,9 @@ async function handleSubmit() {
     </div>
 
     <div class="space-y-1.5">
-      <label for="account-email" class="text-sm text-secondary">{{ $t('account.emailAddress') }}</label>
+      <label for="account-email" class="text-sm text-secondary">{{
+        $t('account.emailAddress')
+      }}</label>
       <input
         id="account-email"
         v-model="config.email"
@@ -144,7 +154,9 @@ async function handleSubmit() {
 
     <div class="grid grid-cols-2 gap-3">
       <div class="space-y-1.5">
-        <label for="account-imap-host" class="text-sm text-secondary">{{ $t('account.imapHost') }}</label>
+        <label for="account-imap-host" class="text-sm text-secondary">{{
+          $t('account.imapHost')
+        }}</label>
         <input
           id="account-imap-host"
           v-model="config.imap.host"
@@ -153,7 +165,9 @@ async function handleSubmit() {
         />
       </div>
       <div class="space-y-1.5">
-        <label for="account-imap-port" class="text-sm text-secondary">{{ $t('account.imapPort') }}</label>
+        <label for="account-imap-port" class="text-sm text-secondary">{{
+          $t('account.imapPort')
+        }}</label>
         <input
           id="account-imap-port"
           v-model.number="config.imap.port"
@@ -165,7 +179,9 @@ async function handleSubmit() {
 
     <div class="grid grid-cols-2 gap-3">
       <div class="space-y-1.5">
-        <label for="account-smtp-host" class="text-sm text-secondary">{{ $t('account.smtpHost') }}</label>
+        <label for="account-smtp-host" class="text-sm text-secondary">{{
+          $t('account.smtpHost')
+        }}</label>
         <input
           id="account-smtp-host"
           v-model="config.smtp.host"
@@ -174,7 +190,9 @@ async function handleSubmit() {
         />
       </div>
       <div class="space-y-1.5">
-        <label for="account-smtp-port" class="text-sm text-secondary">{{ $t('account.smtpPort') }}</label>
+        <label for="account-smtp-port" class="text-sm text-secondary">{{
+          $t('account.smtpPort')
+        }}</label>
         <input
           id="account-smtp-port"
           v-model.number="config.smtp.port"
@@ -185,7 +203,9 @@ async function handleSubmit() {
     </div>
 
     <div class="space-y-1.5">
-      <label for="account-password" class="text-sm text-secondary">{{ $t('account.password') }}</label>
+      <label for="account-password" class="text-sm text-secondary">{{
+        $t('account.password')
+      }}</label>
       <input
         id="account-password"
         v-model="password"
@@ -195,7 +215,9 @@ async function handleSubmit() {
       />
     </div>
 
-    <p v-if="validationError" class="text-sm text-danger">{{ validationError }}</p>
+    <p v-if="validationError || accountStore.error" class="text-sm text-danger">
+      {{ validationError || accountStore.error }}
+    </p>
 
     <button
       type="submit"
@@ -203,7 +225,5 @@ async function handleSubmit() {
     >
       {{ $t('account.addAccount') }}
     </button>
-
-    <p v-if="accountStore.error" class="text-sm text-danger">{{ accountStore.error }}</p>
   </form>
 </template>

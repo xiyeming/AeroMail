@@ -19,7 +19,7 @@ use commands::mail::{
     mark_mail_read, move_mail, toggle_mail_spam, toggle_mail_star,
 };
 use commands::search::{get_search_stats, index_pending_mails, search_mails};
-use commands::settings::{get_setting, set_setting};
+use commands::settings::{get_log_config, get_setting, set_log_config, set_setting};
 use commands::sync::{start_sync, stop_sync};
 use commands::translation::{
     delete_translation_provider, get_cached_translation, list_translation_providers,
@@ -28,9 +28,11 @@ use commands::translation::{
 use db::pool::Database;
 use services::account_manager::AccountManager;
 use services::ai::AiService;
+use services::logging::LogService;
 use services::search::SearchService;
 use services::sync::SyncService;
 use services::translation::TranslationService;
+use std::path::PathBuf;
 use std::sync::Arc;
 use tauri::Manager;
 use tokio::sync::RwLock;
@@ -43,6 +45,8 @@ pub struct AppState {
     pub search_service: Arc<RwLock<SearchService>>,
     pub compose_service: Arc<RwLock<crate::services::compose::ComposeService>>,
     pub db: Arc<Database>,
+    pub app_data_dir: PathBuf,
+    pub log_service: Arc<LogService>,
 }
 
 impl AppState {
@@ -58,11 +62,14 @@ impl AppState {
         let ai_service = Arc::new(RwLock::new(AiService::new(Arc::clone(&db))));
         let translation_service = TranslationService::new(Arc::clone(&db));
 
-        // Initialize search service
         let app_dir = app_handle
             .path()
             .app_data_dir()
             .map_err(|e| crate::error::AeroError::Internal(e.to_string()))?;
+
+        let log_dir = app_dir.join("logs");
+        let log_service = Arc::new(LogService::from_settings(&db, &log_dir)?);
+
         let attachments_dir = app_dir.join("attachments");
         std::fs::create_dir_all(&attachments_dir)
             .map_err(|e| crate::error::AeroError::Internal(e.to_string()))?;
@@ -92,6 +99,8 @@ impl AppState {
             search_service,
             compose_service,
             db,
+            app_data_dir: app_dir,
+            log_service,
         })
     }
 }
@@ -133,6 +142,8 @@ pub fn run() {
             test_account_connection,
             set_setting,
             get_setting,
+            get_log_config,
+            set_log_config,
             list_ai_providers,
             upsert_ai_provider,
             delete_ai_provider,

@@ -155,7 +155,9 @@ function closePopoverOnBlur(event: FocusEvent) {
           >
             {{ accountInitial }}
           </div>
-          <span class="flex-1 truncate text-left text-primary">{{ currentAccount?.name ?? $t('account.noAccounts') }}</span>
+          <span class="flex-1 truncate text-left text-primary">{{
+            currentAccount?.name ?? $t('account.noAccounts')
+          }}</span>
           <ChevronDown class="h-4 w-4 text-secondary" />
         </button>
 

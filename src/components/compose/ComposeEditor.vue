@@ -117,8 +117,20 @@ const toolbarButtons = computed(() => [
     active: isActive('blockquote'),
     action: toolbarActions.value.blockquote,
   },
-  { key: 'undo', label: '↶', title: t('compose.undo'), active: false, action: toolbarActions.value.undo },
-  { key: 'redo', label: '↷', title: t('compose.redo'), active: false, action: toolbarActions.value.redo },
+  {
+    key: 'undo',
+    label: '↶',
+    title: t('compose.undo'),
+    active: false,
+    action: toolbarActions.value.undo,
+  },
+  {
+    key: 'redo',
+    label: '↷',
+    title: t('compose.redo'),
+    active: false,
+    action: toolbarActions.value.redo,
+  },
 ]);
 </script>
 

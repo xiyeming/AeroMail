@@ -254,7 +254,9 @@ async function bulkMarkRead(isRead: boolean) {
       class="flex flex-1 items-center justify-center text-secondary"
     >
       <div class="flex items-center gap-2">
-        <div class="h-4 w-4 animate-spin rounded-full border-2 border-accent border-t-transparent" />
+        <div
+          class="h-4 w-4 animate-spin rounded-full border-2 border-accent border-t-transparent"
+        />
         {{ t('mail.loading') }}
       </div>
     </div>
@@ -352,8 +354,13 @@ async function bulkMarkRead(isRead: boolean) {
       </div>
 
       <!-- Load more indicator -->
-      <div v-if="mailStore.loadingMore" class="flex items-center justify-center py-4 text-secondary">
-        <div class="h-4 w-4 animate-spin rounded-full border-2 border-accent border-t-transparent" />
+      <div
+        v-if="mailStore.loadingMore"
+        class="flex items-center justify-center py-4 text-secondary"
+      >
+        <div
+          class="h-4 w-4 animate-spin rounded-full border-2 border-accent border-t-transparent"
+        />
       </div>
     </div>
 
@@ -362,7 +369,9 @@ async function bulkMarkRead(isRead: boolean) {
       v-if="hasSelection"
       class="flex shrink-0 items-center justify-between border-t border-border bg-raised px-4 py-2"
     >
-      <span class="text-sm text-secondary">{{ t('mail.selectedCount', { count: selectedCount }) }}</span>
+      <span class="text-sm text-secondary">{{
+        t('mail.selectedCount', { count: selectedCount })
+      }}</span>
       <div class="flex items-center gap-2">
         <button
           type="button"

@@ -6,8 +6,6 @@ import { i18n, loadLocaleMessages, type Locale } from './i18n';
 import './styles/theme.css';
 import './styles/fonts.css';
 
-document.documentElement.setAttribute('data-theme', 'dark');
-
 async function bootstrap() {
   const locale: Locale = 'en';
   await loadLocaleMessages(locale);

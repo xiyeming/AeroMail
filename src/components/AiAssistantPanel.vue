@@ -6,7 +6,7 @@ import AiMessageList from '@/components/AiMessageList.vue';
 import { useAiStore } from '@/stores/ai';
 
 const aiStore = useAiStore();
-const { messages, isLoading, activeSessionId, loadSessions, createSession, sendMessage } =
+const { messages, isLoading, error, activeSessionId, loadSessions, createSession, sendMessage } =
   useAiChat();
 
 const input = ref('');
@@ -21,9 +21,17 @@ async function handleSend() {
   if (!input.value.trim() || !activeSessionId.value) return;
   const content = input.value;
   input.value = '';
-  await sendMessage(activeSessionId.value, content);
+  try {
+    await sendMessage(activeSessionId.value, content);
+  } catch {
+    // error is surfaced via useAiChat.error
+  }
   await nextTick();
   scrollToBottom();
+}
+
+function clearError() {
+  error.value = null;
 }
 
 function scrollToBottom() {
@@ -82,11 +90,28 @@ watch(
           <AiMessageList :messages="messages" />
         </div>
         <div class="border-t border-border p-3">
+          <div
+            v-if="error"
+            class="mb-2 rounded-md bg-danger-subtle px-3 py-2 text-xs text-danger"
+            role="alert"
+          >
+            <div class="flex items-start justify-between gap-2">
+              <span class="break-words">{{ error }}</span>
+              <button
+                type="button"
+                class="shrink-0 text-danger underline hover:text-danger-hover"
+                @click="clearError"
+              >
+                {{ $t('common.close') }}
+              </button>
+            </div>
+          </div>
           <textarea
             v-model="input"
             class="w-full resize-none rounded-md border border-border bg-base p-2.5 text-sm text-primary outline-none placeholder:text-tertiary focus:border-accent"
             :rows="3"
             :placeholder="$t('aiAssistant.inputPlaceholder')"
+            @input="clearError"
             @keydown.enter.prevent="handleSend"
           />
           <button

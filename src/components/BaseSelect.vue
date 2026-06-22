@@ -45,17 +45,9 @@ const selectedValue = computed({
   set: (value: string) => emit('update:modelValue', value),
 });
 
-const sizeClasses = computed(() =>
-  props.size === 'sm'
-    ? 'h-8 px-2 text-xs'
-    : 'h-9 px-3 text-sm'
-);
+const sizeClasses = computed(() => (props.size === 'sm' ? 'h-8 px-2 text-xs' : 'h-9 px-3 text-sm'));
 
-const variantClasses = computed(() =>
-  props.variant === 'elevated'
-    ? 'bg-elevated'
-    : 'bg-base'
-);
+const variantClasses = computed(() => (props.variant === 'elevated' ? 'bg-elevated' : 'bg-base'));
 </script>
 
 <template>
@@ -66,10 +58,7 @@ const variantClasses = computed(() =>
       class="group flex w-full items-center justify-between gap-2 rounded-md border border-border outline-none transition-colors focus:border-accent disabled:cursor-not-allowed disabled:opacity-50"
       :class="[sizeClasses, variantClasses]"
     >
-      <SelectValue
-        :placeholder="placeholder"
-        class="truncate text-primary"
-      />
+      <SelectValue :placeholder="placeholder" class="truncate text-primary" />
       <ChevronDown
         class="h-4 w-4 shrink-0 text-tertiary transition-transform group-data-[state=open]:rotate-180"
         aria-hidden="true"

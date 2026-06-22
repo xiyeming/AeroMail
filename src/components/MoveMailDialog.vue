@@ -23,8 +23,7 @@ function handleMove(folderId: string) {
 }
 
 function getFocusableElements(container: HTMLElement): HTMLElement[] {
-  const selector =
-    'button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])';
+  const selector = 'button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])';
   return Array.from(container.querySelectorAll(selector)).filter(
     (el) => !el.hasAttribute('disabled') && (el as HTMLElement).offsetParent !== null
   ) as HTMLElement[];
@@ -93,7 +92,9 @@ watch(
           >
             <FolderInput class="h-4 w-4" />
             <span>{{ folder.name }}</span>
-            <span v-if="folder.unreadCount > 0" class="ml-auto text-xs text-tertiary">{{ folder.unreadCount }}</span>
+            <span v-if="folder.unreadCount > 0" class="ml-auto text-xs text-tertiary">{{
+              folder.unreadCount
+            }}</span>
           </button>
         </div>
 

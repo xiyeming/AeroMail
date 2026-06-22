@@ -2,7 +2,9 @@
   <div class="flex flex-col gap-3 border-b border-border bg-elevated p-4">
     <div class="flex items-center gap-3">
       <div class="flex flex-1 items-center gap-2">
-        <label for="compose-account" class="text-sm text-secondary">{{ $t('compose.selectAccount') }}</label>
+        <label for="compose-account" class="text-sm text-secondary">{{
+          $t('compose.selectAccount')
+        }}</label>
         <div class="flex-1">
           <BaseSelect
             id="compose-account"
@@ -39,18 +41,10 @@
     />
 
     <div class="flex items-center gap-3">
-      <button
-        type="button"
-        class="text-xs text-accent hover:underline"
-        @click="showCc = !showCc"
-      >
+      <button type="button" class="text-xs text-accent hover:underline" @click="showCc = !showCc">
         {{ $t('compose.cc') }}
       </button>
-      <button
-        type="button"
-        class="text-xs text-accent hover:underline"
-        @click="showBcc = !showBcc"
-      >
+      <button type="button" class="text-xs text-accent hover:underline" @click="showBcc = !showBcc">
         {{ $t('compose.bcc') }}
       </button>
     </div>
@@ -59,7 +53,9 @@
     <RecipientInput v-if="showBcc" v-model="localDraft.bcc" :label="$t('compose.bcc')" />
 
     <div class="flex items-center gap-2">
-      <label for="compose-subject" class="text-sm text-secondary">{{ $t('compose.subject') }}</label>
+      <label for="compose-subject" class="text-sm text-secondary">{{
+        $t('compose.subject')
+      }}</label>
       <input
         id="compose-subject"
         v-model="localDraft.subject"

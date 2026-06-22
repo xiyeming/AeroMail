@@ -1,17 +1,30 @@
 import { ref, watch } from 'vue';
+import { useSettingsStore } from '@/stores/settings';
 
-type Theme = 'dark' | 'light';
+export type Theme = 'dark' | 'light';
 
+const SETTINGS_KEY = 'app.theme';
 const theme = ref<Theme>('dark');
 
 export function useTheme() {
-  function setTheme(value: Theme) {
+  const settings = useSettingsStore();
+
+  function setTheme(value: Theme, persist = true) {
     theme.value = value;
-    document.documentElement.setAttribute('data-theme', value);
+    if (persist) {
+      void settings.set(SETTINGS_KEY, value);
+    }
   }
 
   function toggleTheme() {
     setTheme(theme.value === 'dark' ? 'light' : 'dark');
+  }
+
+  async function initTheme() {
+    const saved = await settings.get(SETTINGS_KEY);
+    if (saved === 'dark' || saved === 'light') {
+      setTheme(saved, false);
+    }
   }
 
   watch(
@@ -24,7 +37,8 @@ export function useTheme() {
 
   return {
     theme,
-    toggleTheme,
     setTheme,
+    toggleTheme,
+    initTheme,
   };
 }

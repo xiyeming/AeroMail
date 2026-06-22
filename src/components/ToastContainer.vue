@@ -28,11 +28,7 @@ function iconComponent(type: ToastType) {
 </script>
 
 <template>
-  <div
-    aria-live="polite"
-    aria-atomic="true"
-    class="fixed right-4 top-4 z-40 flex flex-col gap-2"
-  >
+  <div aria-live="polite" aria-atomic="true" class="fixed right-4 top-4 z-40 flex flex-col gap-2">
     <TransitionGroup
       enter-active-class="transition duration-200 ease-out motion-reduce:transition-none"
       enter-from-class="translate-x-full opacity-0"

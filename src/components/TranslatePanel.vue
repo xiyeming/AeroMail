@@ -9,7 +9,7 @@ const props = defineProps<{
 }>();
 
 const emit = defineEmits<{
-  translated: [text: string];
+  translated: [payload: { text: string; lang: string }];
 }>();
 
 const { t } = useI18n();
@@ -18,6 +18,13 @@ const { translateMail, listProviders, getDefaultTargetLang, isTranslating } = us
 const providers = ref<TranslationProviderSummary[]>([]);
 const selectedProviderId = ref('');
 const targetLang = ref(getDefaultTargetLang());
+
+const languages = [
+  { value: 'en', label: 'translation.language.english' },
+  { value: 'zh-CN', label: 'translation.language.chinese' },
+  { value: 'ja', label: 'translation.language.japanese' },
+  { value: 'ko', label: 'translation.language.korean' },
+];
 
 async function loadProviders() {
   providers.value = await listProviders();
@@ -29,34 +36,33 @@ async function loadProviders() {
 async function handleTranslate() {
   if (!selectedProviderId.value) return;
   const translated = await translateMail(props.mailId, targetLang.value, selectedProviderId.value);
-  emit('translated', translated);
+  emit('translated', { text: translated, lang: targetLang.value });
 }
 
-// Load providers on mount
 loadProviders();
 </script>
 
 <template>
-  <div class="flex items-center gap-2 rounded-lg border border-border bg-card p-2">
+  <div class="flex flex-wrap items-center gap-2 rounded-lg border border-border bg-elevated p-2">
     <select
       v-model="targetLang"
-      class="h-7 rounded border border-border bg-panel px-2 text-xs text-text"
+      class="h-8 rounded-md border border-border bg-base px-2 text-xs text-primary outline-none focus:border-accent"
     >
-      <option value="en">English</option>
-      <option value="zh-CN">简体中文</option>
-      <option value="ja">日本語</option>
-      <option value="ko">한국어</option>
+      <option v-for="lang in languages" :key="lang.value" :value="lang.value">
+        {{ $t(lang.label) }}
+      </option>
     </select>
     <select
       v-model="selectedProviderId"
-      class="h-7 rounded border border-border bg-panel px-2 text-xs text-text"
+      class="h-8 rounded-md border border-border bg-base px-2 text-xs text-primary outline-none focus:border-accent"
     >
       <option v-for="p in providers" :key="p.id" :value="p.id">
         {{ p.name }}
       </option>
     </select>
     <button
-      class="flex h-7 items-center rounded bg-primary px-2 text-xs text-white hover:bg-primary-hover disabled:opacity-50"
+      type="button"
+      class="flex h-8 items-center rounded-md bg-accent px-3 text-xs font-medium text-white transition-colors hover:bg-accent-hover disabled:opacity-50 disabled:cursor-not-allowed"
       :disabled="isTranslating || !selectedProviderId"
       @click="handleTranslate"
     >

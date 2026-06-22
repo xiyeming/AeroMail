@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref } from 'vue';
+import { computed, ref } from 'vue';
 import { useI18n } from 'vue-i18n';
 import { useAccountStore } from '@/stores/account';
 import BaseSelect from '@/components/BaseSelect.vue';
@@ -17,6 +17,10 @@ const providers: MailProvider[] = [
   'TencentExmail',
   'Custom',
 ];
+
+const providerOptions = computed(() =>
+  providers.map((p) => ({ value: p, label: t(`account.providerLabels.${p}`) }))
+);
 
 const providerDefaults: Record<MailProvider, { imap: string; smtp: string }> = {
   Gmail: { imap: 'imap.gmail.com', smtp: 'smtp.gmail.com' },
@@ -111,7 +115,7 @@ async function handleSubmit() {
       <BaseSelect
         id="account-provider"
         :model-value="config.provider"
-        :options="providers.map((p) => ({ value: p, label: p }))"
+        :options="providerOptions"
         @update:model-value="updateProvider($event as MailProvider)"
       />
     </div>

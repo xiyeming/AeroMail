@@ -101,6 +101,15 @@
     "emailAddress": "Email address",
     "emailPlaceholder": "your.email@example.com",
     "provider": "Email service",
+    "providerLabels": {
+      "Gmail": "Gmail",
+      "Outlook": "Outlook",
+      "QQ": "QQ Mail",
+      "Netease163": "Netease 163",
+      "Aliyun": "Aliyun Mail",
+      "TencentExmail": "Tencent Exmail",
+      "Custom": "Custom"
+    },
     "incomingServer": "Incoming mail server",
     "incomingPort": "Incoming server port",
     "outgoingServer": "Outgoing mail server",

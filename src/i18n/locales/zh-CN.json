@@ -101,6 +101,15 @@
     "emailAddress": "邮箱地址",
     "emailPlaceholder": "your.email@example.com",
     "provider": "邮件服务",
+    "providerLabels": {
+      "Gmail": "Gmail",
+      "Outlook": "Outlook",
+      "QQ": "QQ 邮箱",
+      "Netease163": "网易 163 邮箱",
+      "Aliyun": "阿里云邮箱",
+      "TencentExmail": "腾讯企业邮",
+      "Custom": "自定义"
+    },
     "incomingServer": "收件服务器",
     "incomingPort": "收件服务器端口",
     "outgoingServer": "发件服务器",

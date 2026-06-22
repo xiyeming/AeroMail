@@ -2,6 +2,7 @@ pub const ACCOUNTS_TABLE: &str = r"
 CREATE TABLE IF NOT EXISTS accounts (
     id TEXT PRIMARY KEY,
     name TEXT NOT NULL,
+    email TEXT,
     provider TEXT NOT NULL,
     imap_host TEXT NOT NULL,
     imap_port INTEGER NOT NULL,
@@ -53,6 +54,7 @@ CREATE TABLE IF NOT EXISTS mails (
     is_read INTEGER DEFAULT 0,
     is_starred INTEGER DEFAULT 0,
     flags TEXT,
+    message_id TEXT,
     created_at INTEGER,
     indexed_at INTEGER,
     FOREIGN KEY (account_id) REFERENCES accounts(id) ON DELETE CASCADE,

@@ -14,7 +14,8 @@ const { t } = useI18n();
 <template>
   <div class="flex items-center gap-1">
     <button
-      class="flex h-8 items-center gap-1.5 rounded-md border border-border px-2 text-xs text-text-secondary hover:bg-card"
+      type="button"
+      class="flex h-8 items-center gap-1.5 rounded-md border border-border px-2 text-xs text-secondary transition-colors hover:bg-raised"
       :title="t('aiActions.summarize')"
       @click="emit('summarize')"
     >
@@ -22,7 +23,8 @@ const { t } = useI18n();
       {{ t('aiActions.summarize') }}
     </button>
     <button
-      class="flex h-8 items-center gap-1.5 rounded-md border border-border px-2 text-xs text-text-secondary hover:bg-card"
+      type="button"
+      class="flex h-8 items-center gap-1.5 rounded-md border border-border px-2 text-xs text-secondary transition-colors hover:bg-raised"
       :title="t('aiActions.generateReply')"
       @click="emit('reply')"
     >
@@ -30,7 +32,8 @@ const { t } = useI18n();
       {{ t('aiActions.generateReply') }}
     </button>
     <button
-      class="flex h-8 items-center gap-1.5 rounded-md border border-border px-2 text-xs text-text-secondary hover:bg-card"
+      type="button"
+      class="flex h-8 items-center gap-1.5 rounded-md border border-border px-2 text-xs text-secondary transition-colors hover:bg-raised"
       :title="t('aiActions.extractTodos')"
       @click="emit('extractTodos')"
     >

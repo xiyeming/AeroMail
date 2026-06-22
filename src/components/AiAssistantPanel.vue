@@ -42,54 +42,63 @@ watch(
 </script>
 
 <template>
-  <div class="flex h-full w-[360px] flex-shrink-0 flex-col border-l border-border bg-panel">
-    <div class="flex h-12 items-center justify-between border-b border-border px-4">
-      <span class="text-sm font-medium text-text">{{ $t('aiAssistant.title') }}</span>
-      <button
-        class="rounded-md p-1 text-muted transition-colors hover:bg-card hover:text-text"
-        @click="aiStore.togglePanel()"
-      >
-        <X class="h-4 w-4" />
-      </button>
-    </div>
-
+  <Teleport to="body">
     <div
-      v-if="!activeSessionId"
-      class="flex flex-1 flex-col items-center justify-center p-4 text-center"
+      class="fixed inset-y-0 right-0 z-50 flex w-80 transform flex-col border-l border-border bg-elevated shadow-lg transition-transform duration-200 ease-out"
+      :class="aiStore.isPanelOpen ? 'translate-x-0' : 'translate-x-full'"
     >
-      <p class="mb-4 text-sm text-muted">{{ $t('aiAssistant.selectProvider') }}</p>
-      <div class="flex flex-wrap justify-center gap-2">
+      <div class="flex h-12 items-center justify-between border-b border-border px-4">
+        <span class="text-sm font-medium text-primary">{{ $t('aiAssistant.title') }}</span>
         <button
-          v-for="provider in aiStore.providers"
-          :key="provider.id"
-          class="rounded-md border border-border bg-card px-3 py-1.5 text-xs text-text-secondary transition-colors hover:border-border-hover hover:text-text"
-          @click="createSession(provider.id)"
+          type="button"
+          class="rounded-md p-1 text-secondary transition-colors hover:bg-raised hover:text-primary"
+          :aria-label="$t('common.close')"
+          @click="aiStore.togglePanel()"
         >
-          {{ provider.name }}
+          <X class="h-4 w-4" />
         </button>
       </div>
-    </div>
 
-    <template v-else>
-      <div ref="messagesContainer" class="flex-1 overflow-y-auto p-3">
-        <AiMessageList :messages="messages" />
+      <div
+        v-if="!activeSessionId"
+        class="flex flex-1 flex-col items-center justify-center p-4 text-center"
+      >
+        <p class="mb-4 text-sm text-secondary">{{ $t('aiAssistant.selectProvider') }}</p>
+        <div class="flex flex-wrap justify-center gap-2">
+          <button
+            v-for="provider in aiStore.providers"
+            :key="provider.id"
+            type="button"
+            class="rounded-md border border-border bg-base px-3 py-2 text-xs text-secondary transition-colors hover:bg-raised"
+            @click="createSession(provider.id)"
+          >
+            {{ provider.name }}
+          </button>
+        </div>
       </div>
-      <div class="border-t border-border p-3">
-        <textarea
-          v-model="input"
-          class="w-full resize-none rounded-md border border-border bg-card p-2.5 text-sm text-text outline-none transition-colors placeholder:text-disabled focus:border-primary focus:ring-1 focus:ring-primary/20"
-          :rows="3"
-          :placeholder="$t('aiAssistant.inputPlaceholder')"
-          @keydown.enter.prevent="handleSend"
-        />
-        <button
-          class="mt-2 flex h-8 w-full items-center justify-center rounded-md bg-primary text-sm font-medium text-white transition-colors hover:bg-primary-hover active:bg-primary-active disabled:opacity-50"
-          :disabled="isLoading || !input.trim()"
-          @click="handleSend"
-        >
-          {{ isLoading ? $t('aiAssistant.thinking') : $t('aiAssistant.send') }}
-        </button>
-      </div>
-    </template>
-  </div>
+
+      <template v-else>
+        <div ref="messagesContainer" class="flex-1 overflow-y-auto p-3">
+          <AiMessageList :messages="messages" />
+        </div>
+        <div class="border-t border-border p-3">
+          <textarea
+            v-model="input"
+            class="w-full resize-none rounded-md border border-border bg-base p-2.5 text-sm text-primary outline-none placeholder:text-tertiary focus:border-accent"
+            :rows="3"
+            :placeholder="$t('aiAssistant.inputPlaceholder')"
+            @keydown.enter.prevent="handleSend"
+          />
+          <button
+            type="button"
+            class="mt-2 flex h-8 w-full items-center justify-center rounded-md bg-accent text-sm font-medium text-white transition-colors hover:bg-accent-hover disabled:opacity-50 disabled:cursor-not-allowed"
+            :disabled="isLoading || !input.trim()"
+            @click="handleSend"
+          >
+            {{ isLoading ? $t('aiAssistant.thinking') : $t('aiAssistant.send') }}
+          </button>
+        </div>
+      </template>
+    </div>
+  </Teleport>
 </template>

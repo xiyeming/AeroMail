@@ -1,4 +1,8 @@
 pub mod account;
 pub mod ai;
+pub mod compose;
+pub mod mail;
+pub mod search;
 pub mod settings;
+pub mod sync;
 pub mod translation;

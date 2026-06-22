@@ -9,6 +9,9 @@ use commands::ai::{
     create_chat_session, delete_ai_provider, delete_chat_session, get_chat_messages,
     list_ai_providers, list_chat_sessions, send_chat_message, test_ai_provider, upsert_ai_provider,
 };
+use commands::compose::{
+    delete_draft, get_draft, get_drafts, prepare_reply, save_draft, send_mail, sync_draft_to_imap,
+};
 use commands::mail::{
     delete_mail, get_attachments, get_mail_detail, get_mail_list, get_unread_count, list_folders,
     mark_mail_read, move_mail, toggle_mail_star,
@@ -144,6 +147,13 @@ pub fn run() {
             search_mails,
             index_pending_mails,
             get_search_stats,
+            save_draft,
+            get_drafts,
+            get_draft,
+            delete_draft,
+            send_mail,
+            prepare_reply,
+            sync_draft_to_imap,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

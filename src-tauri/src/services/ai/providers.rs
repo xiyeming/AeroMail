@@ -7,6 +7,33 @@ pub struct AiProviderPreset {
     pub default_model: String,
 }
 
+/// Returns a human-readable label for an [`AiProviderKind`].
+#[must_use]
+pub fn kind_label(kind: &AiProviderKind) -> String {
+    serde_json::to_string(kind).map_or_else(
+        |_| "custom".to_string(),
+        |s| s.trim_matches('"').to_string(),
+    )
+}
+
+/// Fills in missing base URL, model, and name from the provider preset.
+pub fn apply_preset_defaults(provider: &mut crate::models::ai::AiProvider) {
+    let preset = preset_for(&provider.kind);
+    if provider
+        .base_url
+        .as_deref()
+        .is_none_or(|s| s.trim().is_empty())
+    {
+        provider.base_url = Some(preset.base_url);
+    }
+    if provider.model.trim().is_empty() {
+        provider.model = preset.default_model;
+    }
+    if provider.name.trim().is_empty() {
+        provider.name = preset.name;
+    }
+}
+
 #[must_use]
 pub fn preset_for(kind: &AiProviderKind) -> AiProviderPreset {
     match kind {

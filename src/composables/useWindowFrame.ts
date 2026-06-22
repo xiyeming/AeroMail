@@ -1,5 +1,6 @@
 import { ref, watch } from 'vue';
 import { getCurrentWindow } from '@tauri-apps/api/window';
+import { invoke } from '@tauri-apps/api/core';
 import { useSettingsStore } from '@/stores/settings';
 
 export type Decorations = 'system' | 'none';
@@ -13,6 +14,13 @@ export function useWindowFrame() {
 
   async function applyDecorations(value: Decorations) {
     try {
+      // Apply the decoration change through the backend command. On Linux
+      // the runtime window.setDecorations call is not always respected
+      // immediately, so the command defers it slightly.
+      await invoke('apply_window_decorations', {
+        enabled: value === 'system',
+      });
+      // Keep the local window state in sync as a best-effort fallback.
       await win.setDecorations(value === 'system');
     } catch (e) {
       console.error('Failed to apply window decorations:', e);

@@ -1,7 +1,7 @@
 <script setup lang="ts">
-import { computed, ref, onMounted } from 'vue';
+import { computed, ref, onMounted, watch } from 'vue';
 import { invoke } from '@tauri-apps/api/core';
-import { Trash2 } from 'lucide-vue-next';
+import { Trash2, Pencil } from 'lucide-vue-next';
 import { useLocale, type Locale } from '@/composables/useLocale';
 import { useLogConfig } from '@/composables/useLogConfig';
 import { useTheme, type Theme } from '@/composables/useTheme';
@@ -11,6 +11,7 @@ import { useAiStore } from '@/stores/ai';
 import AccountForm from '@/components/AccountForm.vue';
 import BaseSelect from '@/components/BaseSelect.vue';
 import type { AiProviderKind } from '@/types/ai';
+import type { AccountConfig, AccountSummary } from '@/types/account';
 import type { TranslationProviderSummary, TraditionalProviderKind } from '@/types/translation';
 
 const { locale, setLocale, supportedLocales } = useLocale();
@@ -52,6 +53,8 @@ const localeLabels: Record<Locale, string> = {
 const aiStore = useAiStore();
 const accountStore = useAccountStore();
 const showAddForm = ref(false);
+const editingAccount = ref<AccountSummary | null>(null);
+const editingConfig = ref<AccountConfig | null>(null);
 const newName = ref('');
 const newApiKey = ref('');
 const newBaseUrl = ref('');
@@ -72,6 +75,37 @@ const providerKinds: AiProviderKind[] = [
   'custom_openai_compatible',
 ];
 
+const providerPresets: Record<AiProviderKind, { baseUrl: string; model: string }> = {
+  openai: { baseUrl: 'https://api.openai.com/v1', model: 'gpt-4o' },
+  anthropic: { baseUrl: 'https://api.anthropic.com', model: 'claude-3-5-sonnet-20241022' },
+  gemini: {
+    baseUrl: 'https://generativelanguage.googleapis.com/v1beta',
+    model: 'gemini-1.5-flash',
+  },
+  azure_openai: {
+    baseUrl: 'https://your-resource.openai.azure.com',
+    model: 'gpt-4o',
+  },
+  deepseek: { baseUrl: 'https://api.deepseek.com', model: 'deepseek-chat' },
+  moonshot: { baseUrl: 'https://api.moonshot.cn', model: 'moonshot-v1-8k' },
+  qwen: {
+    baseUrl: 'https://dashscope.aliyuncs.com/compatible-mode/v1',
+    model: 'qwen-turbo',
+  },
+  zhipu: { baseUrl: 'https://open.bigmodel.cn/api/paas/v4', model: 'glm-4-flash' },
+  minimax: { baseUrl: 'https://api.minimax.chat/v1', model: 'abab6.5s-chat' },
+  baichuan: { baseUrl: 'https://api.baichuan-ai.com/v1', model: 'Baichuan4' },
+  custom_openai_compatible: { baseUrl: '', model: '' },
+};
+
+watch(selectedKind, (kind) => {
+  if (!showAddForm.value) return;
+  const preset = providerPresets[kind];
+  if (preset) {
+    newBaseUrl.value = preset.baseUrl;
+    newModel.value = preset.model;
+  }
+});
 onMounted(() => {
   void accountStore.loadAccounts();
   void aiStore.loadProviders();
@@ -102,6 +136,37 @@ async function addProvider() {
   await aiStore.loadProviders();
   resetForm();
   showAddForm.value = false;
+}
+
+async function startEdit(account: AccountSummary) {
+  editingAccount.value = account;
+  editingConfig.value = await accountStore.getAccountConfig(account.id);
+}
+
+function cancelEdit() {
+  editingAccount.value = null;
+  editingConfig.value = null;
+}
+
+async function saveAccount(config: AccountConfig, _password: string) {
+  try {
+    if (editingAccount.value) {
+      await accountStore.updateAccount(config, _password || undefined);
+    } else {
+      await accountStore.addAccount(config);
+    }
+    editingAccount.value = null;
+    editingConfig.value = null;
+    showAddForm.value = false;
+  } catch {
+    // error surfaced by store
+  }
+}
+
+async function testAccount(config: AccountConfig, _password: string) {
+  // The form already invokes testConnection through the store; this handler
+  // is only here in case the parent wants to track test state globally.
+  void accountStore.testConnection(config);
 }
 
 async function removeProvider(id: string) {
@@ -301,6 +366,14 @@ async function removeTranslationProvider(id: string) {
           </div>
           <button
             type="button"
+            class="rounded-md p-1.5 text-secondary transition-colors hover:bg-raised hover:text-primary"
+            :aria-label="$t('common.edit')"
+            @click="startEdit(account)"
+          >
+            <Pencil class="h-4 w-4" />
+          </button>
+          <button
+            type="button"
             class="rounded-md p-1.5 text-secondary transition-colors hover:bg-danger-subtle hover:text-danger"
             :aria-label="$t('common.delete')"
             @click="accountStore.deleteAccount(account.id)"
@@ -310,7 +383,31 @@ async function removeTranslationProvider(id: string) {
         </li>
       </ul>
 
-      <AccountForm />
+      <AccountForm
+        v-if="editingAccount"
+        mode="edit"
+        :initial-config="editingConfig"
+        @submit="saveAccount"
+        @test="testAccount"
+        @cancel="cancelEdit"
+      />
+      <template v-else>
+        <button
+          v-if="!showAddForm"
+          type="button"
+          class="mb-4 flex h-9 w-full items-center justify-center rounded-md border border-border bg-base text-sm text-primary transition-colors hover:bg-raised"
+          @click="showAddForm = true"
+        >
+          {{ $t('account.addAccount') }}
+        </button>
+        <AccountForm
+          v-if="showAddForm"
+          mode="add"
+          @submit="saveAccount"
+          @test="testAccount"
+          @cancel="showAddForm = false"
+        />
+      </template>
     </section>
 
     <section class="mt-6 rounded-lg border border-border bg-elevated p-5">

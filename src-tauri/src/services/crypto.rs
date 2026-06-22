@@ -32,8 +32,8 @@ fn get_or_create_master_key() -> Result<[u8; KEY_LEN], AeroError> {
 
     // Prefer the OS keyring if it has a key.
     match entry.get_password() {
-        Ok(hex_key) => return decode_hex_key(&hex_key),
-        Err(keyring::Error::NoEntry) => {}
+        Ok(hex_key) if !hex_key.trim().is_empty() => return decode_hex_key(&hex_key),
+        Ok(_) | Err(keyring::Error::NoEntry) => {}
         Err(e) => {
             return Err(AeroError::Internal(format!(
                 "failed to retrieve master key: {e}"

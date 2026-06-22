@@ -4,7 +4,10 @@ pub mod error;
 pub mod models;
 pub mod services;
 
-use commands::account::{add_account, delete_account, list_accounts, test_account_connection};
+use commands::account::{
+    add_account, delete_account, get_account_config, list_accounts, test_account_connection,
+    update_account,
+};
 use commands::ai::{
     create_chat_session, delete_ai_provider, delete_chat_session, get_chat_messages,
     list_ai_providers, list_chat_sessions, send_chat_message, test_ai_provider, upsert_ai_provider,
@@ -25,6 +28,9 @@ use commands::translation::{
     delete_translation_provider, get_cached_translation, list_translation_providers,
     translate_mail_text, upsert_translation_provider,
 };
+use commands::window::{
+    apply_window_decorations, close_main_window, confirmed_exit, hide_main_window,
+};
 use db::pool::Database;
 use services::account_manager::AccountManager;
 use services::ai::AiService;
@@ -34,7 +40,9 @@ use services::sync::SyncService;
 use services::translation::TranslationService;
 use std::path::PathBuf;
 use std::sync::Arc;
+use tauri::Emitter;
 use tauri::Manager;
+use tauri::WindowEvent;
 use tauri::image::Image;
 use tauri::menu::{MenuBuilder, MenuItemBuilder};
 use tauri::tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent};
@@ -120,6 +128,7 @@ pub fn run() {
         .setup(|app| {
             let handle = app.handle().clone();
 
+            // Hide to tray on minimize and ask before closing.
             // System tray icon with show/quit menu.
             let tray_menu_handle = app.handle();
             let show_item =
@@ -210,10 +219,22 @@ pub fn run() {
             });
             Ok(())
         })
+        .on_window_event(|window, event| match event {
+            WindowEvent::Resized(size) if size.width == 0 && size.height == 0 => {
+                let _ = window.hide();
+            }
+            WindowEvent::CloseRequested { api, .. } => {
+                api.prevent_close();
+                let _ = window.emit("app://close-requested", ());
+            }
+            _ => {}
+        })
         .invoke_handler(tauri::generate_handler![
             greet,
             add_account,
             list_accounts,
+            get_account_config,
+            update_account,
             delete_account,
             test_account_connection,
             set_setting,
@@ -261,6 +282,10 @@ pub fn run() {
             prepare_reply,
             sync_draft_to_imap,
             save_attachment,
+            apply_window_decorations,
+            hide_main_window,
+            confirmed_exit,
+            close_main_window,
         ])
         .run(tauri::generate_context!());
 

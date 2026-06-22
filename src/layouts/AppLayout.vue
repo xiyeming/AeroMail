@@ -1,6 +1,8 @@
 <script setup lang="ts">
-import { computed } from 'vue';
+import { computed, onMounted, onUnmounted, ref } from 'vue';
 import { getCurrentWindow } from '@tauri-apps/api/window';
+import { listen, type UnlistenFn } from '@tauri-apps/api/event';
+import { invoke } from '@tauri-apps/api/core';
 import { Minus, Square, X } from 'lucide-vue-next';
 import { useResponsive } from '@/composables/useResponsive';
 import { useWindowFrame } from '@/composables/useWindowFrame';
@@ -24,8 +26,23 @@ const sidebarWidth = computed(() => (isWideScreen.value ? 'w-64' : 'w-56'));
 const mailListWidth = computed(() => (isWideScreen.value ? 'w-96' : 'w-80'));
 const showCustomTitleBar = computed(() => decorations.value === 'none');
 
+const showCloseConfirm = ref(false);
+let unlistenClose: UnlistenFn | undefined;
+
+onMounted(async () => {
+  unlistenClose = await listen('app://close-requested', () => {
+    showCloseConfirm.value = true;
+  });
+});
+
+onUnmounted(() => {
+  if (unlistenClose) {
+    unlistenClose();
+  }
+});
+
 async function minimizeWindow() {
-  await win.minimize();
+  await win.hide();
 }
 
 async function toggleMaximizeWindow() {
@@ -37,7 +54,16 @@ async function toggleMaximizeWindow() {
 }
 
 async function closeWindow() {
-  await win.close();
+  showCloseConfirm.value = true;
+}
+
+async function confirmClose() {
+  showCloseConfirm.value = false;
+  await invoke('confirmed_exit');
+}
+
+function cancelClose() {
+  showCloseConfirm.value = false;
 }
 </script>
 
@@ -120,5 +146,35 @@ async function closeWindow() {
     <AiAssistantPanel v-if="aiStore.isPanelOpen" />
     <ToastContainer />
     <CommandPalette />
+
+    <!-- Close confirmation dialog -->
+    <div
+      v-if="showCloseConfirm"
+      class="fixed inset-0 z-[100] flex items-center justify-center bg-black/50 p-4"
+      role="dialog"
+      aria-modal="true"
+      :aria-label="$t('common.closeConfirmTitle')"
+    >
+      <div class="w-full max-w-sm rounded-lg border border-border bg-elevated p-5 shadow-lg">
+        <h3 class="mb-2 text-lg font-medium text-primary">{{ $t('common.closeConfirmTitle') }}</h3>
+        <p class="mb-5 text-sm text-secondary">{{ $t('common.closeConfirmMessage') }}</p>
+        <div class="flex justify-end gap-2">
+          <button
+            type="button"
+            class="rounded-md border border-border bg-base px-4 py-2 text-sm text-primary transition-colors hover:bg-raised"
+            @click="cancelClose"
+          >
+            {{ $t('common.cancel') }}
+          </button>
+          <button
+            type="button"
+            class="rounded-md bg-danger px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-danger-hover"
+            @click="confirmClose"
+          >
+            {{ $t('common.close') }}
+          </button>
+        </div>
+      </div>
+    </div>
   </div>
 </template>

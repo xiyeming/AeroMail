@@ -133,6 +133,82 @@ impl AccountManager {
         Ok(accounts)
     }
 
+    /// Updates an existing email account.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`AeroError::AccountNotFound`] if no account with the given ID exists.
+    #[instrument(skip_all, fields(account_id = %config.id), err(Debug))]
+    pub fn update_account(
+        &self,
+        config: &AccountConfig,
+        password: Option<&[u8]>,
+    ) -> Result<(), AeroError> {
+        debug!("updating account in database");
+
+        let auth_credentials: Option<Vec<u8>> =
+            password.map(crypto::encrypt_password).transpose()?;
+
+        let excluded_folders_json = serde_json::to_string(&config.excluded_folders)?;
+        let now = Utc::now().timestamp();
+        let provider_json = serde_json::to_string(&config.provider)?;
+        let tls_mode_json = serde_json::to_string(&config.imap.tls_mode)?;
+
+        let rows = self.db.connection()?.execute(
+            r"
+            UPDATE accounts SET
+                name = ?1,
+                email = ?2,
+                provider = ?3,
+                imap_host = ?4,
+                imap_port = ?5,
+                smtp_host = ?6,
+                smtp_port = ?7,
+                tls_mode = ?8,
+                ca_cert_path = ?9,
+                verify_certificate = ?10,
+                connect_timeout = ?11,
+                read_timeout = ?12,
+                keepalive = ?13,
+                sync_interval = ?14,
+                excluded_folders = ?15,
+                updated_at = ?16
+            WHERE id = ?17
+            ",
+            params![
+                &config.name,
+                &config.email,
+                provider_json,
+                &config.imap.host,
+                config.imap.port,
+                &config.smtp.host,
+                config.smtp.port,
+                tls_mode_json,
+                config.advanced.ca_cert_path,
+                config.advanced.verify_certificate,
+                config.advanced.connect_timeout_secs,
+                config.advanced.read_timeout_secs,
+                config.advanced.keepalive,
+                config.sync_interval_secs,
+                excluded_folders_json,
+                now,
+                &config.id,
+            ],
+        )?;
+
+        if rows == 0 {
+            return Err(AeroError::AccountNotFound(config.id.clone()));
+        }
+
+        if let Some(credentials) = auth_credentials {
+            self.db
+                .update_account_auth_credentials(&config.id, &credentials)?;
+        }
+
+        info!(account_id = %config.id, "account updated");
+        Ok(())
+    }
+
     /// Deletes an email account by its ID.
     ///
     /// # Errors

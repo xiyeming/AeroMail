@@ -28,9 +28,10 @@ pub async fn list_ai_providers(
 #[tauri::command]
 #[instrument(skip(state, provider), fields(provider_id = %provider.id), err(Debug))]
 pub async fn upsert_ai_provider(
-    provider: AiProvider,
+    mut provider: AiProvider,
     state: State<'_, AppState>,
 ) -> Result<String, ErrorPayload> {
+    crate::services::ai::providers::apply_preset_defaults(&mut provider);
     let db = &state.db;
     db.upsert_ai_provider(&provider)
         .map_err(|e| e.to_payload())?;

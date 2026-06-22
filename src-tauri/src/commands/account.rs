@@ -42,6 +42,41 @@ pub async fn list_accounts(
     manager.list_accounts().map_err(|e| e.to_payload())
 }
 
+/// Retrieves the full configuration for an existing account.
+///
+/// # Errors
+///
+/// Returns an error if the account is not found.
+#[tauri::command]
+#[tracing::instrument(skip(state), err(Debug))]
+pub async fn get_account_config(
+    account_id: String,
+    state: State<'_, AppState>,
+) -> Result<AccountConfig, ErrorPayload> {
+    let manager = state.account_manager.read().await;
+    manager
+        .get_account_config(&account_id)
+        .map_err(|e| e.to_payload())
+}
+
+/// Updates an existing email account.
+///
+/// # Errors
+///
+/// Returns an error if the account is not found or the update fails.
+#[tauri::command]
+#[tracing::instrument(skip(state, password), err(Debug))]
+pub async fn update_account(
+    config: AccountConfig,
+    password: Option<Vec<u8>>,
+    state: State<'_, AppState>,
+) -> Result<(), ErrorPayload> {
+    let manager = state.account_manager.read().await;
+    manager
+        .update_account(&config, password.as_deref())
+        .map_err(|e| e.to_payload())
+}
+
 /// Deletes an email account by ID.
 ///
 /// # Errors

@@ -123,6 +123,9 @@
     "testConnection": "Test connection",
     "delete": "Delete",
     "noAccounts": "No accounts yet",
+    "editAccount": "Edit account",
+    "saveAccount": "Save account",
+    "passwordUnchangedHint": "Leave blank to keep the current password.",
     "errors": {
       "nameRequired": "Label is required",
       "emailRequired": "Email address is required",
@@ -235,10 +238,13 @@
     "search": "Search",
     "settings": "Settings",
     "close": "Close",
+    "edit": "Edit",
     "delete": "Delete",
     "confirm": "Confirm",
     "minimize": "Minimize",
-    "maximize": "Maximize"
+    "maximize": "Maximize",
+    "closeConfirmTitle": "Close AeroMail",
+    "closeConfirmMessage": "Are you sure you want to exit AeroMail?"
   },
   "errors": {
     "SMTP_CONNECTION_FAILED": "Could not connect to the outgoing mail server.",

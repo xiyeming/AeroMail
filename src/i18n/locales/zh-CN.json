@@ -123,6 +123,9 @@
     "testConnection": "测试连接",
     "delete": "删除",
     "noAccounts": "暂无账户",
+    "editAccount": "编辑账户",
+    "saveAccount": "保存账户",
+    "passwordUnchangedHint": "留空则保留当前密码。",
     "errors": {
       "nameRequired": "标签不能为空",
       "emailRequired": "邮箱地址不能为空",
@@ -235,10 +238,13 @@
     "search": "搜索",
     "settings": "设置",
     "close": "关闭",
+    "edit": "编辑",
     "delete": "删除",
     "confirm": "确认",
     "minimize": "最小化",
-    "maximize": "最大化"
+    "maximize": "最大化",
+    "closeConfirmTitle": "关闭 AeroMail",
+    "closeConfirmMessage": "确定要退出 AeroMail 吗？"
   },
   "errors": {
     "SMTP_CONNECTION_FAILED": "无法连接到发件服务器。",

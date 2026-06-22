@@ -34,6 +34,22 @@ export const useAccountStore = defineStore('account', () => {
     }
   }
 
+  async function getAccountConfig(accountId: string) {
+    return await call<AccountConfig>('get_account_config', { accountId });
+  }
+
+  async function updateAccount(config: AccountConfig, password?: string) {
+    error.value = null;
+    try {
+      const passwordBytes = password ? Array.from(new TextEncoder().encode(password)) : undefined;
+      await call<void>('update_account', { config, password: passwordBytes });
+      await loadAccounts();
+    } catch (e) {
+      error.value = e instanceof Error ? e.message : String(e);
+      throw e;
+    }
+  }
+
   async function deleteAccount(accountId: string) {
     error.value = null;
     try {
@@ -45,6 +61,10 @@ export const useAccountStore = defineStore('account', () => {
     }
   }
 
+  async function testConnection(config: AccountConfig) {
+    return await call<string>('test_account_connection', { config });
+  }
+
   return {
     accounts,
     loading,
@@ -52,6 +72,9 @@ export const useAccountStore = defineStore('account', () => {
     accountCount,
     loadAccounts,
     addAccount,
+    getAccountConfig,
+    updateAccount,
     deleteAccount,
+    testConnection,
   };
 });

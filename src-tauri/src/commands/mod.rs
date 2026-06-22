@@ -6,3 +6,4 @@ pub mod search;
 pub mod settings;
 pub mod sync;
 pub mod translation;
+pub mod window;

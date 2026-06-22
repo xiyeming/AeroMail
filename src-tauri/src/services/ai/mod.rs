@@ -5,6 +5,7 @@ pub mod providers;
 use crate::db::pool::Database;
 use crate::error::AeroError;
 use crate::models::ai::{AiChatMessage, AiChatSession, AiProviderSummary};
+use crate::services::ai::providers::kind_label;
 use std::sync::Arc;
 
 #[derive(Debug, Clone)]
@@ -38,7 +39,7 @@ impl AiService {
             .map(|p| AiProviderSummary {
                 id: p.id,
                 name: p.name,
-                kind: format!("{:?}", p.kind),
+                kind: kind_label(&p.kind),
                 model: p.model,
             })
             .collect())

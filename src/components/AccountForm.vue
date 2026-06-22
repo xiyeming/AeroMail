@@ -1,9 +1,26 @@
 <script setup lang="ts">
-import { computed, ref } from 'vue';
+import { computed, ref, watch } from 'vue';
 import { useI18n } from 'vue-i18n';
 import { useAccountStore } from '@/stores/account';
 import BaseSelect from '@/components/BaseSelect.vue';
 import type { AccountConfig, MailProvider } from '@/types/account';
+
+const props = withDefaults(
+  defineProps<{
+    mode?: 'add' | 'edit';
+    initialConfig?: AccountConfig | null;
+  }>(),
+  {
+    mode: 'add',
+    initialConfig: null,
+  }
+);
+
+const emit = defineEmits<{
+  submit: [config: AccountConfig, password: string];
+  test: [config: AccountConfig, password: string];
+  cancel: [];
+}>();
 
 const { t } = useI18n();
 const accountStore = useAccountStore();
@@ -32,7 +49,7 @@ const providerDefaults: Record<MailProvider, { imap: string; smtp: string }> = {
   Custom: { imap: '', smtp: '' },
 };
 
-const config = ref<AccountConfig>({
+const defaultConfig = (): AccountConfig => ({
   id: '',
   name: '',
   email: '',
@@ -51,8 +68,27 @@ const config = ref<AccountConfig>({
   excludedFolders: [],
 });
 
+const config = ref<AccountConfig>(defaultConfig());
 const password = ref('');
 const validationError = ref<string | null>(null);
+const testing = ref(false);
+const testMessage = ref<string | null>(null);
+
+watch(
+  () => props.initialConfig,
+  (value) => {
+    if (value) {
+      config.value = JSON.parse(JSON.stringify(value));
+      password.value = '';
+    } else {
+      config.value = defaultConfig();
+      password.value = '';
+    }
+    validationError.value = null;
+    testMessage.value = null;
+  },
+  { immediate: true }
+);
 
 function updateProvider(provider: MailProvider) {
   config.value.provider = provider;
@@ -78,7 +114,7 @@ function validate(): boolean {
     validationError.value = t('account.errors.smtpRequired');
     return false;
   }
-  if (config.value.auth.type === 'Password' && !password.value) {
+  if (props.mode === 'add' && config.value.auth.type === 'Password' && !password.value) {
     validationError.value = t('account.errors.passwordRequired');
     return false;
   }
@@ -86,26 +122,39 @@ function validate(): boolean {
   return true;
 }
 
-async function handleSubmit() {
+function buildConfig(): AccountConfig {
+  const cloned: AccountConfig = JSON.parse(JSON.stringify(config.value));
+  if (cloned.auth.type === 'Password' && password.value) {
+    cloned.auth.passwordEncrypted = Array.from(new TextEncoder().encode(password.value));
+  }
+  if (!cloned.email) {
+    cloned.email = cloned.name;
+  }
+  return cloned;
+}
+
+async function handleTest() {
   if (!validate()) return;
-
-  if (config.value.auth.type === 'Password') {
-    config.value.auth.passwordEncrypted = Array.from(new TextEncoder().encode(password.value));
-  }
-
-  if (!config.value.email) {
-    config.value.email = config.value.name;
-  }
-
+  testing.value = true;
+  testMessage.value = null;
   accountStore.error = null;
   try {
-    await accountStore.addAccount(config.value);
-    if (!accountStore.error) {
-      password.value = '';
-    }
+    const result = await accountStore.testConnection(buildConfig());
+    testMessage.value = result;
   } catch {
-    // Error is already surfaced by accountStore.error; no need to rethrow.
+    testMessage.value = null;
+  } finally {
+    testing.value = false;
   }
+}
+
+async function handleSubmit() {
+  if (!validate()) return;
+  emit('submit', buildConfig(), password.value);
+}
+
+function handleCancel() {
+  emit('cancel');
 }
 </script>
 
@@ -114,7 +163,9 @@ async function handleSubmit() {
     class="space-y-5 rounded-lg border border-border bg-elevated p-5"
     @submit.prevent="handleSubmit"
   >
-    <h2 class="text-lg font-medium text-primary">{{ $t('account.addAccount') }}</h2>
+    <h2 class="text-lg font-medium text-primary">
+      {{ mode === 'edit' ? $t('account.editAccount') : $t('account.addAccount') }}
+    </h2>
 
     <div class="space-y-1.5">
       <label for="account-provider" class="text-sm text-secondary">{{
@@ -213,17 +264,40 @@ async function handleSubmit() {
         class="h-9 w-full rounded-md border border-border bg-base px-3 text-sm text-primary outline-none placeholder:text-tertiary focus:border-accent"
         :placeholder="t('account.passwordPlaceholder')"
       />
+      <p v-if="mode === 'edit'" class="text-xs text-tertiary">
+        {{ $t('account.passwordUnchangedHint') }}
+      </p>
     </div>
 
     <p v-if="validationError || accountStore.error" class="text-sm text-danger">
       {{ validationError || accountStore.error }}
     </p>
+    <p v-else-if="testMessage" class="text-sm text-success">{{ testMessage }}</p>
+
+    <div class="flex gap-2">
+      <button
+        type="button"
+        class="h-9 flex-1 rounded-md border border-border bg-base text-sm font-medium text-primary transition-colors hover:bg-raised disabled:opacity-50"
+        :disabled="testing"
+        @click="handleTest"
+      >
+        {{ testing ? $t('common.loading') : $t('account.testConnection') }}
+      </button>
+      <button
+        v-if="mode === 'edit'"
+        type="button"
+        class="h-9 flex-1 rounded-md border border-border bg-base text-sm font-medium text-primary transition-colors hover:bg-raised"
+        @click="handleCancel"
+      >
+        {{ $t('common.cancel') }}
+      </button>
+    </div>
 
     <button
       type="submit"
       class="h-9 w-full rounded-md bg-accent text-sm font-medium text-white transition-colors hover:bg-accent-hover"
     >
-      {{ $t('account.addAccount') }}
+      {{ mode === 'edit' ? $t('account.saveAccount') : $t('account.addAccount') }}
     </button>
   </form>
 </template>

@@ -198,8 +198,8 @@ function extractRemoteDomains(html: string): string[] {
     }
   };
 
-  // src / href / background attributes (support protocol-relative URLs)
-  const attrRe = /(?:src|href|background)\s*=\s*["']((?:https?:)?\/\/[^"']+)["']/gi;
+  // src / href / data attributes (support protocol-relative URLs)
+  const attrRe = /(?:src|href|data-src|data-original|poster|background)\s*=\s*["']((?:https?:)?\/\/[^"']+)["']/gi;
   let match: RegExpExecArray | null;
   while ((match = attrRe.exec(html)) !== null) {
     capture(match[1]);
@@ -245,7 +245,7 @@ const allowedDomains = computed(() => [
 
 const untrustedDomains = computed(() =>
   remoteDomains.value.filter(
-    (d) => !allowedDomains.value.includes(d)
+    (d) => !allowedDomains.value.includes(d) && !allowedDomains.value.includes('*')
   )
 );
 
@@ -253,6 +253,10 @@ const showSecurityBanner = computed(() => untrustedDomains.value.length > 0);
 
 function allowRemoteOnce() {
   temporarilyAllowedDomains.value = [...untrustedDomains.value];
+}
+
+function allowAllRemoteOnce() {
+  temporarilyAllowedDomains.value = ['*'];
 }
 
 async function trustDomain(domain: string) {
@@ -523,6 +527,13 @@ watch(currentMailId, (newMailId) => {
                 @click="allowRemoteOnce"
               >
                 {{ t('mail.allowOnce') }}
+              </button>
+              <button
+                type="button"
+                class="rounded px-2 py-1 text-xs font-medium text-warning transition-colors hover:bg-warning/10"
+                @click="allowAllRemoteOnce"
+              >
+                {{ t('mail.allowAllOnce') }}
               </button>
               <button
                 v-for="domain in untrustedDomains"

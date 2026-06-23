@@ -66,6 +66,7 @@
     "remoteContentBlocked": "Remote content blocked",
     "remoteContentHint": "External images and styles are hidden to protect your privacy.",
     "allowOnce": "Allow once",
+    "allowAllOnce": "Allow all once",
     "alwaysTrustDomain": "Always trust {domain}"
   },
   "compose": {

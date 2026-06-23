@@ -66,6 +66,7 @@
     "remoteContentBlocked": "远程内容已被拦截",
     "remoteContentHint": "为保护隐私，外部图片和样式已被隐藏。",
     "allowOnce": "临时允许",
+    "allowAllOnce": "临时允许全部",
     "alwaysTrustDomain": "始终信任 {domain}"
   },
   "compose": {

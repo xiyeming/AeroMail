@@ -14,8 +14,27 @@ function buildCsp(): string {
     .map((d) => d.trim())
     .filter(Boolean);
 
-  // Allow exact host and its subdomains for each trusted domain.
-  const hosts = allowed.flatMap((domain) => [domain, `*.${domain}`]);
+  if (allowed.includes('*')) {
+    return [
+      "default-src 'none'",
+      "img-src 'self' data: cid: http: https:",
+      "style-src 'unsafe-inline' 'self' http: https:",
+      "font-src 'self' http: https:",
+      "media-src 'self' http: https:",
+      "script-src 'none'",
+    ].join('; ');
+  }
+
+  // Allow exact host, its direct subdomains, and (for deep hosts) sibling
+  // subdomains under the parent domain.
+  const hosts = allowed.flatMap((domain) => {
+    const labels = domain.split('.');
+    const entries = [domain, `*.${domain}`];
+    if (labels.length >= 3) {
+      entries.push(`*.${labels.slice(1).join('.')}`);
+    }
+    return entries;
+  });
 
   const imgSrc = ["'self'", 'data:', 'cid:', ...hosts].join(' ');
   const styleSrc = ["'unsafe-inline'", "'self'", ...hosts].join(' ');

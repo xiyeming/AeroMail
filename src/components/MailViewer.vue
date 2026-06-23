@@ -555,6 +555,7 @@ watch(currentMailId, (newMailId) => {
 
         <SandboxedHtml
           v-if="mail.bodyHtml"
+          :key="`${currentMailId}-${allowedDomains.join(',')}`"
           :html="mail.bodyHtml"
           :allowed-domains="allowedDomains"
           class="prose prose-sm max-w-none text-primary"

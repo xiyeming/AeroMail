@@ -90,21 +90,18 @@ function renderHtml() {
           color: #666;
         }
         table {
-          border-collapse: collapse;
           max-width: 100%;
         }
+        /* Respect email-defined table cell styling; don't force borders. */
         th, td {
-          border: 1px solid #ddd;
-          padding: 8px;
-          text-align: left;
+          border: initial;
+          padding: initial;
+          text-align: initial;
+          background: initial;
         }
-        th {
-          background: #f5f5f5;
-        }
-        /* 防止邮件内容破坏布局 */
+        /* Prevent email content from breaking layout while preserving flow. */
         body > * {
           max-width: 100%;
-          overflow: hidden;
         }
       </style>
     </head>

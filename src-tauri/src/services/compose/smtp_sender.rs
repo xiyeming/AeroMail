@@ -1,25 +1,31 @@
+use std::time::Duration;
+
 use lettre::address::{Address, Envelope};
 use lettre::transport::smtp::authentication::{Credentials, Mechanism};
-use lettre::transport::smtp::client::{Tls, TlsParameters};
+use lettre::transport::smtp::client::{Certificate, Tls, TlsParameters};
 use lettre::{AsyncSmtpTransport, AsyncTransport, Tokio1Executor};
+use tracing::{debug, info, instrument};
 
 use crate::error::AeroError;
 use crate::models::account::{AccountConfig, AuthConfig, TlsMode};
 
 /// Sends a pre-built MIME message via SMTP.
+#[instrument(skip_all, fields(host = %config.smtp.host, port = config.smtp.port, tls_mode = ?config.smtp.tls_mode), err(Debug))]
 pub async fn send_message(config: &AccountConfig, message_bytes: Vec<u8>) -> Result<(), AeroError> {
+    info!("building SMTP transport");
     let creds = build_credentials(config);
-
-    let tls_parameters = TlsParameters::new(config.smtp.host.clone())
-        .map_err(|e| AeroError::SmtpConnectionFailed(e.to_string()))?;
+    let tls_parameters = build_tls_parameters(config)?;
 
     let mailer = match config.smtp.tls_mode {
         TlsMode::Required => AsyncSmtpTransport::<Tokio1Executor>::relay(&config.smtp.host)
             .map_err(|e| AeroError::SmtpConnectionFailed(e.to_string()))?
             .port(config.smtp.port)
-            .tls(Tls::Required(tls_parameters))
+            .tls(Tls::Wrapper(tls_parameters))
             .credentials(creds)
             .authentication(auth_mechanisms(config))
+            .timeout(Some(Duration::from_secs(
+                config.advanced.connect_timeout_secs,
+            )))
             .build(),
         TlsMode::StartTls => {
             AsyncSmtpTransport::<Tokio1Executor>::starttls_relay(&config.smtp.host)
@@ -28,6 +34,9 @@ pub async fn send_message(config: &AccountConfig, message_bytes: Vec<u8>) -> Res
                 .tls(Tls::Required(tls_parameters))
                 .credentials(creds)
                 .authentication(auth_mechanisms(config))
+                .timeout(Some(Duration::from_secs(
+                    config.advanced.connect_timeout_secs,
+                )))
                 .build()
         }
         TlsMode::None => {
@@ -35,6 +44,9 @@ pub async fn send_message(config: &AccountConfig, message_bytes: Vec<u8>) -> Res
                 .port(config.smtp.port)
                 .credentials(creds)
                 .authentication(auth_mechanisms(config))
+                .timeout(Some(Duration::from_secs(
+                    config.advanced.connect_timeout_secs,
+                )))
                 .build()
         }
     };
@@ -42,6 +54,7 @@ pub async fn send_message(config: &AccountConfig, message_bytes: Vec<u8>) -> Res
     // Parse the envelope from the MIME message bytes
     let envelope = parse_envelope_from_mime(&message_bytes)?;
 
+    debug!("sending raw message over SMTP");
     mailer
         .send_raw(&envelope, &message_bytes)
         .await
@@ -57,7 +70,29 @@ pub async fn send_message(config: &AccountConfig, message_bytes: Vec<u8>) -> Res
             AeroError::SmtpConnectionFailed(e.to_string())
         })?;
 
+    info!("SMTP send complete");
     Ok(())
+}
+
+fn build_tls_parameters(config: &AccountConfig) -> Result<TlsParameters, AeroError> {
+    let mut builder = TlsParameters::builder(config.smtp.host.clone());
+
+    if !config.advanced.verify_certificate {
+        builder = builder.dangerous_accept_invalid_certs(true);
+    }
+
+    if let Some(path) = &config.advanced.ca_cert_path {
+        debug!(ca_cert_path = %path, "loading custom CA certificate");
+        let cert_bytes = std::fs::read(path)
+            .map_err(|e| AeroError::SmtpConnectionFailed(format!("cannot read CA cert: {e}")))?;
+        let cert = Certificate::from_pem(&cert_bytes)
+            .map_err(|e| AeroError::SmtpConnectionFailed(format!("invalid CA cert: {e}")))?;
+        builder = builder.add_root_certificate(cert);
+    }
+
+    builder
+        .build()
+        .map_err(|e| AeroError::SmtpConnectionFailed(e.to_string()))
 }
 
 fn build_credentials(config: &AccountConfig) -> Credentials {

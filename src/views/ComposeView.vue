@@ -17,10 +17,11 @@
     <div class="flex items-center gap-3 border-t border-border p-3">
       <button
         type="button"
-        class="rounded-md border border-border bg-elevated px-3 py-2 text-sm text-primary transition-colors hover:bg-raised"
+        class="rounded-md border border-border bg-elevated px-3 py-2 text-sm text-primary transition-colors hover:bg-raised disabled:opacity-50"
+        :disabled="isAttaching"
         @click="addAttachment"
       >
-        {{ $t('compose.addAttachment') }}
+        {{ isAttaching ? $t('compose.attaching') : $t('compose.addAttachment') }}
       </button>
       <span v-if="store.saving" class="text-xs text-tertiary">{{ $t('compose.saving') }}</span>
       <span v-else-if="store.draft.savedAt > 0" class="text-xs text-tertiary">{{
@@ -40,7 +41,7 @@
 </template>
 
 <script setup lang="ts">
-import { onMounted, computed } from 'vue';
+import { onMounted, computed, ref } from 'vue';
 import { useRoute } from 'vue-router';
 import { Loader2 } from 'lucide-vue-next';
 import { useTauriInvoke } from '@/composables/useTauriInvoke';
@@ -61,6 +62,7 @@ const { call } = useTauriInvoke();
 const { t } = useI18n();
 
 const accounts = computed(() => accountStore.accounts);
+const isAttaching = ref(false);
 
 onMounted(async () => {
   await accountStore.loadAccounts();
@@ -97,13 +99,23 @@ async function ensureDraftId(): Promise<string | null> {
   return store.draft.id || null;
 }
 
+function readFileAsArrayBuffer(file: File): Promise<ArrayBuffer> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(reader.result as ArrayBuffer);
+    reader.onerror = () =>
+      reject(new Error(t('compose.attachmentReadFailed', { name: file.name })));
+    reader.readAsArrayBuffer(file);
+  });
+}
+
 async function handleImagePasted(file: File) {
   const draftId = await ensureDraftId();
   if (!draftId) return;
 
-  const reader = new FileReader();
-  reader.onload = async () => {
-    const arrayBuffer = reader.result as ArrayBuffer;
+  isAttaching.value = true;
+  try {
+    const arrayBuffer = await readFileAsArrayBuffer(file);
     const base64 = btoa(
       new Uint8Array(arrayBuffer).reduce((data, byte) => data + String.fromCharCode(byte), '')
     );
@@ -117,25 +129,24 @@ async function handleImagePasted(file: File) {
       contentId,
       previewUrl: `data:${file.type};base64,${base64}`,
     };
-    try {
-      await call('save_attachment', {
-        draftId,
-        attachment,
-        data: Array.from(new Uint8Array(arrayBuffer)),
-      });
-      store.draft.attachments.push(attachment);
-      const imgHtml = `<img src="cid:${contentId}" alt="${attachment.filename}" />`;
-      store.draft.bodyHtml += imgHtml;
-      await store.saveNow();
-    } catch (e) {
-      toast.add({
-        type: 'error',
-        message: e instanceof Error ? e.message : String(e),
-        duration: 5000,
-      });
-    }
-  };
-  reader.readAsArrayBuffer(file);
+    await call('save_attachment', {
+      draftId,
+      attachment,
+      data: Array.from(new Uint8Array(arrayBuffer)),
+    });
+    store.draft.attachments.push(attachment);
+    const imgHtml = `<img src="cid:${contentId}" alt="${attachment.filename}" />`;
+    store.draft.bodyHtml += imgHtml;
+    await store.saveNow();
+  } catch (e) {
+    toast.add({
+      type: 'error',
+      message: e instanceof Error ? e.message : String(e),
+      duration: 5000,
+    });
+  } finally {
+    isAttaching.value = false;
+  }
 }
 
 async function addAttachment() {
@@ -146,10 +157,13 @@ async function addAttachment() {
   input.type = 'file';
   input.multiple = true;
   input.onchange = async () => {
-    for (const file of Array.from(input.files ?? [])) {
-      const reader = new FileReader();
-      reader.onload = async () => {
-        const arrayBuffer = reader.result as ArrayBuffer;
+    const files = Array.from(input.files ?? []);
+    if (files.length === 0) return;
+
+    isAttaching.value = true;
+    try {
+      for (const file of files) {
+        const arrayBuffer = await readFileAsArrayBuffer(file);
         const attachment: AttachmentDraft = {
           id: crypto.randomUUID(),
           filename: file.name,
@@ -157,23 +171,22 @@ async function addAttachment() {
           size: file.size,
           isInline: false,
         };
-        try {
-          await call('save_attachment', {
-            draftId,
-            attachment,
-            data: Array.from(new Uint8Array(arrayBuffer)),
-          });
-          store.draft.attachments.push(attachment);
-          await store.saveNow();
-        } catch (e) {
-          toast.add({
-            type: 'error',
-            message: e instanceof Error ? e.message : String(e),
-            duration: 5000,
-          });
-        }
-      };
-      reader.readAsArrayBuffer(file);
+        await call('save_attachment', {
+          draftId,
+          attachment,
+          data: Array.from(new Uint8Array(arrayBuffer)),
+        });
+        store.draft.attachments.push(attachment);
+      }
+      await store.saveNow();
+    } catch (e) {
+      toast.add({
+        type: 'error',
+        message: e instanceof Error ? e.message : String(e),
+        duration: 5000,
+      });
+    } finally {
+      isAttaching.value = false;
     }
   };
   input.click();

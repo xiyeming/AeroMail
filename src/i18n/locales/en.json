@@ -117,7 +117,9 @@
     "richText": "Rich text",
     "markdown": "Markdown",
     "plainText": "Plain text",
-    "sending": "Sending..."
+    "sending": "Sending...",
+    "attaching": "Adding attachment...",
+    "attachmentReadFailed": "Failed to read attachment {name}"
   },
   "account": {
     "addAccount": "Add account",
@@ -311,7 +313,11 @@
     "title": "To-dos",
     "add": "Add",
     "placeholder": "Add a to-do...",
-    "noItems": "No to-dos yet."
+    "noItems": "No to-dos yet.",
+    "reminder": "Reminder",
+    "markDone": "Mark as done",
+    "markUndone": "Mark as not done",
+    "completedAt": "Completed at {time}"
   },
   "statusBar": {
     "syncing": "Syncing...",

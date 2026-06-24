@@ -117,7 +117,9 @@
     "richText": "富文本",
     "markdown": "Markdown",
     "plainText": "纯文本",
-    "sending": "发送中..."
+    "sending": "发送中...",
+    "attaching": "添加附件中...",
+    "attachmentReadFailed": "读取附件 {name} 失败"
   },
   "account": {
     "addAccount": "添加账户",
@@ -311,7 +313,11 @@
     "title": "待办事项",
     "add": "添加",
     "placeholder": "添加待办...",
-    "noItems": "暂无待办事项。"
+    "noItems": "暂无待办事项。",
+    "reminder": "提醒时间",
+    "markDone": "标记为完成",
+    "markUndone": "标记为未完成",
+    "completedAt": "完成于 {time}"
   },
   "statusBar": {
     "syncing": "同步中...",

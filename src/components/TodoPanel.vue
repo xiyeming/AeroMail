@@ -1,13 +1,15 @@
 <script setup lang="ts">
 import { ref, nextTick, computed } from 'vue';
-import { ListTodo, Plus, Trash2, X, Check } from 'lucide-vue-next';
+import { ListTodo, Plus, Trash2, X, Check, Bell } from 'lucide-vue-next';
 import { useTodoStore } from '@/stores/todo';
 
 const todoStore = useTodoStore();
 
 const newTodoText = ref('');
+const newTodoReminder = ref('');
 const editingId = ref<string | null>(null);
 const editText = ref('');
+const editReminder = ref('');
 const editInputRef = ref<HTMLInputElement | null>(null);
 
 const sortedItems = computed(() => {
@@ -19,8 +21,12 @@ const sortedItems = computed(() => {
 
 function handleAdd() {
   if (!newTodoText.value.trim()) return;
-  todoStore.addTodo(newTodoText.value);
+  const reminderAt = newTodoReminder.value
+    ? new Date(newTodoReminder.value).getTime()
+    : undefined;
+  todoStore.addTodo(newTodoText.value, undefined, reminderAt);
   newTodoText.value = '';
+  newTodoReminder.value = '';
 }
 
 function handleKeydown(event: KeyboardEvent) {
@@ -29,9 +35,12 @@ function handleKeydown(event: KeyboardEvent) {
   }
 }
 
-function startEdit(item: { id: string; text: string }) {
+function startEdit(item: { id: string; text: string; reminderAt?: number }) {
   editingId.value = item.id;
   editText.value = item.text;
+  editReminder.value = item.reminderAt
+    ? new Date(item.reminderAt).toISOString().slice(0, 16)
+    : '';
   void nextTick(() => {
     editInputRef.value?.focus();
   });
@@ -39,15 +48,21 @@ function startEdit(item: { id: string; text: string }) {
 
 function commitEdit() {
   if (editingId.value) {
+    const reminderAt = editReminder.value
+      ? new Date(editReminder.value).getTime()
+      : undefined;
     todoStore.updateText(editingId.value, editText.value);
+    todoStore.setReminder(editingId.value, reminderAt);
   }
   editingId.value = null;
   editText.value = '';
+  editReminder.value = '';
 }
 
 function cancelEdit() {
   editingId.value = null;
   editText.value = '';
+  editReminder.value = '';
 }
 
 function handleEditKeydown(event: KeyboardEvent) {
@@ -60,6 +75,10 @@ function handleEditKeydown(event: KeyboardEvent) {
 
 function clearCompleted() {
   todoStore.clearCompleted();
+}
+
+function formatReminder(timestamp: number): string {
+  return new Date(timestamp).toLocaleString();
 }
 </script>
 
@@ -102,32 +121,53 @@ function clearCompleted() {
             :key="item.id"
             class="group flex items-start gap-2 rounded-md p-1.5 transition-colors hover:bg-raised"
           >
-            <input
-              :id="`todo-${item.id}`"
-              v-model="item.done"
-              type="checkbox"
-              class="mt-1 h-4 w-4 rounded border-border text-accent focus:ring-accent"
-              @change="todoStore.toggleDone(item.id)"
-            />
+            <button
+              type="button"
+              class="mt-1 flex h-4 w-4 shrink-0 items-center justify-center rounded border border-border bg-base transition-colors hover:border-accent"
+              :class="{ 'border-accent bg-accent text-white': item.done }"
+              :aria-label="item.done ? $t('todo.markUndone') : $t('todo.markDone')"
+              @click.stop="todoStore.toggleDone(item.id)"
+            >
+              <Check v-if="item.done" class="h-3 w-3" />
+            </button>
             <div class="min-w-0 flex-1">
-              <input
-                v-if="editingId === item.id"
-                ref="editInputRef"
-                v-model="editText"
-                type="text"
-                class="w-full rounded border border-border bg-base px-1.5 py-0.5 text-sm text-primary outline-none focus:border-accent"
-                @keydown="handleEditKeydown"
-                @blur="commitEdit"
-              />
-              <label
-                v-else
-                :for="`todo-${item.id}`"
-                class="cursor-pointer text-sm text-secondary"
-                :class="{ 'text-tertiary line-through': item.done }"
-                @click="startEdit(item)"
-              >
-                {{ item.text }}
-              </label>
+              <div v-if="editingId === item.id" class="space-y-2">
+                <input
+                  ref="editInputRef"
+                  v-model="editText"
+                  type="text"
+                  class="w-full rounded border border-border bg-base px-1.5 py-0.5 text-sm text-primary outline-none focus:border-accent"
+                  @keydown="handleEditKeydown"
+                  @blur="commitEdit"
+                />
+                <input
+                  v-model="editReminder"
+                  type="datetime-local"
+                  class="w-full rounded border border-border bg-base px-1.5 py-0.5 text-xs text-primary outline-none focus:border-accent"
+                  @blur="commitEdit"
+                />
+              </div>
+              <div v-else @click="startEdit(item)">
+                <p
+                  class="cursor-pointer text-sm text-secondary"
+                  :class="{ 'text-tertiary line-through': item.done }"
+                >
+                  {{ item.text }}
+                </p>
+                <p
+                  v-if="item.reminderAt"
+                  class="mt-0.5 flex items-center gap-1 text-xs text-tertiary"
+                >
+                  <Bell class="h-3 w-3" />
+                  {{ formatReminder(item.reminderAt) }}
+                </p>
+                <p
+                  v-if="item.completedAt"
+                  class="mt-0.5 text-xs text-tertiary"
+                >
+                  {{ $t('todo.completedAt', { time: formatReminder(item.completedAt) }) }}
+                </p>
+              </div>
             </div>
             <button
               type="button"
@@ -154,6 +194,12 @@ function clearCompleted() {
             class="flex-1 rounded-md border border-border bg-base px-3 py-2 text-sm text-primary outline-none placeholder:text-tertiary focus:border-accent"
             :placeholder="$t('todo.placeholder')"
             @keydown="handleKeydown"
+          />
+          <input
+            v-model="newTodoReminder"
+            type="datetime-local"
+            class="w-40 rounded-md border border-border bg-base px-2 py-2 text-xs text-primary outline-none placeholder:text-tertiary focus:border-accent"
+            :title="$t('todo.reminder')"
           />
           <button
             type="button"

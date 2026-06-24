@@ -112,20 +112,24 @@ impl ComposeService {
         smtp_sender::send_message(&account_config, message_bytes.clone()).await?;
 
         // Append a copy to the IMAP Sent folder so the message appears there.
-        let sent_folder = Self::append_to_sent_folder(&account_config, &message_bytes)
-            .await
-            .ok();
-
-        // Always keep a local copy so the Sent virtual folder shows the mail
-        // immediately, even before the next IMAP sync.
-        if let Some(ref folder_path) = sent_folder {
-            if let Err(e) = self.save_local_sent_copy(&account_config, folder_path, &message_bytes)
-            {
+        let sent_folder = match Self::append_to_sent_folder(&account_config, &message_bytes).await {
+            Ok(path) => path,
+            Err(e) => {
                 warn!(
-                    "Failed to save local sent copy for account {}: {}",
+                    "Failed to append sent message to IMAP for account {}: {}",
                     account_id, e
                 );
+                "Sent".to_string()
             }
+        };
+
+        // Always keep a local copy so the Sent virtual folder shows the mail
+        // immediately, even if the IMAP append failed or before the next sync.
+        if let Err(e) = self.save_local_sent_copy(&account_config, &sent_folder, &message_bytes) {
+            warn!(
+                "Failed to save local sent copy for account {}: {}",
+                account_id, e
+            );
         }
 
         // Clean up local draft

@@ -7,6 +7,9 @@ export interface TodoItem {
   done: boolean;
   mailId?: string;
   createdAt: number;
+  reminderAt?: number;
+  completedAt?: number;
+  completionLog: number[];
 }
 
 let idCounter = 0;
@@ -23,7 +26,7 @@ export const useTodoStore = defineStore('todo', () => {
   const pendingItems = computed(() => items.value.filter((i) => !i.done));
   const doneItems = computed(() => items.value.filter((i) => i.done));
 
-  function addTodo(text: string, mailId?: string) {
+  function addTodo(text: string, mailId?: string, reminderAt?: number) {
     const trimmed = text.trim();
     if (!trimmed) return;
     items.value.push({
@@ -32,6 +35,8 @@ export const useTodoStore = defineStore('todo', () => {
       done: false,
       mailId,
       createdAt: Date.now(),
+      reminderAt,
+      completionLog: [],
     });
   }
 
@@ -43,6 +48,13 @@ export const useTodoStore = defineStore('todo', () => {
     const item = items.value.find((i) => i.id === id);
     if (item) {
       item.done = !item.done;
+      if (item.done) {
+        const now = Date.now();
+        item.completedAt = now;
+        item.completionLog.push(now);
+      } else {
+        item.completedAt = undefined;
+      }
     }
   }
 
@@ -50,6 +62,13 @@ export const useTodoStore = defineStore('todo', () => {
     const item = items.value.find((i) => i.id === id);
     if (item) {
       item.text = text.trim();
+    }
+  }
+
+  function setReminder(id: string, reminderAt?: number) {
+    const item = items.value.find((i) => i.id === id);
+    if (item) {
+      item.reminderAt = reminderAt;
     }
   }
 
@@ -87,6 +106,7 @@ export const useTodoStore = defineStore('todo', () => {
     removeTodo,
     toggleDone,
     updateText,
+    setReminder,
     setFromAiTodos,
     togglePanel,
     openPanel,

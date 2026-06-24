@@ -70,6 +70,7 @@ const selectedTranslationProviderId = ref('');
 const translationTargetLang = ref(getDefaultTargetLang());
 const summaryText = ref('');
 const isSummarizing = ref(false);
+const isExtractingTodos = ref(false);
 
 async function loadTranslationProviders() {
   translationProviders.value = await listTranslationProviders();
@@ -242,6 +243,7 @@ async function handleQuickAction(action: 'summarize' | 'extractTodos') {
   }
 
   if (action === 'extractTodos') {
+    isExtractingTodos.value = true;
     try {
       const items = await extractTodos(currentMailId.value, providerId);
       todoStore.setFromAiTodos(items, currentMailId.value);
@@ -252,6 +254,8 @@ async function handleQuickAction(action: 'summarize' | 'extractTodos') {
         message: e instanceof Error ? e.message : String(e),
         duration: 5000,
       });
+    } finally {
+      isExtractingTodos.value = false;
     }
     return;
   }
@@ -573,6 +577,8 @@ watchEffect(() => {
       <!-- Toolbar -->
       <div class="flex items-center justify-between border-b border-border px-3 py-2">
         <AiQuickActions
+          :is-summarizing="isSummarizing"
+          :is-extracting-todos="isExtractingTodos"
           @summarize="handleQuickAction('summarize')"
           @extract-todos="handleQuickAction('extractTodos')"
         />

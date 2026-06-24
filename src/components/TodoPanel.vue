@@ -149,18 +149,18 @@ function clearEditReminder() {
                   @blur="commitEdit"
                 />
                 <div class="flex items-center gap-2">
-                  <input
-                    v-model="editReminder"
-                    type="datetime-local"
-                    class="sr-only"
-                    @blur="commitEdit"
-                  />
                   <label
-                    class="flex h-7 w-7 shrink-0 cursor-pointer items-center justify-center rounded border border-border transition-colors"
+                    class="relative flex h-7 w-7 shrink-0 cursor-pointer items-center justify-center rounded border border-border transition-colors"
                     :class="editReminder ? 'border-accent/50 text-accent' : 'text-secondary hover:text-primary'"
                     :title="$t('todo.reminder')"
                   >
                     <Bell class="h-3.5 w-3.5" />
+                    <input
+                      v-model="editReminder"
+                      type="datetime-local"
+                      class="absolute inset-0 opacity-0 cursor-pointer"
+                      @blur="commitEdit"
+                    />
                   </label>
                   <div v-if="editReminder" class="flex min-w-0 flex-1 items-center gap-1 text-xs text-tertiary">
                     <Clock class="h-3 w-3 shrink-0" />
@@ -224,17 +224,17 @@ function clearEditReminder() {
             :placeholder="$t('todo.placeholder')"
             @keydown="handleKeydown"
           />
-          <input
-            v-model="newTodoReminder"
-            type="datetime-local"
-            class="sr-only"
-          />
           <label
-            class="flex h-9 w-9 shrink-0 cursor-pointer items-center justify-center rounded-md border border-border transition-colors"
+            class="relative flex h-9 w-9 shrink-0 cursor-pointer items-center justify-center rounded-md border border-border transition-colors"
             :class="newTodoReminder ? 'border-accent/50 text-accent' : 'text-secondary hover:text-primary hover:bg-raised'"
             :title="$t('todo.reminder')"
           >
             <Bell class="h-4 w-4" />
+            <input
+              v-model="newTodoReminder"
+              type="datetime-local"
+              class="absolute inset-0 opacity-0 cursor-pointer"
+            />
           </label>
           <button
             type="button"

@@ -156,9 +156,21 @@ async function addAttachment() {
   const input = document.createElement('input');
   input.type = 'file';
   input.multiple = true;
+  // Keep the input in the DOM while the picker is open and files are read.
+  // Some WebKit builds (e.g. Tauri on Linux) silently ignore clicks on
+  // detached inputs, so we hide it instead of leaving it unmounted.
+  input.style.position = 'fixed';
+  input.style.opacity = '0';
+  input.style.pointerEvents = 'none';
+  input.style.left = '-9999px';
+  document.body.appendChild(input);
+
   input.onchange = async () => {
     const files = Array.from(input.files ?? []);
-    if (files.length === 0) return;
+    if (files.length === 0) {
+      document.body.removeChild(input);
+      return;
+    }
 
     isAttaching.value = true;
     try {
@@ -187,8 +199,18 @@ async function addAttachment() {
       });
     } finally {
       isAttaching.value = false;
+      if (input.parentNode) {
+        document.body.removeChild(input);
+      }
     }
   };
+
+  input.addEventListener('cancel', () => {
+    if (input.parentNode) {
+      document.body.removeChild(input);
+    }
+  }, { once: true });
+
   input.click();
 }
 

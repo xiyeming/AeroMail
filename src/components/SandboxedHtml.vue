@@ -114,31 +114,34 @@ function detachViolationListener() {
   doc.removeEventListener('error', handleResourceError, true);
 }
 
-let selectionMouseupHandler: ((this: Document, ev: MouseEvent) => void) | null = null;
+let selectionMouseupHandler: ((this: Window, ev: MouseEvent) => void) | null = null;
 
 function detachSelectionListener() {
-  if (!iframeRef.value?.contentDocument) return;
-  const doc = iframeRef.value.contentDocument;
-  if (selectionMouseupHandler) {
-    doc.removeEventListener('mouseup', selectionMouseupHandler);
+  try {
+    const win = iframeRef.value?.contentWindow;
+    if (win && selectionMouseupHandler) {
+      win.removeEventListener('mouseup', selectionMouseupHandler);
+    }
+  } catch {
+    // The iframe may have been navigated away; ignore cleanup errors.
   }
+  selectionMouseupHandler = null;
 }
 
-function attachSelectionListener() {
-  const doc = iframeRef.value?.contentDocument;
-  if (!doc) return false;
+function attachSelectionListener(): boolean {
+  const win = iframeRef.value?.contentWindow;
+  if (!win) return false;
   detachSelectionListener();
   selectionMouseupHandler = (e: MouseEvent) => {
-    const text = doc.getSelection()?.toString()?.trim();
+    const text = win.getSelection()?.toString()?.trim();
     if (!text) return;
     emit('selection', { text, clientX: e.clientX, clientY: e.clientY });
   };
-  doc.addEventListener('mouseup', selectionMouseupHandler);
+  win.addEventListener('mouseup', selectionMouseupHandler);
   return true;
 }
 
 function ensureSelectionListener() {
-  if (!iframeRef.value?.contentDocument) return;
   if (attachSelectionListener()) return;
   const interval = setInterval(() => {
     if (attachSelectionListener() || !iframeRef.value) {

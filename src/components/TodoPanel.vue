@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { ref, nextTick, computed } from 'vue';
-import { ListTodo, Plus, Trash2, X, Check, Bell } from 'lucide-vue-next';
+import { ListTodo, Plus, Trash2, X, Check, Bell, Clock } from 'lucide-vue-next';
 import { useTodoStore } from '@/stores/todo';
 
 const todoStore = useTodoStore();
@@ -80,6 +80,14 @@ function clearCompleted() {
 function formatReminder(timestamp: number): string {
   return new Date(timestamp).toLocaleString();
 }
+
+function clearNewReminder() {
+  newTodoReminder.value = '';
+}
+
+function clearEditReminder() {
+  editReminder.value = '';
+}
 </script>
 
 <template>
@@ -140,12 +148,33 @@ function formatReminder(timestamp: number): string {
                   @keydown="handleEditKeydown"
                   @blur="commitEdit"
                 />
-                <input
-                  v-model="editReminder"
-                  type="datetime-local"
-                  class="w-full rounded border border-border bg-base px-1.5 py-0.5 text-xs text-primary outline-none focus:border-accent"
-                  @blur="commitEdit"
-                />
+                <div class="flex items-center gap-2">
+                  <input
+                    v-model="editReminder"
+                    type="datetime-local"
+                    class="sr-only"
+                    @blur="commitEdit"
+                  />
+                  <label
+                    class="flex h-7 w-7 shrink-0 cursor-pointer items-center justify-center rounded border border-border transition-colors"
+                    :class="editReminder ? 'border-accent/50 text-accent' : 'text-secondary hover:text-primary'"
+                    :title="$t('todo.reminder')"
+                  >
+                    <Bell class="h-3.5 w-3.5" />
+                  </label>
+                  <div v-if="editReminder" class="flex min-w-0 flex-1 items-center gap-1 text-xs text-tertiary">
+                    <Clock class="h-3 w-3 shrink-0" />
+                    <span class="truncate">{{ formatReminder(new Date(editReminder).getTime()) }}</span>
+                    <button
+                      type="button"
+                      class="ml-1 rounded p-0.5 text-tertiary hover:text-primary"
+                      @click="clearEditReminder"
+                    >
+                      <X class="h-3 w-3" />
+                    </button>
+                  </div>
+                  <span v-else class="text-xs text-tertiary">{{ $t('todo.reminder') }}</span>
+                </div>
               </div>
               <div v-else @click="startEdit(item)">
                 <p
@@ -198,9 +227,15 @@ function formatReminder(timestamp: number): string {
           <input
             v-model="newTodoReminder"
             type="datetime-local"
-            class="w-40 rounded-md border border-border bg-base px-2 py-2 text-xs text-primary outline-none placeholder:text-tertiary focus:border-accent"
-            :title="$t('todo.reminder')"
+            class="sr-only"
           />
+          <label
+            class="flex h-9 w-9 shrink-0 cursor-pointer items-center justify-center rounded-md border border-border transition-colors"
+            :class="newTodoReminder ? 'border-accent/50 text-accent' : 'text-secondary hover:text-primary hover:bg-raised'"
+            :title="$t('todo.reminder')"
+          >
+            <Bell class="h-4 w-4" />
+          </label>
           <button
             type="button"
             class="flex h-9 w-9 shrink-0 items-center justify-center rounded-md bg-accent text-white transition-colors hover:bg-accent-hover disabled:opacity-50"
@@ -208,6 +243,17 @@ function formatReminder(timestamp: number): string {
             @click="handleAdd"
           >
             <Plus class="h-4 w-4" />
+          </button>
+        </div>
+        <div v-if="newTodoReminder" class="mt-2 flex items-center gap-1 text-xs text-tertiary">
+          <Clock class="h-3 w-3" />
+          <span>{{ formatReminder(new Date(newTodoReminder).getTime()) }}</span>
+          <button
+            type="button"
+            class="ml-1 rounded p-0.5 text-tertiary hover:text-primary"
+            @click="clearNewReminder"
+          >
+            <X class="h-3 w-3" />
           </button>
         </div>
       </div>

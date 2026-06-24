@@ -1,7 +1,10 @@
 import { defineStore } from 'pinia';
 import { ref, computed } from 'vue';
+import { invoke } from '@tauri-apps/api/core';
 import { listen } from '@tauri-apps/api/event';
 import type { SyncProgress } from '@/types/mail';
+
+const LAST_SYNC_TIME_KEY = 'app.last_sync_time';
 
 export interface SyncStatusItem {
   accountId: string;
@@ -18,6 +21,8 @@ export const useStatusStore = defineStore('status', () => {
   const syncingAccounts = computed(
     () => syncStatus.value.filter((s) => s.status === 'syncing').length
   );
+
+  const errorAccounts = computed(() => syncStatus.value.filter((s) => s.status === 'error').length);
 
   function updateSyncStatus(accountId: string, status: SyncStatusItem['status'], message?: string) {
     const idx = syncStatus.value.findIndex((s) => s.accountId === accountId);
@@ -40,6 +45,18 @@ export const useStatusStore = defineStore('status', () => {
     unreadCount.value = value;
   }
 
+  // Load the persisted last-sync timestamp from the backend settings store.
+  async function loadLastSyncTime() {
+    try {
+      const value = await invoke<string | null>('get_setting', { key: LAST_SYNC_TIME_KEY });
+      if (value) {
+        setLastSyncTime(value);
+      }
+    } catch (e) {
+      console.error('Failed to load last sync time:', e);
+    }
+  }
+
   // Listen for sync progress events from the backend
   function initEventListeners() {
     listen<SyncProgress>('sync:progress', (event) => {
@@ -47,7 +64,7 @@ export const useStatusStore = defineStore('status', () => {
       updateSyncStatus(
         progress.accountId,
         progress.status,
-        progress.status === 'error' ? progress.status : undefined
+        progress.status === 'error' ? progress.message : undefined
       );
       if (progress.status === 'completed') {
         setLastSyncTime(progress.lastSyncTime);
@@ -65,10 +82,12 @@ export const useStatusStore = defineStore('status', () => {
     lastSyncTime,
     isOnline,
     syncingAccounts,
+    errorAccounts,
     updateSyncStatus,
     setOnline,
     setLastSyncTime,
     setUnreadCount,
     initEventListeners,
+    loadLastSyncTime,
   };
 });

@@ -24,7 +24,7 @@ impl TranslationService {
     ///
     /// Returns an error if the text is empty, the provider is not found,
     /// or the translation API call fails.
-    pub fn translate_mail(
+    pub async fn translate_mail(
         &self,
         source_text: &str,
         target_lang: &str,
@@ -47,11 +47,11 @@ impl TranslationService {
 
         let translated = match &provider {
             crate::models::translation::TranslationProvider::Traditional { .. } => {
-                traditional::translate(&provider, source_text, target_lang)?
+                traditional::translate(&provider, source_text, target_lang).await?
             }
             crate::models::translation::TranslationProvider::Ai { ai_provider_id, .. } => {
                 let ai_provider = self.db.get_ai_provider(ai_provider_id)?;
-                ai::translate(&ai_provider, source_text, target_lang)?
+                ai::translate(&ai_provider, source_text, target_lang).await?
             }
         };
 

@@ -38,6 +38,21 @@ pub async fn get_virtual_mail_list(
 }
 
 #[tauri::command]
+#[instrument(skip(state), fields(account_ids, limit, offset), err(Debug))]
+pub async fn get_inbox_mail_list(
+    account_ids: Vec<String>,
+    limit: u32,
+    offset: u32,
+    state: State<'_, AppState>,
+) -> Result<Vec<MailHeader>, ErrorPayload> {
+    debug!("listing inbox mails for accounts");
+    state
+        .db
+        .list_inbox_mails(&account_ids, limit, offset)
+        .map_err(|e| e.to_payload())
+}
+
+#[tauri::command]
 #[instrument(skip(state), fields(mail_id = %mail_id), err(Debug))]
 pub async fn archive_mail(
     mail_id: String,
@@ -96,8 +111,15 @@ pub async fn mark_mail_read(
     state: State<'_, AppState>,
 ) -> Result<(), ErrorPayload> {
     let db = &state.db;
+    let mail = db
+        .get_mail_detail(&mail_id)
+        .map_err(|e| e.to_payload())?
+        .ok_or_else(|| AeroError::MailNotFound(mail_id.clone()).to_payload())?;
+
+    sync_read_to_imap(&state, &mail.account_id, &mail.folder_id, mail.uid, is_read).await?;
     db.mark_mail_read(&mail_id, is_read)
-        .map_err(|e| e.to_payload())
+        .map_err(|e| e.to_payload())?;
+    Ok(())
 }
 
 #[tauri::command]
@@ -107,6 +129,20 @@ pub async fn toggle_mail_star(
     state: State<'_, AppState>,
 ) -> Result<bool, ErrorPayload> {
     let db = &state.db;
+    let mail = db
+        .get_mail_detail(&mail_id)
+        .map_err(|e| e.to_payload())?
+        .ok_or_else(|| AeroError::MailNotFound(mail_id.clone()).to_payload())?;
+
+    let new_starred = !mail.is_starred;
+    sync_star_to_imap(
+        &state,
+        &mail.account_id,
+        &mail.folder_id,
+        mail.uid,
+        new_starred,
+    )
+    .await?;
     db.toggle_mail_star(&mail_id).map_err(|e| e.to_payload())
 }
 
@@ -198,6 +234,116 @@ pub async fn get_attachment_content(
     std::fs::read(&local_path).map_err(|e| {
         AeroError::Internal(format!("failed to read attachment {attachment_id}: {e}")).to_payload()
     })
+}
+
+#[tauri::command]
+#[instrument(skip(state), fields(attachment_id = %attachment_id), err(Debug))]
+pub async fn download_attachment(
+    attachment_id: String,
+    target_path: std::path::PathBuf,
+    state: State<'_, AppState>,
+) -> Result<(), ErrorPayload> {
+    let db = &state.db;
+    let local_path = db
+        .get_attachment_path(&attachment_id)
+        .map_err(|e| e.to_payload())?
+        .ok_or_else(|| AeroError::AttachmentNotFound(attachment_id.clone()).to_payload())?;
+
+    if let Some(parent) = target_path.parent() {
+        std::fs::create_dir_all(parent).map_err(|e| {
+            AeroError::Internal(format!("failed to create target directory: {e}")).to_payload()
+        })?;
+    }
+
+    std::fs::copy(&local_path, &target_path).map_err(|e| {
+        AeroError::Internal(format!(
+            "failed to copy attachment to {}: {e}",
+            target_path.display()
+        ))
+        .to_payload()
+    })?;
+
+    Ok(())
+}
+
+#[instrument(skip(state), fields(account_id = %account_id, folder_id = %folder_id, uid, is_read), err(Debug))]
+async fn sync_read_to_imap(
+    state: &State<'_, AppState>,
+    account_id: &str,
+    folder_id: &str,
+    uid: u32,
+    is_read: bool,
+) -> Result<(), ErrorPayload> {
+    if uid == 0 {
+        return Ok(());
+    }
+
+    let account_manager = state.account_manager.read().await;
+    let config = account_manager
+        .get_account_config_with_refresh(account_id)
+        .await
+        .map_err(|e| e.to_payload())?;
+    drop(account_manager);
+
+    let folder = state
+        .db
+        .get_folder_by_id(folder_id)
+        .map_err(|e| e.to_payload())?
+        .ok_or_else(|| AeroError::MailNotFound(folder_id.to_string()).to_payload())?;
+
+    debug!(folder_path = %folder.path, uid, is_read, "issuing IMAP seen update");
+    let mut session = imap_client::connect_imap(&config)
+        .await
+        .map_err(|e| e.to_payload())?;
+    imap_client::set_seen_on_server(&mut session, &folder.path, uid, is_read)
+        .await
+        .map_err(|e| e.to_payload())?;
+    session
+        .logout()
+        .await
+        .map_err(|e| AeroError::ImapConnectionFailed(e.to_string()).to_payload())?;
+
+    Ok(())
+}
+
+#[instrument(skip(state), fields(account_id = %account_id, folder_id = %folder_id, uid, is_starred), err(Debug))]
+async fn sync_star_to_imap(
+    state: &State<'_, AppState>,
+    account_id: &str,
+    folder_id: &str,
+    uid: u32,
+    is_starred: bool,
+) -> Result<(), ErrorPayload> {
+    if uid == 0 {
+        return Ok(());
+    }
+
+    let account_manager = state.account_manager.read().await;
+    let config = account_manager
+        .get_account_config_with_refresh(account_id)
+        .await
+        .map_err(|e| e.to_payload())?;
+    drop(account_manager);
+
+    let folder = state
+        .db
+        .get_folder_by_id(folder_id)
+        .map_err(|e| e.to_payload())?
+        .ok_or_else(|| AeroError::MailNotFound(folder_id.to_string()).to_payload())?;
+
+    debug!(folder_path = %folder.path, uid, is_starred, "issuing IMAP flagged update");
+    let mut session = imap_client::connect_imap(&config)
+        .await
+        .map_err(|e| e.to_payload())?;
+    imap_client::set_flagged_on_server(&mut session, &folder.path, uid, is_starred)
+        .await
+        .map_err(|e| e.to_payload())?;
+    session
+        .logout()
+        .await
+        .map_err(|e| AeroError::ImapConnectionFailed(e.to_string()).to_payload())?;
+
+    Ok(())
 }
 
 #[instrument(skip(state), fields(account_id = %account_id, folder_id = %folder_id, uid), err(Debug))]

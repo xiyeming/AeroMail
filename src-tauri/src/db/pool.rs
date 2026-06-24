@@ -300,6 +300,56 @@ impl Database {
         Ok(())
     }
 
+    /// Clears all messages in a chat session while keeping the session itself.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the database write fails.
+    pub fn clear_chat_messages(&self, session_id: &str) -> Result<(), AeroError> {
+        let conn = self.connection()?;
+        conn.execute(
+            "DELETE FROM ai_chat_messages WHERE session_id = ?1",
+            [session_id],
+        )?;
+        drop(conn);
+        Ok(())
+    }
+
+    /// Renames a chat session.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the database write fails.
+    pub fn rename_chat_session(&self, session_id: &str, title: &str) -> Result<(), AeroError> {
+        let conn = self.connection()?;
+        conn.execute(
+            "UPDATE ai_chat_sessions SET title = ?1 WHERE id = ?2",
+            (title, session_id),
+        )?;
+        drop(conn);
+        Ok(())
+    }
+
+    /// Updates the provider and model of a chat session.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the database write fails.
+    pub fn set_chat_session_provider(
+        &self,
+        session_id: &str,
+        provider_id: &str,
+        model: &str,
+    ) -> Result<(), AeroError> {
+        let conn = self.connection()?;
+        conn.execute(
+            "UPDATE ai_chat_sessions SET provider_id = ?1, model = ?2 WHERE id = ?3",
+            (provider_id, model, session_id),
+        )?;
+        drop(conn);
+        Ok(())
+    }
+
     /// Updates the `updated_at` timestamp of a chat session.
     ///
     /// # Errors
@@ -330,8 +380,8 @@ impl Database {
     ) -> Result<Vec<crate::models::ai::AiChatMessage>, AeroError> {
         let conn = self.connection()?;
         let mut stmt = conn.prepare(
-            "SELECT id, session_id, role, content, created_at
-             FROM ai_chat_messages WHERE session_id = ?1 ORDER BY created_at ASC",
+            "SELECT id, session_id, role, content, thinking, created_at
+             FROM ai_chat_messages WHERE session_id = ?1 ORDER BY created_at ASC, rowid ASC",
         )?;
         let rows = stmt.query_map([session_id], |row| {
             Ok(crate::models::ai::AiChatMessage {
@@ -339,7 +389,415 @@ impl Database {
                 session_id: row.get(1)?,
                 role: row.get(2)?,
                 content: row.get(3)?,
-                created_at: row.get(4)?,
+                thinking: row.get(4)?,
+                created_at: row.get(5)?,
+            })
+        })?;
+        rows.collect::<Result<Vec<_>, _>>()
+            .map_err(|e| AeroError::Database(e.to_string()))
+    }
+
+    /// Inserts an AI usage log entry.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the database write fails.
+    pub fn insert_ai_usage_log(
+        &self,
+        log: &crate::models::ai::AiUsageLog,
+    ) -> Result<(), AeroError> {
+        let conn = self.connection()?;
+        conn.execute(
+            "INSERT INTO ai_usage_logs (
+                id, session_id, provider_id, model,
+                prompt_tokens, completion_tokens, total_tokens,
+                estimated, cost, currency, created_at
+            ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11)",
+            (
+                &log.id,
+                &log.session_id,
+                &log.provider_id,
+                &log.model,
+                log.prompt_tokens,
+                log.completion_tokens,
+                log.total_tokens,
+                log.estimated,
+                log.cost,
+                &log.currency,
+                log.created_at,
+            ),
+        )?;
+        drop(conn);
+        Ok(())
+    }
+
+    /// Returns aggregate AI usage, optionally filtered by provider.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the database query fails.
+    #[allow(clippy::significant_drop_tightening)]
+    pub fn get_ai_usage_summary(
+        &self,
+        provider_id: Option<&str>,
+    ) -> Result<Vec<crate::models::ai::AiUsageSummary>, AeroError> {
+        let conn = self.connection()?;
+        let mut stmt = conn.prepare(
+            "SELECT provider_id, model,
+                    COALESCE(SUM(prompt_tokens), 0),
+                    COALESCE(SUM(completion_tokens), 0),
+                    COALESCE(SUM(total_tokens), 0),
+                    COALESCE(SUM(cost), 0.0),
+                    COALESCE(MIN(currency), 'USD')
+             FROM ai_usage_logs
+             WHERE (?1 IS NULL OR provider_id = ?1)
+             GROUP BY provider_id, model
+             ORDER BY provider_id, model",
+        )?;
+        let rows = stmt.query_map([provider_id], |row| {
+            Ok(crate::models::ai::AiUsageSummary {
+                provider_id: row.get(0)?,
+                model: row.get(1)?,
+                total_prompt_tokens: row.get::<_, i64>(2)? as u64,
+                total_completion_tokens: row.get::<_, i64>(3)? as u64,
+                total_tokens: row.get::<_, i64>(4)? as u64,
+                total_cost: row.get(5)?,
+                currency: row.get(6)?,
+            })
+        })?;
+        rows.collect::<Result<Vec<_>, _>>()
+            .map_err(|e| AeroError::Database(e.to_string()))
+    }
+
+    /// Returns aggregate AI usage for a single chat session.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the database query fails.
+    #[allow(clippy::significant_drop_tightening)]
+    pub fn get_ai_session_usage(
+        &self,
+        session_id: &str,
+    ) -> Result<Option<crate::models::ai::AiUsageSummary>, AeroError> {
+        let conn = self.connection()?;
+        let mut stmt = conn.prepare(
+            "SELECT provider_id, model,
+                    COALESCE(SUM(prompt_tokens), 0),
+                    COALESCE(SUM(completion_tokens), 0),
+                    COALESCE(SUM(total_tokens), 0),
+                    COALESCE(SUM(cost), 0.0),
+                    COALESCE(MIN(currency), 'USD')
+             FROM ai_usage_logs
+             WHERE session_id = ?1
+             GROUP BY provider_id, model
+             LIMIT 1",
+        )?;
+        let mut rows = stmt.query([session_id])?;
+        if let Some(row) = rows.next()? {
+            Ok(Some(crate::models::ai::AiUsageSummary {
+                provider_id: row.get(0)?,
+                model: row.get(1)?,
+                total_prompt_tokens: row.get::<_, i64>(2)? as u64,
+                total_completion_tokens: row.get::<_, i64>(3)? as u64,
+                total_tokens: row.get::<_, i64>(4)? as u64,
+                total_cost: row.get(5)?,
+                currency: row.get(6)?,
+            }))
+        } else {
+            Ok(None)
+        }
+    }
+
+    /// Retrieves pricing for a provider/model combination.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the database query fails.
+    #[allow(clippy::significant_drop_tightening)]
+    pub fn get_ai_provider_pricing(
+        &self,
+        provider_id: &str,
+        model: &str,
+    ) -> Result<Option<crate::models::ai::AiProviderPricing>, AeroError> {
+        let conn = self.connection()?;
+        let mut stmt = conn.prepare(
+            "SELECT id, provider_id, model, input_price_per_1k, output_price_per_1k,
+                    currency, effective_from
+             FROM ai_provider_pricing
+             WHERE provider_id = ?1 AND model = ?2
+             LIMIT 1",
+        )?;
+        let mut rows = stmt.query([provider_id, model])?;
+        if let Some(row) = rows.next()? {
+            Ok(Some(crate::models::ai::AiProviderPricing {
+                id: row.get(0)?,
+                provider_id: row.get(1)?,
+                model: row.get(2)?,
+                input_price_per_1k: row.get(3)?,
+                output_price_per_1k: row.get(4)?,
+                currency: row.get(5)?,
+                effective_from: row.get(6)?,
+            }))
+        } else {
+            Ok(None)
+        }
+    }
+
+    /// Inserts or updates pricing for a provider/model combination.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the database write fails.
+    pub fn upsert_ai_provider_pricing(
+        &self,
+        pricing: &crate::models::ai::AiProviderPricing,
+    ) -> Result<(), AeroError> {
+        let conn = self.connection()?;
+        conn.execute(
+            "INSERT INTO ai_provider_pricing (
+                id, provider_id, model, input_price_per_1k, output_price_per_1k,
+                currency, effective_from
+            ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)
+            ON CONFLICT(provider_id, model) DO UPDATE SET
+                input_price_per_1k = excluded.input_price_per_1k,
+                output_price_per_1k = excluded.output_price_per_1k,
+                currency = excluded.currency,
+                effective_from = excluded.effective_from",
+            (
+                &pricing.id,
+                &pricing.provider_id,
+                &pricing.model,
+                pricing.input_price_per_1k,
+                pricing.output_price_per_1k,
+                &pricing.currency,
+                pricing.effective_from,
+            ),
+        )?;
+        drop(conn);
+        Ok(())
+    }
+
+    /// Lists all configured AI provider pricing records.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the database query fails.
+    #[allow(clippy::significant_drop_tightening)]
+    pub fn list_ai_provider_pricing(
+        &self,
+    ) -> Result<Vec<crate::models::ai::AiProviderPricing>, AeroError> {
+        let conn = self.connection()?;
+        let mut stmt = conn.prepare(
+            "SELECT id, provider_id, model, input_price_per_1k, output_price_per_1k,
+                    currency, effective_from
+             FROM ai_provider_pricing
+             ORDER BY provider_id, model",
+        )?;
+        let rows = stmt.query_map([], |row| {
+            Ok(crate::models::ai::AiProviderPricing {
+                id: row.get(0)?,
+                provider_id: row.get(1)?,
+                model: row.get(2)?,
+                input_price_per_1k: row.get(3)?,
+                output_price_per_1k: row.get(4)?,
+                currency: row.get(5)?,
+                effective_from: row.get(6)?,
+            })
+        })?;
+        rows.collect::<Result<Vec<_>, _>>()
+            .map_err(|e| AeroError::Database(e.to_string()))
+    }
+
+    // ---- AI MCP Servers ----
+
+    /// Inserts or updates an MCP server configuration.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if serialization or the database write fails.
+    pub fn upsert_ai_mcp_server(
+        &self,
+        server: &crate::models::ai::AiMcpServer,
+    ) -> Result<(), AeroError> {
+        let conn = self.connection()?;
+        let args_json = server
+            .args
+            .as_ref()
+            .map(serde_json::to_string)
+            .transpose()
+            .map_err(|e| AeroError::Database(format!("failed to serialize args: {e}")))?;
+        conn.execute(
+            "INSERT INTO ai_mcp_servers (
+                id, name, transport, command, args, url, env_json, is_enabled,
+                created_at, updated_at
+            ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10)
+            ON CONFLICT(id) DO UPDATE SET
+                name = excluded.name,
+                transport = excluded.transport,
+                command = excluded.command,
+                args = excluded.args,
+                url = excluded.url,
+                env_json = excluded.env_json,
+                is_enabled = excluded.is_enabled,
+                updated_at = excluded.updated_at",
+            (
+                &server.id,
+                &server.name,
+                &server.transport,
+                &server.command,
+                &args_json,
+                &server.url,
+                &server.env_json,
+                server.is_enabled,
+                server.created_at,
+                server.updated_at,
+            ),
+        )?;
+        drop(conn);
+        Ok(())
+    }
+
+    /// Deletes an MCP server configuration.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the database write fails.
+    pub fn delete_ai_mcp_server(&self, id: &str) -> Result<(), AeroError> {
+        let conn = self.connection()?;
+        conn.execute("DELETE FROM ai_mcp_servers WHERE id = ?1", [id])?;
+        drop(conn);
+        Ok(())
+    }
+
+    /// Lists all MCP server configurations.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the database query fails.
+    #[allow(clippy::significant_drop_tightening)]
+    pub fn list_ai_mcp_servers(&self) -> Result<Vec<crate::models::ai::AiMcpServer>, AeroError> {
+        let conn = self.connection()?;
+        let mut stmt = conn.prepare(
+            "SELECT id, name, transport, command, args, url, env_json, is_enabled,
+                    created_at, updated_at
+             FROM ai_mcp_servers
+             ORDER BY name",
+        )?;
+        let rows = stmt.query_map([], |row| {
+            let args_json: Option<String> = row.get(4)?;
+            let args = args_json
+                .map(|j| serde_json::from_str::<Vec<String>>(&j))
+                .transpose()
+                .map_err(|e| rusqlite::Error::InvalidParameterName(e.to_string()))?;
+            Ok(crate::models::ai::AiMcpServer {
+                id: row.get(0)?,
+                name: row.get(1)?,
+                transport: row.get(2)?,
+                command: row.get(3)?,
+                args,
+                url: row.get(5)?,
+                env_json: row.get(6)?,
+                is_enabled: row.get(7)?,
+                created_at: row.get(8)?,
+                updated_at: row.get(9)?,
+            })
+        })?;
+        rows.collect::<Result<Vec<_>, _>>()
+            .map_err(|e| AeroError::Database(e.to_string()))
+    }
+
+    // ---- AI Skills ----
+
+    /// Inserts or updates a skill configuration.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if serialization or the database write fails.
+    pub fn upsert_ai_skill(&self, skill: &crate::models::ai::AiSkill) -> Result<(), AeroError> {
+        let conn = self.connection()?;
+        let args_json = skill
+            .args
+            .as_ref()
+            .map(serde_json::to_string)
+            .transpose()
+            .map_err(|e| AeroError::Database(format!("failed to serialize args: {e}")))?;
+        conn.execute(
+            "INSERT INTO ai_skills (
+                id, name, description, input_schema_json, command, args, working_dir,
+                timeout_seconds, is_enabled, created_at, updated_at
+            ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11)
+            ON CONFLICT(id) DO UPDATE SET
+                name = excluded.name,
+                description = excluded.description,
+                input_schema_json = excluded.input_schema_json,
+                command = excluded.command,
+                args = excluded.args,
+                working_dir = excluded.working_dir,
+                timeout_seconds = excluded.timeout_seconds,
+                is_enabled = excluded.is_enabled,
+                updated_at = excluded.updated_at",
+            (
+                &skill.id,
+                &skill.name,
+                &skill.description,
+                &skill.input_schema_json,
+                &skill.command,
+                &args_json,
+                &skill.working_dir,
+                skill.timeout_seconds,
+                skill.is_enabled,
+                skill.created_at,
+                skill.updated_at,
+            ),
+        )?;
+        drop(conn);
+        Ok(())
+    }
+
+    /// Deletes a skill configuration.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the database write fails.
+    pub fn delete_ai_skill(&self, id: &str) -> Result<(), AeroError> {
+        let conn = self.connection()?;
+        conn.execute("DELETE FROM ai_skills WHERE id = ?1", [id])?;
+        drop(conn);
+        Ok(())
+    }
+
+    /// Lists all skill configurations.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the database query fails.
+    #[allow(clippy::significant_drop_tightening)]
+    pub fn list_ai_skills(&self) -> Result<Vec<crate::models::ai::AiSkill>, AeroError> {
+        let conn = self.connection()?;
+        let mut stmt = conn.prepare(
+            "SELECT id, name, description, input_schema_json, command, args, working_dir,
+                    timeout_seconds, is_enabled, created_at, updated_at
+             FROM ai_skills
+             ORDER BY name",
+        )?;
+        let rows = stmt.query_map([], |row| {
+            let args_json: Option<String> = row.get(5)?;
+            let args = args_json
+                .map(|j| serde_json::from_str::<Vec<String>>(&j))
+                .transpose()
+                .map_err(|e| rusqlite::Error::InvalidParameterName(e.to_string()))?;
+            Ok(crate::models::ai::AiSkill {
+                id: row.get(0)?,
+                name: row.get(1)?,
+                description: row.get(2)?,
+                input_schema_json: row.get(3)?,
+                command: row.get(4)?,
+                args,
+                working_dir: row.get(6)?,
+                timeout_seconds: row.get(7)?,
+                is_enabled: row.get(8)?,
+                created_at: row.get(9)?,
+                updated_at: row.get(10)?,
             })
         })?;
         rows.collect::<Result<Vec<_>, _>>()
@@ -585,14 +1043,15 @@ impl Database {
         session_id: &str,
         role: &str,
         content: &str,
+        thinking: Option<&str>,
     ) -> Result<crate::models::ai::AiChatMessage, AeroError> {
         let conn = self.connection()?;
         let id = uuid::Uuid::new_v4().to_string();
         let now = chrono::Utc::now().timestamp();
         conn.execute(
-            "INSERT INTO ai_chat_messages (id, session_id, role, content, created_at)
-             VALUES (?1, ?2, ?3, ?4, ?5)",
-            (&id, session_id, role, content, now),
+            "INSERT INTO ai_chat_messages (id, session_id, role, content, thinking, created_at)
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6)",
+            (&id, session_id, role, content, thinking, now),
         )?;
         drop(conn);
         Ok(crate::models::ai::AiChatMessage {
@@ -600,6 +1059,7 @@ impl Database {
             session_id: session_id.to_string(),
             role: role.to_string(),
             content: content.to_string(),
+            thinking: thinking.map(std::string::ToString::to_string),
             created_at: now,
         })
     }
@@ -850,6 +1310,151 @@ impl Database {
             .map_err(|e| AeroError::Database(e.to_string()))
     }
 
+    /// Returns the most recent mail headers across all accounts.
+    ///
+    /// Used as a fallback for @-mentions when the search index yields no results.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the database query fails.
+    #[allow(clippy::significant_drop_tightening)]
+    pub fn list_recent_mails(
+        &self,
+        limit: u32,
+    ) -> Result<Vec<crate::models::mail::MailHeader>, AeroError> {
+        let conn = self.connection()?;
+        let mut stmt = conn.prepare(
+            "SELECT id, account_id, folder_id, uid, subject, from_name, from_address,
+             date, is_read, is_starred, is_archived, is_spam,
+             EXISTS(SELECT 1 FROM attachments WHERE mail_id = mails.id) as has_attachments
+             FROM mails
+             ORDER BY date DESC, uid DESC
+             LIMIT ?1",
+        )?;
+        let rows = stmt.query_map([limit], |row| {
+            Ok(crate::models::mail::MailHeader {
+                id: row.get(0)?,
+                account_id: row.get(1)?,
+                folder_id: row.get(2)?,
+                uid: row.get::<_, i64>(3)? as u32,
+                subject: row.get(4)?,
+                from_name: row.get(5)?,
+                from_address: row.get(6)?,
+                date: row.get(7)?,
+                is_read: row.get::<_, i64>(8)? != 0,
+                is_starred: row.get::<_, i64>(9)? != 0,
+                is_archived: row.get::<_, i64>(10)? != 0,
+                is_spam: row.get::<_, i64>(11)? != 0,
+                has_attachments: row.get::<_, i64>(12)? != 0,
+            })
+        })?;
+        rows.collect::<Result<Vec<_>, _>>()
+            .map_err(|e| AeroError::Database(e.to_string()))
+    }
+
+    /// Searches mail headers by a fuzzy match against subject, sender name, or
+    /// sender address.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the database query cannot be executed.
+    pub fn search_mail_headers(
+        &self,
+        query: &str,
+        limit: u32,
+    ) -> Result<Vec<crate::models::mail::MailHeader>, AeroError> {
+        let conn = self.connection()?;
+        let mut stmt = conn.prepare(
+            "SELECT id, account_id, folder_id, uid, subject, from_name, from_address,
+             date, is_read, is_starred, is_archived, is_spam,
+             EXISTS(SELECT 1 FROM attachments WHERE mail_id = mails.id) as has_attachments
+             FROM mails
+             WHERE LOWER(subject) LIKE LOWER(?1)
+                OR LOWER(from_name) LIKE LOWER(?1)
+                OR LOWER(from_address) LIKE LOWER(?1)
+             ORDER BY date DESC, uid DESC
+             LIMIT ?2",
+        )?;
+        let pattern = format!("%{query}%");
+        let rows = stmt.query_map(params![pattern, limit], |row| {
+            Ok(crate::models::mail::MailHeader {
+                id: row.get(0)?,
+                account_id: row.get(1)?,
+                folder_id: row.get(2)?,
+                uid: row.get::<_, i64>(3)? as u32,
+                subject: row.get(4)?,
+                from_name: row.get(5)?,
+                from_address: row.get(6)?,
+                date: row.get(7)?,
+                is_read: row.get::<_, i64>(8)? != 0,
+                is_starred: row.get::<_, i64>(9)? != 0,
+                is_archived: row.get::<_, i64>(10)? != 0,
+                is_spam: row.get::<_, i64>(11)? != 0,
+                has_attachments: row.get::<_, i64>(12)? != 0,
+            })
+        })?;
+        rows.collect::<Result<Vec<_>, _>>()
+            .map_err(|e| AeroError::Database(e.to_string()))
+    }
+
+    /// Returns mails from the INBOX folders of the given accounts, merged and sorted.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the database query fails.
+    #[allow(clippy::significant_drop_tightening)]
+    pub fn list_inbox_mails(
+        &self,
+        account_ids: &[String],
+        limit: u32,
+        offset: u32,
+    ) -> Result<Vec<crate::models::mail::MailHeader>, AeroError> {
+        if account_ids.is_empty() {
+            return Ok(Vec::new());
+        }
+        let placeholders = account_ids
+            .iter()
+            .map(|_| "?")
+            .collect::<Vec<_>>()
+            .join(",");
+        let sql = format!(
+            "SELECT m.id, m.account_id, m.folder_id, m.uid, m.subject, m.from_name, m.from_address,
+             m.date, m.is_read, m.is_starred, m.is_archived, m.is_spam,
+             EXISTS(SELECT 1 FROM attachments WHERE mail_id = m.id) as has_attachments
+             FROM mails m
+             JOIN folders f ON m.folder_id = f.id
+             WHERE m.account_id IN ({placeholders}) AND f.path = 'INBOX'
+             ORDER BY m.date DESC, m.uid DESC
+             LIMIT ?{} OFFSET ?{}",
+            account_ids.len() + 1,
+            account_ids.len() + 2,
+        );
+        let conn = self.connection()?;
+        let mut stmt = conn.prepare(&sql)?;
+        let mut param_values: Vec<String> = account_ids.to_vec();
+        param_values.push(limit.to_string());
+        param_values.push(offset.to_string());
+        let rows = stmt.query_map(rusqlite::params_from_iter(param_values.iter()), |row| {
+            Ok(crate::models::mail::MailHeader {
+                id: row.get(0)?,
+                account_id: row.get(1)?,
+                folder_id: row.get(2)?,
+                uid: row.get::<_, i64>(3)? as u32,
+                subject: row.get(4)?,
+                from_name: row.get(5)?,
+                from_address: row.get(6)?,
+                date: row.get(7)?,
+                is_read: row.get::<_, i64>(8)? != 0,
+                is_starred: row.get::<_, i64>(9)? != 0,
+                is_archived: row.get::<_, i64>(10)? != 0,
+                is_spam: row.get::<_, i64>(11)? != 0,
+                has_attachments: row.get::<_, i64>(12)? != 0,
+            })
+        })?;
+        rows.collect::<Result<Vec<_>, _>>()
+            .map_err(|e| AeroError::Database(e.to_string()))
+    }
+
     /// Gets full mail detail by ID.
     ///
     /// # Errors
@@ -886,6 +1491,44 @@ impl Database {
                 is_spam: row.get::<_, i64>(15)? != 0,
                 flags: row.get(16)?,
                 message_id: row.get(17)?,
+            }))
+        } else {
+            Ok(None)
+        }
+    }
+
+    /// Gets a mail header by ID.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the database query fails.
+    pub fn get_mail_header(
+        &self,
+        mail_id: &str,
+    ) -> Result<Option<crate::models::mail::MailHeader>, AeroError> {
+        let conn = self.connection()?;
+        let mut stmt = conn.prepare(
+            "SELECT id, account_id, folder_id, uid, subject, from_name, from_address,
+             date, is_read, is_starred, is_archived, is_spam,
+             EXISTS(SELECT 1 FROM attachments WHERE mail_id = mails.id) as has_attachments
+             FROM mails WHERE id = ?1",
+        )?;
+        let mut rows = stmt.query([mail_id])?;
+        if let Some(row) = rows.next()? {
+            Ok(Some(crate::models::mail::MailHeader {
+                id: row.get(0)?,
+                account_id: row.get(1)?,
+                folder_id: row.get(2)?,
+                uid: row.get::<_, i64>(3)? as u32,
+                subject: row.get(4)?,
+                from_name: row.get(5)?,
+                from_address: row.get(6)?,
+                date: row.get(7)?,
+                is_read: row.get::<_, i64>(8)? != 0,
+                is_starred: row.get::<_, i64>(9)? != 0,
+                is_archived: row.get::<_, i64>(10)? != 0,
+                is_spam: row.get::<_, i64>(11)? != 0,
+                has_attachments: row.get::<_, i64>(12)? != 0,
             }))
         } else {
             Ok(None)
@@ -1101,6 +1744,38 @@ impl Database {
         } else {
             Ok(None)
         }
+    }
+
+    /// Gets the minimum UID in a folder.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the database query fails.
+    pub fn get_min_uid(&self, folder_id: &str) -> Result<Option<u32>, AeroError> {
+        let conn = self.connection()?;
+        let mut stmt = conn.prepare("SELECT MIN(uid) FROM mails WHERE folder_id = ?1")?;
+        let mut rows = stmt.query([folder_id])?;
+        if let Some(row) = rows.next()? {
+            let min_uid: Option<i64> = row.get(0)?;
+            Ok(min_uid.map(|v| v as u32))
+        } else {
+            Ok(None)
+        }
+    }
+
+    /// Counts all mails in a folder.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the database query fails.
+    pub fn count_mails_in_folder(&self, folder_id: &str) -> Result<u32, AeroError> {
+        let conn = self.connection()?;
+        let count: i64 = conn.query_row(
+            "SELECT COUNT(*) FROM mails WHERE folder_id = ?1",
+            [folder_id],
+            |row| row.get(0),
+        )?;
+        Ok(count as u32)
     }
 
     /// Gets a mail ID by its folder and IMAP UID.

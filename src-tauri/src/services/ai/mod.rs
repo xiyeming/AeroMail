@@ -1,10 +1,13 @@
 pub mod chat;
 pub mod client;
 pub mod providers;
+pub mod tokens;
+pub mod tools;
 
 use crate::db::pool::Database;
 use crate::error::AeroError;
 use crate::models::ai::{AiChatMessage, AiChatSession, AiProviderSummary};
+use crate::services::ai::client::{CompletionResult, ToolCall, chat_completion};
 use crate::services::ai::providers::kind_label;
 use std::sync::Arc;
 
@@ -12,6 +15,20 @@ use std::sync::Arc;
 pub struct ChatMessage {
     pub role: String,
     pub content: String,
+    pub tool_calls: Option<Vec<ToolCall>>,
+    pub tool_call_id: Option<String>,
+}
+
+impl ChatMessage {
+    /// Creates a simple text message with no tool metadata.
+    pub fn new(role: impl Into<String>, content: impl Into<String>) -> Self {
+        Self {
+            role: role.into(),
+            content: content.into(),
+            tool_calls: None,
+            tool_call_id: None,
+        }
+    }
 }
 
 pub struct AiService {
@@ -80,10 +97,11 @@ impl AiService {
     pub async fn complete(
         &self,
         provider_id: &str,
-        messages: Vec<ChatMessage>,
-    ) -> Result<String, AeroError> {
+        messages: &[ChatMessage],
+        tools: Option<&[serde_json::Value]>,
+    ) -> Result<CompletionResult, AeroError> {
         let provider = self.db.get_ai_provider(provider_id)?;
         let max_tokens = provider.max_tokens.unwrap_or(4096);
-        client::chat_completion(&self.client, &provider, messages, max_tokens).await
+        chat_completion(&self.client, &provider, messages, max_tokens, tools).await
     }
 }

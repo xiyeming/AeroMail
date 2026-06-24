@@ -1,6 +1,7 @@
 use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct ComposeDraft {
     pub id: String,
     pub account_id: String,
@@ -33,6 +34,7 @@ pub enum ReplyKind {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct AttachmentDraft {
     pub id: String,
     pub filename: String,
@@ -45,6 +47,7 @@ pub struct AttachmentDraft {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct ComposeDraftSummary {
     pub id: String,
     pub account_id: String,

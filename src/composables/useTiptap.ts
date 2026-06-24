@@ -62,6 +62,7 @@ export function useTiptap(options: UseTiptapOptions) {
     italic: () => editor.value?.chain().focus().toggleItalic().run(),
     underline: () => editor.value?.chain().focus().toggleUnderline().run(),
     strike: () => editor.value?.chain().focus().toggleStrike().run(),
+    code: () => editor.value?.chain().focus().toggleCode().run(),
     h1: () => editor.value?.chain().focus().toggleHeading({ level: 1 }).run(),
     h2: () => editor.value?.chain().focus().toggleHeading({ level: 2 }).run(),
     paragraph: () => editor.value?.chain().focus().setParagraph().run(),

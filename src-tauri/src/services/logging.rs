@@ -4,7 +4,6 @@ use std::sync::Mutex;
 use tracing_appender::non_blocking::WorkerGuard;
 use tracing_appender::rolling::{RollingFileAppender, Rotation};
 use tracing_subscriber::Registry;
-use tracing_subscriber::filter::EnvFilter;
 use tracing_subscriber::fmt;
 use tracing_subscriber::layer::{Layer, SubscriberExt};
 use tracing_subscriber::reload::{self, Handle};
@@ -132,19 +131,13 @@ fn build_layer(
         tracing_appender::non_blocking(std::io::sink())
     };
 
-    let env_filter = if config.enabled {
-        EnvFilter::new("debug")
-    } else {
-        EnvFilter::new("off")
-    };
-
     let layer = fmt::layer()
         .with_writer(writer)
         .with_ansi(false)
         .with_file(true)
         .with_line_number(true)
         .with_target(true)
-        .with_filter(env_filter);
+        .with_timer(tracing_subscriber::fmt::time::LocalTime::rfc_3339());
 
     Ok((Box::new(layer), guard))
 }

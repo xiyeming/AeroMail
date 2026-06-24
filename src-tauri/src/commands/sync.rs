@@ -27,3 +27,27 @@ pub async fn stop_sync(account_id: String, state: State<'_, AppState>) -> Result
         .await
         .map_err(|e| e.to_payload())
 }
+
+#[tauri::command]
+#[instrument(skip(state), fields(folder_id = %folder_id, limit), err(Debug))]
+pub async fn fetch_older_mails(
+    folder_id: String,
+    limit: u32,
+    state: State<'_, AppState>,
+) -> Result<u32, ErrorPayload> {
+    let sync = state.sync_service.read().await;
+    let fetched = sync
+        .fetch_older_mails(&folder_id, limit)
+        .await
+        .map_err(|e| e.to_payload())?;
+    drop(sync);
+
+    if fetched > 0 {
+        let index_result = state.search_service.read().await.index_pending_mails();
+        if let Err(e) = index_result {
+            tracing::warn!(error = %e, "failed to index fetched older mails");
+        }
+    }
+
+    Ok(fetched)
+}

@@ -53,7 +53,7 @@ export function useKeyboardShortcuts() {
         e.preventDefault();
         if (mailStore.isReadingMode) {
           mailStore.toggleReadingMode();
-        } else if (mailStore.selectedMailIds.size > 0) {
+        } else if (mailStore.selectedMailIds.length > 0) {
           mailStore.clearBulkSelection();
         } else if (mailStore.selectedMailId) {
           mailStore.clearSelection();

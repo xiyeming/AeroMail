@@ -16,6 +16,7 @@ pub fn run_migrations(conn: &mut Connection) -> Result<(), AeroError> {
     run_account_migrations(&tx)?;
     run_draft_migrations(&tx)?;
     run_mail_migrations(&tx)?;
+    run_ai_chat_migrations(&tx)?;
     tx.commit()?;
     Ok(())
 }
@@ -31,6 +32,12 @@ fn run_account_migrations(tx: &rusqlite::Transaction) -> Result<(), AeroError> {
         tx.execute("ALTER TABLE accounts ADD COLUMN email TEXT", [])?;
         tx.execute(
             "UPDATE accounts SET email = name WHERE email IS NULL OR email = ''",
+            [],
+        )?;
+    }
+    if !column_exists(tx, "accounts", "smtp_tls_mode")? {
+        tx.execute(
+            "ALTER TABLE accounts ADD COLUMN smtp_tls_mode TEXT NOT NULL DEFAULT 'required'",
             [],
         )?;
     }
@@ -64,6 +71,13 @@ fn run_mail_migrations(tx: &rusqlite::Transaction) -> Result<(), AeroError> {
         if !column_exists(tx, "mails", column_name)? {
             tx.execute(&format!("ALTER TABLE mails ADD COLUMN {column_def}"), [])?;
         }
+    }
+    Ok(())
+}
+
+fn run_ai_chat_migrations(tx: &rusqlite::Transaction) -> Result<(), AeroError> {
+    if !column_exists(tx, "ai_chat_messages", "thinking")? {
+        tx.execute("ALTER TABLE ai_chat_messages ADD COLUMN thinking TEXT", [])?;
     }
     Ok(())
 }

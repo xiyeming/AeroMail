@@ -15,9 +15,10 @@ pub struct AccountConfig {
     pub excluded_folders: Vec<String>,
 }
 
-#[derive(Debug, Clone, Copy, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, Default)]
 #[serde(rename_all = "PascalCase")]
 pub enum MailProvider {
+    #[default]
     Gmail,
     Outlook,
     QQ,
@@ -35,9 +36,10 @@ pub struct ServerConfig {
     pub tls_mode: TlsMode,
 }
 
-#[derive(Debug, Clone, Copy, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, Default)]
 #[serde(rename_all = "lowercase")]
 pub enum TlsMode {
+    #[default]
     Required,
     StartTls,
     None,

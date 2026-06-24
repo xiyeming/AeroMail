@@ -11,7 +11,7 @@ export const useMailStore = defineStore('mail', () => {
   const mails = ref<MailHeader[]>([]);
   const selectedMailId = ref<string | null>(null);
   const selectedMail = ref<MailDetail | null>(null);
-  const selectedMailIds = ref<Set<string>>(new Set());
+  const selectedMailIds = ref<string[]>([]);
   const lastSelectedIndex = ref<number>(-1);
   const folders = ref<FolderInfo[]>([]);
   const currentFolderId = ref<string>('');
@@ -27,12 +27,52 @@ export const useMailStore = defineStore('mail', () => {
   async function loadFolders(accountId: string) {
     try {
       currentAccountId.value = accountId;
-      folders.value = await invoke<FolderInfo[]>('list_folders', { accountId });
+      const newFolders = await invoke<FolderInfo[]>('list_folders', { accountId });
+      const existing = new Map(folders.value.map((f) => [f.id, f]));
+      for (const folder of newFolders) {
+        existing.set(folder.id, folder);
+      }
+      folders.value = Array.from(existing.values());
       if (folders.value.length > 0 && !currentFolderId.value) {
         currentFolderId.value = folders.value[0].id;
       }
     } catch (e) {
       error.value = e instanceof Error ? e.message : String(e);
+    }
+  }
+
+  async function loadInboxMails(accountIds: string[], reset = true) {
+    if (loading.value || accountIds.length === 0) return;
+
+    try {
+      if (reset) {
+        loading.value = true;
+        mails.value = [];
+        hasMore.value = true;
+      } else {
+        loadingMore.value = true;
+      }
+
+      const offset = reset ? 0 : mails.value.length;
+      const newMails = await invoke<MailHeader[]>('get_inbox_mail_list', {
+        accountIds,
+        limit: PAGE_SIZE,
+        offset,
+      });
+
+      if (reset) {
+        mails.value = newMails;
+      } else {
+        mails.value.push(...newMails);
+      }
+
+      hasMore.value = newMails.length === PAGE_SIZE;
+      error.value = null;
+    } catch (e) {
+      error.value = e instanceof Error ? e.message : String(e);
+    } finally {
+      loading.value = false;
+      loadingMore.value = false;
     }
   }
 
@@ -49,9 +89,9 @@ export const useMailStore = defineStore('mail', () => {
       }
 
       currentFolderId.value = folderId;
-      const offset = reset ? 0 : mails.value.length;
       const isVirtual = VIRTUAL_FOLDERS.includes(folderId);
-      const newMails = await invoke<MailHeader[]>(
+      const offset = reset ? 0 : mails.value.length;
+      let newMails = await invoke<MailHeader[]>(
         isVirtual ? 'get_virtual_mail_list' : 'get_mail_list',
         {
           folderId,
@@ -59,6 +99,24 @@ export const useMailStore = defineStore('mail', () => {
           offset,
         }
       );
+
+      // When the local page is empty and we expect more, ask the backend to
+      // backfill older messages from the IMAP server, then try the same page
+      // again. Only do this for real folders; virtual folders have no remote
+      // older-mail source.
+      if (!reset && newMails.length === 0 && hasMore.value && !isVirtual) {
+        const fetched = await invoke<number>('fetch_older_mails', {
+          folderId,
+          limit: PAGE_SIZE,
+        });
+        if (fetched > 0) {
+          newMails = await invoke<MailHeader[]>('get_mail_list', {
+            folderId,
+            limit: PAGE_SIZE,
+            offset,
+          });
+        }
+      }
 
       if (reset) {
         mails.value = newMails;
@@ -73,6 +131,81 @@ export const useMailStore = defineStore('mail', () => {
     } finally {
       loading.value = false;
       loadingMore.value = false;
+    }
+  }
+
+  async function refreshMails(folderId: string) {
+    if (loading.value || loadingMore.value) return;
+
+    try {
+      currentFolderId.value = folderId;
+      const isVirtual = VIRTUAL_FOLDERS.includes(folderId);
+      // Fetch enough items to cover what the user has already loaded, then
+      // merge with the existing list. Reusing the same object references for
+      // already-visible items lets Vue's keyed list keep the DOM nodes in
+      // place, which removes the post-sync flicker.
+      const limit = Math.max(PAGE_SIZE, mails.value.length);
+      const fetched = await invoke<MailHeader[]>(
+        isVirtual ? 'get_virtual_mail_list' : 'get_mail_list',
+        {
+          folderId,
+          limit,
+          offset: 0,
+        }
+      );
+
+      if (fetched.length > 0) {
+        const existing = new Map(mails.value.map((m) => [m.id, m]));
+        const merged: MailHeader[] = [];
+        for (const mail of fetched) {
+          const current = existing.get(mail.id);
+          if (current) {
+            Object.assign(current, mail);
+            merged.push(current);
+          } else {
+            merged.push(mail);
+          }
+        }
+        mails.value = merged;
+      }
+
+      hasMore.value = fetched.length === limit;
+      error.value = null;
+    } catch (e) {
+      error.value = e instanceof Error ? e.message : String(e);
+    }
+  }
+
+  async function refreshInboxMails(accountIds: string[]) {
+    if (accountIds.length === 0 || loading.value || loadingMore.value) return;
+
+    try {
+      const limit = Math.max(PAGE_SIZE, mails.value.length);
+      const fetched = await invoke<MailHeader[]>('get_inbox_mail_list', {
+        accountIds,
+        limit,
+        offset: 0,
+      });
+
+      if (fetched.length > 0 || mails.value.length > 0) {
+        const existing = new Map(mails.value.map((m) => [m.id, m]));
+        const merged: MailHeader[] = [];
+        for (const mail of fetched) {
+          const current = existing.get(mail.id);
+          if (current) {
+            Object.assign(current, mail);
+            merged.push(current);
+          } else {
+            merged.push(mail);
+          }
+        }
+        mails.value = merged;
+      }
+
+      hasMore.value = fetched.length === limit;
+      error.value = null;
+    } catch (e) {
+      error.value = e instanceof Error ? e.message : String(e);
     }
   }
 
@@ -211,6 +344,23 @@ export const useMailStore = defineStore('mail', () => {
     selectedMail.value = null;
   }
 
+  function closeReader() {
+    clearSelection();
+    isReadingMode.value = false;
+  }
+
+  function addToSelection(mailId: string) {
+    if (!selectedMailIds.value.includes(mailId)) {
+      selectedMailIds.value = [...selectedMailIds.value, mailId];
+    }
+    lastSelectedIndex.value = mails.value.findIndex((m) => m.id === mailId);
+  }
+
+  function removeFromSelection(mailId: string) {
+    selectedMailIds.value = selectedMailIds.value.filter((id) => id !== mailId);
+    lastSelectedIndex.value = mails.value.findIndex((m) => m.id === mailId);
+  }
+
   // Batch selection
   function toggleSelection(mailId: string, ctrlKey: boolean, shiftKey: boolean) {
     if (shiftKey && lastSelectedIndex.value >= 0) {
@@ -218,30 +368,40 @@ export const useMailStore = defineStore('mail', () => {
       const currentIndex = mails.value.findIndex((m) => m.id === mailId);
       const start = Math.min(lastSelectedIndex.value, currentIndex);
       const end = Math.max(lastSelectedIndex.value, currentIndex);
+      const next = new Set(selectedMailIds.value);
       for (let i = start; i <= end; i++) {
-        selectedMailIds.value.add(mails.value[i].id);
+        next.add(mails.value[i].id);
       }
+      selectedMailIds.value = Array.from(next);
     } else if (ctrlKey) {
       // Toggle single
-      if (selectedMailIds.value.has(mailId)) {
-        selectedMailIds.value.delete(mailId);
+      const index = selectedMailIds.value.indexOf(mailId);
+      if (index === -1) {
+        selectedMailIds.value = [...selectedMailIds.value, mailId];
       } else {
-        selectedMailIds.value.add(mailId);
+        selectedMailIds.value = selectedMailIds.value.filter((id) => id !== mailId);
       }
     } else {
       // Single select
-      selectedMailIds.value.clear();
-      selectedMailIds.value.add(mailId);
+      selectedMailIds.value = [mailId];
     }
     lastSelectedIndex.value = mails.value.findIndex((m) => m.id === mailId);
   }
 
   function selectAll() {
-    mails.value.forEach((m) => selectedMailIds.value.add(m.id));
+    selectedMailIds.value = mails.value.map((m) => m.id);
   }
 
   function clearBulkSelection() {
-    selectedMailIds.value.clear();
+    selectedMailIds.value = [];
+    lastSelectedIndex.value = -1;
+  }
+
+  function invertSelection() {
+    const current = new Set(selectedMailIds.value);
+    selectedMailIds.value = mails.value
+      .filter((m) => !current.has(m.id))
+      .map((m) => m.id);
     lastSelectedIndex.value = -1;
   }
 
@@ -303,6 +463,9 @@ export const useMailStore = defineStore('mail', () => {
     totalUnread,
     loadFolders,
     loadMails,
+    loadInboxMails,
+    refreshMails,
+    refreshInboxMails,
     loadMailDetail,
     selectMail,
     markRead,
@@ -314,9 +477,13 @@ export const useMailStore = defineStore('mail', () => {
     selectNextMail,
     selectPreviousMail,
     clearSelection,
+    closeReader,
     toggleSelection,
     selectAll,
     clearBulkSelection,
+    invertSelection,
+    addToSelection,
+    removeFromSelection,
     bulkMarkRead,
     bulkDelete,
     moveMail,

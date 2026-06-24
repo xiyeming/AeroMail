@@ -10,22 +10,72 @@ struct ChatCompletionRequest {
     model: String,
     messages: Vec<ChatMessagePayload>,
     max_tokens: u32,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    tools: Option<Vec<serde_json::Value>>,
 }
 
 #[derive(Serialize, Deserialize)]
 struct ChatMessagePayload {
     role: String,
-    content: String,
+    content: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    tool_calls: Option<Vec<ToolCall>>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    tool_call_id: Option<String>,
 }
 
 #[derive(Deserialize)]
 struct ChatCompletionResponse {
     choices: Vec<Choice>,
+    usage: Option<Usage>,
 }
 
 #[derive(Deserialize)]
 struct Choice {
-    message: ChatMessagePayload,
+    message: MessagePayload,
+}
+
+#[derive(Deserialize, Debug, Clone)]
+struct MessagePayload {
+    content: Option<String>,
+    #[serde(default)]
+    reasoning_content: Option<String>,
+    #[serde(default)]
+    thinking: Option<String>,
+    #[serde(default)]
+    tool_calls: Option<Vec<ToolCall>>,
+}
+
+/// A tool invocation returned by the model.
+#[derive(Serialize, Deserialize, Debug, Clone)]
+pub struct ToolCall {
+    pub id: String,
+    #[serde(rename = "type")]
+    pub call_type: String,
+    pub function: FunctionCall,
+}
+
+#[derive(Serialize, Deserialize, Debug, Clone)]
+pub struct FunctionCall {
+    pub name: String,
+    pub arguments: String,
+}
+
+/// Token usage reported by the provider, if available.
+#[derive(Debug, Clone, Deserialize)]
+pub struct Usage {
+    pub prompt_tokens: Option<u32>,
+    pub completion_tokens: Option<u32>,
+    pub total_tokens: Option<u32>,
+}
+
+/// Result of a chat-completion request.
+#[derive(Debug, Clone)]
+pub struct CompletionResult {
+    pub content: String,
+    pub reasoning: Option<String>,
+    pub tool_calls: Option<Vec<ToolCall>>,
+    pub usage: Option<Usage>,
 }
 
 /// Sends a chat completion request to an OpenAI-compatible API.
@@ -37,9 +87,10 @@ struct Choice {
 pub async fn chat_completion(
     client: &Client,
     provider: &AiProvider,
-    messages: Vec<ChatMessage>,
+    messages: &[ChatMessage],
     max_tokens: u32,
-) -> Result<String, AeroError> {
+    tools: Option<&[serde_json::Value]>,
+) -> Result<CompletionResult, AeroError> {
     let api_key = String::from_utf8(provider.api_key_encrypted.clone())
         .map_err(|e| AeroError::AiApiError(format!("invalid api key: {e}")))?;
     let base_url = provider
@@ -52,10 +103,16 @@ pub async fn chat_completion(
     let url = format!("{}/chat/completions", base_url.trim_end_matches('/'));
 
     let payload_messages: Vec<ChatMessagePayload> = messages
-        .into_iter()
+        .iter()
         .map(|m| ChatMessagePayload {
-            role: m.role,
-            content: m.content,
+            role: m.role.clone(),
+            content: if m.content.is_empty() {
+                None
+            } else {
+                Some(m.content.clone())
+            },
+            tool_calls: m.tool_calls.clone(),
+            tool_call_id: m.tool_call_id.clone(),
         })
         .collect();
 
@@ -63,6 +120,7 @@ pub async fn chat_completion(
         model: provider.model.clone(),
         messages: payload_messages,
         max_tokens,
+        tools: tools.map(<[serde_json::Value]>::to_vec),
     };
 
     let res = client
@@ -87,9 +145,20 @@ pub async fn chat_completion(
         .await
         .map_err(|e| AeroError::AiApiError(e.to_string()))?;
 
-    data.choices
+    let choice = data
+        .choices
         .into_iter()
         .next()
-        .map(|c| c.message.content)
-        .ok_or_else(|| AeroError::AiApiError("empty response".to_string()))
+        .ok_or_else(|| AeroError::AiApiError("empty response".to_string()))?;
+    let message = choice.message;
+
+    let content = message.content.unwrap_or_default();
+    let reasoning = message.reasoning_content.or(message.thinking);
+
+    Ok(CompletionResult {
+        content,
+        reasoning,
+        tool_calls: message.tool_calls,
+        usage: data.usage,
+    })
 }

@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed, ref, onMounted, watch } from 'vue';
 import { invoke } from '@tauri-apps/api/core';
-import { Trash2, Pencil } from 'lucide-vue-next';
+import { Star, Trash2, Pencil } from 'lucide-vue-next';
 import { useLocale, type Locale } from '@/composables/useLocale';
 import { useLogConfig } from '@/composables/useLogConfig';
 import { useTheme, type Theme } from '@/composables/useTheme';
@@ -9,11 +9,14 @@ import { useWindowFrame, type Decorations } from '@/composables/useWindowFrame';
 import { useAccountStore } from '@/stores/account';
 import { useAiStore } from '@/stores/ai';
 import { useSettingsStore } from '@/stores/settings';
+import { useToastStore } from '@/stores/toast';
 import AccountForm from '@/components/AccountForm.vue';
+import BaseCheckbox from '@/components/BaseCheckbox.vue';
 import BaseSelect from '@/components/BaseSelect.vue';
-import type { AiProviderKind } from '@/types/ai';
+import type { AiMcpTransport, AiProviderKind } from '@/types/ai';
 import type { AccountConfig, AccountSummary } from '@/types/account';
 import type { TranslationProviderSummary, TraditionalProviderKind } from '@/types/translation';
+import type { AiMcpServer, AiSkill } from '@/types/ai';
 
 const { locale, setLocale, supportedLocales } = useLocale();
 const { theme, setTheme } = useTheme();
@@ -54,7 +57,9 @@ const localeLabels: Record<Locale, string> = {
 const aiStore = useAiStore();
 const accountStore = useAccountStore();
 const settingsStore = useSettingsStore();
-const showAddForm = ref(false);
+const toast = useToastStore();
+const showAccountForm = ref(false);
+const showAiForm = ref(false);
 const editingAccount = ref<AccountSummary | null>(null);
 const editingConfig = ref<AccountConfig | null>(null);
 const newName = ref('');
@@ -100,20 +105,48 @@ const providerPresets: Record<AiProviderKind, { baseUrl: string; model: string }
   custom_openai_compatible: { baseUrl: '', model: '' },
 };
 
+const savingProvider = ref(false);
+
 watch(selectedKind, (kind) => {
-  if (!showAddForm.value) return;
+  if (!showAiForm.value) return;
   const preset = providerPresets[kind];
   if (preset) {
     newBaseUrl.value = preset.baseUrl;
     newModel.value = preset.model;
   }
 });
+
+watch(showAiForm, (show) => {
+  if (show) {
+    const preset = providerPresets[selectedKind.value];
+    if (preset) {
+      newBaseUrl.value = preset.baseUrl;
+      newModel.value = preset.model;
+    }
+  }
+});
+const syncMailDays = ref('7');
+const syncMailDayOptions = ['7', '30', '90', '180', 'all'];
+
+async function loadSyncMailDays() {
+  const value = await settingsStore.get('app.sync.mailDays');
+  syncMailDays.value = syncMailDayOptions.includes(value ?? '') ? value! : '7';
+}
+
+watch(syncMailDays, async (value) => {
+  await settingsStore.set('app.sync.mailDays', value);
+});
+
 onMounted(() => {
   void accountStore.loadAccounts();
   void aiStore.loadProviders();
+  void aiStore.loadDefaultProvider();
+  void aiStore.loadMcpServers();
+  void aiStore.loadSkills();
   void loadTranslationProviders();
   void loadLogConfig();
   void loadTrustedDomains();
+  void loadSyncMailDays();
 });
 
 // --- Trusted domains ---
@@ -169,20 +202,45 @@ function resetForm() {
 }
 
 async function addProvider() {
-  await invoke('upsert_ai_provider', {
-    provider: {
-      id: crypto.randomUUID(),
-      name: newName.value,
-      kind: selectedKind.value,
-      apiKeyEncrypted: Array.from(new TextEncoder().encode(newApiKey.value)),
-      baseUrl: newBaseUrl.value || undefined,
-      model: newModel.value,
-      maxTokens: 2048,
-    },
+  console.log('[SettingsView] addProvider clicked', {
+    name: newName.value,
+    kind: selectedKind.value,
+    baseUrl: newBaseUrl.value,
+    model: newModel.value,
+    apiKeyLength: newApiKey.value.length,
   });
-  await aiStore.loadProviders();
-  resetForm();
-  showAddForm.value = false;
+  if (!newName.value || !newApiKey.value || !newModel.value) {
+    console.warn('[SettingsView] addProvider aborted: missing required fields');
+    return;
+  }
+  savingProvider.value = true;
+  try {
+    console.log('[SettingsView] invoking upsert_ai_provider');
+    const result = await invoke('upsert_ai_provider', {
+      provider: {
+        id: crypto.randomUUID(),
+        name: newName.value,
+        kind: selectedKind.value,
+        apiKeyEncrypted: Array.from(new TextEncoder().encode(newApiKey.value)),
+        baseUrl: newBaseUrl.value || undefined,
+        model: newModel.value,
+        maxTokens: 2048,
+      },
+    });
+    console.log('[SettingsView] upsert_ai_provider result:', result);
+    await aiStore.loadProviders();
+    resetForm();
+    showAiForm.value = false;
+  } catch (e) {
+    console.error('[SettingsView] upsert_ai_provider failed:', e);
+    toast.add({
+      type: 'error',
+      message: e instanceof Error ? e.message : String(e),
+      duration: 5000,
+    });
+  } finally {
+    savingProvider.value = false;
+  }
 }
 
 async function startEdit(account: AccountSummary) {
@@ -204,7 +262,7 @@ async function saveAccount(config: AccountConfig, _password: string) {
     }
     editingAccount.value = null;
     editingConfig.value = null;
-    showAddForm.value = false;
+    showAccountForm.value = false;
   } catch {
     // error surfaced by store
   }
@@ -219,6 +277,11 @@ async function testAccount(config: AccountConfig, _password: string) {
 async function removeProvider(id: string) {
   await invoke('delete_ai_provider', { providerId: id });
   await aiStore.loadProviders();
+}
+
+async function setDefaultProvider(id: string) {
+  const next = aiStore.defaultProviderId === id ? null : id;
+  await aiStore.setDefaultProvider(next);
 }
 
 // --- Translation Providers ---
@@ -295,6 +358,140 @@ async function removeTranslationProvider(id: string) {
   await invoke('delete_translation_provider', { providerId: id });
   await loadTranslationProviders();
 }
+
+// --- MCP Servers ---
+const showMcpForm = ref(false);
+const mcpTransport = ref<AiMcpTransport>('stdio');
+const mcpName = ref('');
+const mcpCommand = ref('');
+const mcpArgs = ref('');
+const mcpUrl = ref('');
+const mcpEnvJson = ref('');
+const mcpEnabled = ref(true);
+const mcpTransports: AiMcpTransport[] = ['stdio', 'sse'];
+
+function resetMcpForm() {
+  mcpTransport.value = 'stdio';
+  mcpName.value = '';
+  mcpCommand.value = '';
+  mcpArgs.value = '';
+  mcpUrl.value = '';
+  mcpEnvJson.value = '';
+  mcpEnabled.value = true;
+}
+
+function parseArgs(value: string): string[] | undefined {
+  const trimmed = value.trim();
+  if (!trimmed) return undefined;
+  return trimmed
+    .split(/[\n,]/)
+    .map((arg) => arg.trim())
+    .filter(Boolean);
+}
+
+function isValidJsonObject(value: string): boolean {
+  const trimmed = value.trim();
+  if (!trimmed) return true;
+  try {
+    const parsed = JSON.parse(trimmed);
+    return typeof parsed === 'object' && parsed !== null && !Array.isArray(parsed);
+  } catch {
+    return false;
+  }
+}
+
+function isValidJsonSchema(value: string): boolean {
+  const trimmed = value.trim();
+  if (!trimmed) return false;
+  try {
+    const parsed = JSON.parse(trimmed);
+    return typeof parsed === 'object' && parsed !== null && typeof parsed.type === 'string';
+  } catch {
+    return false;
+  }
+}
+
+async function addMcpServer() {
+  if (!mcpName.value) return;
+  if (mcpTransport.value === 'stdio' && !mcpCommand.value) return;
+  if (mcpTransport.value === 'sse' && !mcpUrl.value) return;
+  if (!isValidJsonObject(mcpEnvJson.value)) return;
+
+  const server: AiMcpServer = {
+    id: crypto.randomUUID(),
+    name: mcpName.value,
+    transport: mcpTransport.value,
+    command: mcpCommand.value || undefined,
+    args: parseArgs(mcpArgs.value),
+    url: mcpUrl.value || undefined,
+    envJson: mcpEnvJson.value.trim() || undefined,
+    isEnabled: mcpEnabled.value,
+    createdAt: Date.now(),
+    updatedAt: Date.now(),
+  };
+
+  await invoke('upsert_ai_mcp_server', { server });
+  await aiStore.loadMcpServers();
+  resetMcpForm();
+  showMcpForm.value = false;
+}
+
+async function removeMcpServer(id: string) {
+  await invoke('delete_ai_mcp_server', { serverId: id });
+  await aiStore.loadMcpServers();
+}
+
+// --- AI Skills ---
+const showSkillForm = ref(false);
+const skillName = ref('');
+const skillDescription = ref('');
+const skillSchemaJson = ref('');
+const skillCommand = ref('');
+const skillArgs = ref('');
+const skillWorkingDir = ref('');
+const skillTimeout = ref('60');
+const skillEnabled = ref(true);
+
+function resetSkillForm() {
+  skillName.value = '';
+  skillDescription.value = '';
+  skillSchemaJson.value = '';
+  skillCommand.value = '';
+  skillArgs.value = '';
+  skillWorkingDir.value = '';
+  skillTimeout.value = '60';
+  skillEnabled.value = true;
+}
+
+async function addSkill() {
+  if (!skillName.value || !skillDescription.value || !skillCommand.value) return;
+  if (!isValidJsonSchema(skillSchemaJson.value)) return;
+
+  const timeout = parseInt(skillTimeout.value, 10);
+  const skill: AiSkill = {
+    id: crypto.randomUUID(),
+    name: skillName.value,
+    description: skillDescription.value,
+    inputSchemaJson: skillSchemaJson.value.trim(),
+    command: skillCommand.value,
+    args: parseArgs(skillArgs.value),
+    workingDir: skillWorkingDir.value.trim() || undefined,
+    timeoutSeconds: Number.isNaN(timeout) || timeout <= 0 ? undefined : timeout,
+    isEnabled: skillEnabled.value,
+    createdAt: Date.now(),
+    updatedAt: Date.now(),
+  };
+
+  await invoke('upsert_ai_skill', { skill });
+  await aiStore.loadSkills();
+  resetSkillForm();
+  showSkillForm.value = false;
+}
+
+async function removeSkill(id: string) {
+  await invoke('delete_ai_skill', { skillId: id });
+  await aiStore.loadSkills();
+}
 </script>
 
 <template>
@@ -330,16 +527,25 @@ async function removeTranslationProvider(id: string) {
             ]"
           />
         </div>
-        <div class="mt-4 flex items-center gap-2">
-          <input
-            id="system-title-bar"
-            v-model="systemTitleBarEnabled"
-            type="checkbox"
-            class="h-4 w-4 rounded border-border bg-base text-accent outline-none focus:ring-2 focus:ring-accent focus:ring-offset-0"
+        <div class="flex flex-col gap-1.5">
+          <label for="sync-mail-days-select" class="text-sm text-secondary">{{
+            $t('settings.syncMailDays')
+          }}</label>
+          <BaseSelect
+            id="sync-mail-days-select"
+            v-model="syncMailDays"
+            :options="
+              syncMailDayOptions.map((value) => ({
+                value,
+                label: $t(`settings.syncMailDays${value === 'all' ? 'All' : value}`),
+              }))
+            "
           />
-          <label for="system-title-bar" class="text-sm text-secondary">
-            {{ $t('settings.systemTitleBar') }}
-          </label>
+        </div>
+        <div class="mt-4 flex items-center">
+          <BaseCheckbox id="system-title-bar" v-model="systemTitleBarEnabled">{{
+            $t('settings.systemTitleBar')
+          }}</BaseCheckbox>
         </div>
       </div>
     </section>
@@ -350,16 +556,10 @@ async function removeTranslationProvider(id: string) {
     >
       <h2 id="log-heading" class="mb-4 text-lg font-medium">{{ $t('settings.log') }}</h2>
       <div class="space-y-4">
-        <div class="flex items-center gap-2">
-          <input
-            id="log-enabled"
-            v-model="logEnabled"
-            type="checkbox"
-            class="h-4 w-4 rounded border-border bg-base text-accent outline-none focus:ring-2 focus:ring-accent focus:ring-offset-0"
-          />
-          <label for="log-enabled" class="text-sm text-secondary">
-            {{ $t('settings.logEnabled') }}
-          </label>
+        <div class="flex items-center">
+          <BaseCheckbox id="log-enabled" v-model="logEnabled">{{
+            $t('settings.logEnabled')
+          }}</BaseCheckbox>
         </div>
         <div>
           <label for="log-dir" class="mb-1 block text-sm text-secondary">
@@ -383,6 +583,12 @@ async function removeTranslationProvider(id: string) {
     >
       <h2 id="trusted-domains-heading" class="mb-1 text-lg font-medium">
         {{ $t('settings.trustedDomains') }}
+        <span
+          v-if="trustedDomains.length > 0"
+          class="ml-2 rounded-full bg-raised px-2 py-0.5 text-xs text-secondary"
+        >
+          {{ trustedDomains.length }}
+        </span>
       </h2>
       <p class="mb-4 text-xs text-secondary">{{ $t('settings.trustedDomainsHint') }}</p>
 
@@ -405,23 +611,20 @@ async function removeTranslationProvider(id: string) {
         </button>
       </div>
 
-      <div
-        v-if="isLoadingTrustedDomains"
-        class="py-6 text-center text-sm text-secondary"
-      >
+      <div v-if="isLoadingTrustedDomains" class="py-6 text-center text-sm text-secondary">
         {{ $t('common.loading') }}
       </div>
-      <div
-        v-else-if="trustedDomains.length === 0"
-        class="py-6 text-center text-sm text-secondary"
-      >
+      <div v-else-if="trustedDomains.length === 0" class="py-6 text-center text-sm text-secondary">
         {{ $t('settings.noTrustedDomains') }}
       </div>
-      <ul v-else class="mt-4 divide-y divide-border">
+      <ul
+        v-else
+        class="mt-4 max-h-48 divide-y divide-border overflow-y-auto rounded-md border border-border"
+      >
         <li
           v-for="domain in trustedDomains"
           :key="domain"
-          class="flex items-center justify-between py-2"
+          class="flex items-center justify-between px-3 py-2"
         >
           <span class="text-sm text-primary">{{ domain }}</span>
           <button
@@ -470,22 +673,24 @@ async function removeTranslationProvider(id: string) {
               </div>
             </div>
           </div>
-          <button
-            type="button"
-            class="rounded-md p-1.5 text-secondary transition-colors hover:bg-raised hover:text-primary"
-            :aria-label="$t('common.edit')"
-            @click="startEdit(account)"
-          >
-            <Pencil class="h-4 w-4" />
-          </button>
-          <button
-            type="button"
-            class="rounded-md p-1.5 text-secondary transition-colors hover:bg-danger-subtle hover:text-danger"
-            :aria-label="$t('common.delete')"
-            @click="accountStore.deleteAccount(account.id)"
-          >
-            <Trash2 class="h-4 w-4" />
-          </button>
+          <div class="flex items-center gap-1">
+            <button
+              type="button"
+              class="rounded-md p-1.5 text-secondary transition-colors hover:bg-raised hover:text-primary"
+              :aria-label="$t('common.edit')"
+              @click="startEdit(account)"
+            >
+              <Pencil class="h-4 w-4" />
+            </button>
+            <button
+              type="button"
+              class="rounded-md p-1.5 text-secondary transition-colors hover:bg-danger-subtle hover:text-danger"
+              :aria-label="$t('common.delete')"
+              @click="accountStore.deleteAccount(account.id)"
+            >
+              <Trash2 class="h-4 w-4" />
+            </button>
+          </div>
         </li>
       </ul>
 
@@ -499,19 +704,19 @@ async function removeTranslationProvider(id: string) {
       />
       <template v-else>
         <button
-          v-if="!showAddForm"
+          v-if="!showAccountForm"
           type="button"
           class="mb-4 flex h-9 w-full items-center justify-center rounded-md border border-border bg-base text-sm text-primary transition-colors hover:bg-raised"
-          @click="showAddForm = true"
+          @click="showAccountForm = true"
         >
           {{ $t('account.addAccount') }}
         </button>
         <AccountForm
-          v-if="showAddForm"
+          v-if="showAccountForm"
           mode="add"
           @submit="saveAccount"
           @test="testAccount"
-          @cancel="showAddForm = false"
+          @cancel="showAccountForm = false"
         />
       </template>
     </section>
@@ -522,14 +727,14 @@ async function removeTranslationProvider(id: string) {
         <button
           type="button"
           class="flex h-9 items-center justify-center rounded-md border border-border bg-base px-3 text-sm text-primary transition-colors hover:bg-raised"
-          @click="showAddForm = !showAddForm"
+          @click="showAiForm = !showAiForm"
         >
-          {{ showAddForm ? $t('common.cancel') : $t('settings.addProvider') }}
+          {{ showAiForm ? $t('common.cancel') : $t('settings.addProvider') }}
         </button>
       </div>
 
       <div
-        v-if="aiStore.providers.length === 0 && !showAddForm"
+        v-if="aiStore.providers.length === 0 && !showAiForm"
         class="py-6 text-center text-sm text-secondary"
       >
         {{ $t('settings.noProviders') }}
@@ -546,17 +751,35 @@ async function removeTranslationProvider(id: string) {
             <span class="rounded bg-raised px-2 py-0.5 text-xs text-secondary">{{ p.kind }}</span>
             <span class="text-xs text-tertiary">{{ p.model }}</span>
           </div>
-          <button
-            type="button"
-            class="text-xs text-danger transition-colors hover:text-danger-hover"
-            @click="removeProvider(p.id)"
-          >
-            {{ $t('common.delete') }}
-          </button>
+          <div class="flex items-center gap-1">
+            <button
+              type="button"
+              class="rounded p-1.5 transition-colors"
+              :class="
+                aiStore.defaultProviderId === p.id
+                  ? 'text-accent'
+                  : 'text-secondary hover:text-accent'
+              "
+              :title="$t('settings.defaultProvider')"
+              @click="setDefaultProvider(p.id)"
+            >
+              <Star
+                class="h-4 w-4"
+                :fill="aiStore.defaultProviderId === p.id ? 'currentColor' : 'none'"
+              />
+            </button>
+            <button
+              type="button"
+              class="text-xs text-danger transition-colors hover:text-danger-hover"
+              @click="removeProvider(p.id)"
+            >
+              {{ $t('common.delete') }}
+            </button>
+          </div>
         </li>
       </ul>
 
-      <div v-if="showAddForm" class="mt-4 space-y-3 rounded-md border border-border bg-base p-4">
+      <div v-if="showAiForm" class="mt-4 space-y-3 rounded-md border border-border bg-base p-4">
         <div>
           <label class="mb-1 block text-sm text-secondary">{{ $t('settings.providerName') }}</label>
           <input
@@ -606,10 +829,10 @@ async function removeTranslationProvider(id: string) {
         <button
           type="button"
           class="mt-2 flex h-9 w-full items-center justify-center rounded-md bg-accent text-sm font-medium text-white transition-colors hover:bg-accent-hover disabled:opacity-50 disabled:cursor-not-allowed"
-          :disabled="!newName || !newApiKey || !newModel"
+          :disabled="!newName || !newApiKey || !newModel || savingProvider"
           @click="addProvider"
         >
-          {{ $t('settings.saveProvider') }}
+          {{ savingProvider ? $t('common.loading') : $t('settings.saveProvider') }}
         </button>
       </div>
     </section>
@@ -778,6 +1001,245 @@ async function removeTranslationProvider(id: string) {
           @click="addTranslationProvider"
         >
           {{ $t('settings.saveProvider') }}
+        </button>
+      </div>
+    </section>
+
+    <section class="mt-6 rounded-lg border border-border bg-elevated p-5">
+      <div class="mb-4 flex items-center justify-between">
+        <h2 class="text-lg font-medium">{{ $t('settings.mcpServers') }}</h2>
+        <button
+          type="button"
+          class="flex h-9 items-center justify-center rounded-md border border-border bg-base px-3 text-sm text-primary transition-colors hover:bg-raised"
+          @click="
+            showMcpForm = !showMcpForm;
+            resetMcpForm();
+          "
+        >
+          {{ showMcpForm ? $t('common.cancel') : $t('settings.addMcpServer') }}
+        </button>
+      </div>
+
+      <div
+        v-if="aiStore.mcpServers.length === 0 && !showMcpForm"
+        class="py-6 text-center text-sm text-secondary"
+      >
+        {{ $t('settings.noMcpServers') }}
+      </div>
+
+      <ul v-else-if="aiStore.mcpServers.length > 0" class="divide-y divide-border">
+        <li
+          v-for="server in aiStore.mcpServers"
+          :key="server.id"
+          class="flex items-center justify-between py-2.5"
+        >
+          <div class="flex items-center gap-2">
+            <span class="text-sm text-primary">{{ server.name }}</span>
+            <span class="rounded bg-raised px-2 py-0.5 text-xs text-secondary">{{ server.transport }}</span>
+            <span v-if="!server.isEnabled" class="text-xs text-tertiary">{{ $t('settings.disabled') }}</span>
+          </div>
+          <button
+            type="button"
+            class="text-xs text-danger transition-colors hover:text-danger-hover"
+            @click="removeMcpServer(server.id)"
+          >
+            {{ $t('common.delete') }}
+          </button>
+        </li>
+      </ul>
+
+      <div v-if="showMcpForm" class="mt-4 space-y-3 rounded-md border border-border bg-base p-4">
+        <div>
+          <label class="mb-1 block text-sm text-secondary">{{ $t('settings.providerName') }}</label>
+          <input
+            v-model="mcpName"
+            type="text"
+            class="h-9 w-full rounded-md border border-border bg-elevated px-3 text-sm text-primary outline-none placeholder:text-tertiary focus:border-accent"
+            :placeholder="$t('settings.providerNamePlaceholder')"
+          />
+        </div>
+        <div>
+          <label class="mb-1 block text-sm text-secondary">{{ $t('settings.mcpTransport') }}</label>
+          <BaseSelect
+            v-model="mcpTransport"
+            variant="elevated"
+            :options="mcpTransports.map((t) => ({ value: t, label: t }))"
+          />
+        </div>
+        <div v-if="mcpTransport === 'stdio'">
+          <label class="mb-1 block text-sm text-secondary">{{ $t('settings.mcpCommand') }}</label>
+          <input
+            v-model="mcpCommand"
+            type="text"
+            class="h-9 w-full rounded-md border border-border bg-elevated px-3 text-sm text-primary outline-none placeholder:text-tertiary focus:border-accent"
+            :placeholder="$t('settings.mcpCommandPlaceholder')"
+          />
+        </div>
+        <div>
+          <label class="mb-1 block text-sm text-secondary">{{ $t('settings.mcpArgs') }}</label>
+          <input
+            v-model="mcpArgs"
+            type="text"
+            class="h-9 w-full rounded-md border border-border bg-elevated px-3 text-sm text-primary outline-none placeholder:text-tertiary focus:border-accent"
+            :placeholder="$t('settings.mcpArgsPlaceholder')"
+          />
+        </div>
+        <div v-if="mcpTransport === 'sse'">
+          <label class="mb-1 block text-sm text-secondary">{{ $t('settings.mcpUrl') }}</label>
+          <input
+            v-model="mcpUrl"
+            type="text"
+            class="h-9 w-full rounded-md border border-border bg-elevated px-3 text-sm text-primary outline-none placeholder:text-tertiary focus:border-accent"
+            :placeholder="$t('settings.mcpUrlPlaceholder')"
+          />
+        </div>
+        <div>
+          <label class="mb-1 block text-sm text-secondary">{{ $t('settings.mcpEnv') }}</label>
+          <textarea
+            v-model="mcpEnvJson"
+            rows="3"
+            class="w-full rounded-md border border-border bg-elevated px-3 py-2 text-sm text-primary outline-none placeholder:text-tertiary focus:border-accent"
+            :placeholder="$t('settings.mcpEnvPlaceholder')"
+          />
+        </div>
+        <div class="flex items-center">
+          <BaseCheckbox id="mcp-enabled" v-model="mcpEnabled">{{ $t('settings.enabled') }}</BaseCheckbox>
+        </div>
+        <button
+          type="button"
+          class="mt-2 flex h-9 w-full items-center justify-center rounded-md bg-accent text-sm font-medium text-white transition-colors hover:bg-accent-hover disabled:opacity-50 disabled:cursor-not-allowed"
+          :disabled="
+            !mcpName ||
+            (mcpTransport === 'stdio' && !mcpCommand) ||
+            (mcpTransport === 'sse' && !mcpUrl) ||
+            !isValidJsonObject(mcpEnvJson)
+          "
+          @click="addMcpServer"
+        >
+          {{ $t('settings.saveMcpServer') }}
+        </button>
+      </div>
+    </section>
+
+    <section class="mt-6 rounded-lg border border-border bg-elevated p-5">
+      <div class="mb-4 flex items-center justify-between">
+        <h2 class="text-lg font-medium">{{ $t('settings.aiSkills') }}</h2>
+        <button
+          type="button"
+          class="flex h-9 items-center justify-center rounded-md border border-border bg-base px-3 text-sm text-primary transition-colors hover:bg-raised"
+          @click="
+            showSkillForm = !showSkillForm;
+            resetSkillForm();
+          "
+        >
+          {{ showSkillForm ? $t('common.cancel') : $t('settings.addAiSkill') }}
+        </button>
+      </div>
+
+      <div
+        v-if="aiStore.skills.length === 0 && !showSkillForm"
+        class="py-6 text-center text-sm text-secondary"
+      >
+        {{ $t('settings.noAiSkills') }}
+      </div>
+
+      <ul v-else-if="aiStore.skills.length > 0" class="divide-y divide-border">
+        <li
+          v-for="skill in aiStore.skills"
+          :key="skill.id"
+          class="flex items-center justify-between py-2.5"
+        >
+          <div class="flex items-center gap-2">
+            <span class="text-sm text-primary">{{ skill.name }}</span>
+            <span v-if="!skill.isEnabled" class="text-xs text-tertiary">{{ $t('settings.disabled') }}</span>
+          </div>
+          <button
+            type="button"
+            class="text-xs text-danger transition-colors hover:text-danger-hover"
+            @click="removeSkill(skill.id)"
+          >
+            {{ $t('common.delete') }}
+          </button>
+        </li>
+      </ul>
+
+      <div v-if="showSkillForm" class="mt-4 space-y-3 rounded-md border border-border bg-base p-4">
+        <div>
+          <label class="mb-1 block text-sm text-secondary">{{ $t('settings.providerName') }}</label>
+          <input
+            v-model="skillName"
+            type="text"
+            class="h-9 w-full rounded-md border border-border bg-elevated px-3 text-sm text-primary outline-none placeholder:text-tertiary focus:border-accent"
+            :placeholder="$t('settings.skillNamePlaceholder')"
+          />
+        </div>
+        <div>
+          <label class="mb-1 block text-sm text-secondary">{{ $t('settings.skillDescription') }}</label>
+          <input
+            v-model="skillDescription"
+            type="text"
+            class="h-9 w-full rounded-md border border-border bg-elevated px-3 text-sm text-primary outline-none placeholder:text-tertiary focus:border-accent"
+            :placeholder="$t('settings.skillDescriptionPlaceholder')"
+          />
+        </div>
+        <div>
+          <label class="mb-1 block text-sm text-secondary">{{ $t('settings.skillSchema') }}</label>
+          <textarea
+            v-model="skillSchemaJson"
+            rows="4"
+            class="w-full rounded-md border border-border bg-elevated px-3 py-2 text-sm text-primary outline-none placeholder:text-tertiary focus:border-accent"
+            :placeholder="$t('settings.skillSchemaPlaceholder')"
+          />
+        </div>
+        <div>
+          <label class="mb-1 block text-sm text-secondary">{{ $t('settings.skillCommand') }}</label>
+          <input
+            v-model="skillCommand"
+            type="text"
+            class="h-9 w-full rounded-md border border-border bg-elevated px-3 text-sm text-primary outline-none placeholder:text-tertiary focus:border-accent"
+            :placeholder="$t('settings.mcpCommandPlaceholder')"
+          />
+        </div>
+        <div>
+          <label class="mb-1 block text-sm text-secondary">{{ $t('settings.skillArgs') }}</label>
+          <input
+            v-model="skillArgs"
+            type="text"
+            class="h-9 w-full rounded-md border border-border bg-elevated px-3 text-sm text-primary outline-none placeholder:text-tertiary focus:border-accent"
+            :placeholder="$t('settings.mcpArgsPlaceholder')"
+          />
+        </div>
+        <div>
+          <label class="mb-1 block text-sm text-secondary">{{ $t('settings.skillWorkingDir') }}</label>
+          <input
+            v-model="skillWorkingDir"
+            type="text"
+            class="h-9 w-full rounded-md border border-border bg-elevated px-3 text-sm text-primary outline-none placeholder:text-tertiary focus:border-accent"
+            :placeholder="$t('settings.skillWorkingDirPlaceholder')"
+          />
+        </div>
+        <div>
+          <label class="mb-1 block text-sm text-secondary">{{ $t('settings.skillTimeout') }}</label>
+          <input
+            v-model="skillTimeout"
+            type="number"
+            min="1"
+            class="h-9 w-full rounded-md border border-border bg-elevated px-3 text-sm text-primary outline-none placeholder:text-tertiary focus:border-accent"
+            :placeholder="$t('settings.skillTimeoutPlaceholder')"
+          />
+        </div>
+        <div class="flex items-center">
+          <BaseCheckbox id="skill-enabled" v-model="skillEnabled">{{ $t('settings.enabled') }}</BaseCheckbox>
+        </div>
+        <button
+          type="button"
+          class="mt-2 flex h-9 w-full items-center justify-center rounded-md bg-accent text-sm font-medium text-white transition-colors hover:bg-accent-hover disabled:opacity-50 disabled:cursor-not-allowed"
+          :disabled="
+            !skillName || !skillDescription || !skillCommand || !isValidJsonSchema(skillSchemaJson)
+          "
+          @click="addSkill"
+        >
+          {{ $t('settings.saveAiSkill') }}
         </button>
       </div>
     </section>

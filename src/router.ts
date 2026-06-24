@@ -1,6 +1,6 @@
 import { createRouter, createWebHistory } from 'vue-router';
 import MailViewer from './components/MailViewer.vue';
-import SettingsView from './views/SettingsView.vue';
+import SettingsErrorBoundary from './components/SettingsErrorBoundary.vue';
 import ComposeView from './views/ComposeView.vue';
 import DraftsView from './views/DraftsView.vue';
 
@@ -20,7 +20,7 @@ const router = createRouter({
     {
       path: '/settings',
       name: 'settings',
-      component: SettingsView,
+      component: SettingsErrorBoundary,
     },
     {
       path: '/compose',

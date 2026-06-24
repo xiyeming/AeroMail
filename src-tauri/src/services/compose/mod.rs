@@ -9,7 +9,7 @@ use std::path::PathBuf;
 use std::sync::Arc;
 
 use tokio::sync::RwLock;
-use tracing::{debug, instrument};
+use tracing::{debug, instrument, warn};
 
 use crate::db::pool::Database;
 use crate::error::AeroError;
@@ -17,6 +17,7 @@ use crate::models::account::AccountConfig;
 use crate::models::compose::{ComposeDraft, ComposeDraftSummary, ReplyKind, SendMailRequest};
 use crate::models::mail::MailDetail;
 use crate::services::account_manager::AccountManager;
+use crate::services::imap_client;
 
 use self::draft::DraftService;
 
@@ -107,9 +108,33 @@ impl ComposeService {
         debug!("sending message via SMTP");
         smtp_sender::send_message(&account_config, message_bytes.clone()).await?;
 
+        // Append a copy to the IMAP Sent folder so the message appears there.
+        if let Err(e) = Self::append_to_sent_folder(&account_config, &message_bytes).await {
+            warn!(
+                "Failed to append sent message to Sent folder for account {}: {}",
+                account_id, e
+            );
+        }
+
         // Clean up local draft
         self.draft_service.delete_draft(&draft.id)?;
 
+        Ok(())
+    }
+
+    /// Appends a sent message to the account's IMAP Sent folder.
+    #[instrument(skip_all, fields(account_id = %config.id), err(Debug))]
+    async fn append_to_sent_folder(
+        config: &AccountConfig,
+        message_bytes: &[u8],
+    ) -> Result<(), AeroError> {
+        debug!("connecting to IMAP to append sent message");
+        let mut session = imap_client::connect_imap(config).await?;
+        let sent_folder = imap_client::find_sent_folder(&mut session).await?;
+        imap_client::append_message(&mut session, &sent_folder, Some("\\Seen"), message_bytes)
+            .await?;
+        let _ = session.logout().await;
+        debug!("sent message appended to folder");
         Ok(())
     }
 

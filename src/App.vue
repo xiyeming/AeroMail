@@ -20,6 +20,7 @@ onMounted(() => {
   void initTheme();
   void initDecorations();
   statusStore.initEventListeners();
+  void statusStore.loadLastSyncTime();
 });
 </script>
 

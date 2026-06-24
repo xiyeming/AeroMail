@@ -1,4 +1,4 @@
-use tauri::State;
+use tauri::{AppHandle, State};
 
 use crate::AppState;
 use crate::models::account::{AccountConfig, AccountSummary};
@@ -70,11 +70,27 @@ pub async fn update_account(
     config: AccountConfig,
     password: Option<Vec<u8>>,
     state: State<'_, AppState>,
+    app: AppHandle,
 ) -> Result<(), ErrorPayload> {
+    let account_id = config.id.clone();
     let manager = state.account_manager.read().await;
     manager
         .update_account(&config, password.as_deref())
-        .map_err(|e| e.to_payload())
+        .map_err(|e| e.to_payload())?;
+
+    drop(manager);
+
+    // Restart sync so credential/config changes take effect immediately.
+    let sync = state.sync_service.read().await;
+    if let Err(e) = sync.stop_sync(&account_id).await {
+        tracing::warn!(error = %e, account_id = %account_id, "failed to stop sync before restart");
+    }
+    if let Err(e) = sync.start_sync(&account_id, app).await {
+        tracing::warn!(error = %e, account_id = %account_id, "failed to restart sync after account update");
+    }
+    drop(sync);
+
+    Ok(())
 }
 
 /// Deletes an email account by ID.

@@ -54,14 +54,14 @@ pub async fn delete_draft(
 }
 
 #[tauri::command]
-#[instrument(skip(state, req), fields(draft_id = %req.draft_id), err(Debug))]
-pub async fn send_mail(
-    req: SendMailRequest,
-    state: State<'_, AppState>,
-) -> Result<(), ErrorPayload> {
+#[instrument(skip(state), fields(draft_id = %draft_id), err(Debug))]
+pub async fn send_mail(draft_id: String, state: State<'_, AppState>) -> Result<(), ErrorPayload> {
     debug!("sending mail");
     let compose = state.compose_service.read().await;
-    compose.send_mail(req).await.map_err(|e| e.to_payload())
+    compose
+        .send_mail(SendMailRequest { draft_id })
+        .await
+        .map_err(|e| e.to_payload())
 }
 
 #[tauri::command]

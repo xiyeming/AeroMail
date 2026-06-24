@@ -12,6 +12,9 @@ async function bootstrap() {
   i18n.global.locale.value = locale;
 
   const app = createApp(App);
+  app.config.errorHandler = (err, instance, info) => {
+    console.error('[Vue global error]', err, info, instance);
+  };
   app.use(createPinia());
   app.use(router);
   app.use(i18n);

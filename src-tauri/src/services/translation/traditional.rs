@@ -11,7 +11,7 @@ use crate::models::translation::{TraditionalProviderKind, TranslationProvider};
 ///
 /// Returns an error if the provider type is unsupported or the API call fails.
 #[instrument(skip(provider), fields(provider_id = %match provider { TranslationProvider::Traditional { id, .. } | TranslationProvider::Ai { id, .. } => id.as_str() }, kind = ?match provider { TranslationProvider::Traditional { kind, .. } => Some(kind), TranslationProvider::Ai { .. } => None }), err(Debug))]
-pub fn translate(
+pub async fn translate(
     provider: &TranslationProvider,
     source_text: &str,
     target_lang: &str,
@@ -28,27 +28,33 @@ pub fn translate(
                 .map_err(|e| AeroError::TranslationApiError(format!("invalid key: {e}")))?;
             match kind {
                 TraditionalProviderKind::GoogleTranslate => {
-                    google_translate(&api_key, source_text, target_lang)
+                    google_translate(&api_key, source_text, target_lang).await
                 }
                 TraditionalProviderKind::DeepL => {
-                    deepl_translate(&api_key, source_text, target_lang, endpoint.as_deref())
+                    deepl_translate(&api_key, source_text, target_lang, endpoint.as_deref()).await
                 }
-                TraditionalProviderKind::AzureTranslator => azure_translate(
-                    &api_key,
-                    source_text,
-                    target_lang,
-                    endpoint.as_deref(),
-                    extra,
-                ),
-                TraditionalProviderKind::Baidu => baidu_translate(
-                    &api_key,
-                    source_text,
-                    target_lang,
-                    endpoint.as_deref(),
-                    extra,
-                ),
+                TraditionalProviderKind::AzureTranslator => {
+                    azure_translate(
+                        &api_key,
+                        source_text,
+                        target_lang,
+                        endpoint.as_deref(),
+                        extra,
+                    )
+                    .await
+                }
+                TraditionalProviderKind::Baidu => {
+                    baidu_translate(
+                        &api_key,
+                        source_text,
+                        target_lang,
+                        endpoint.as_deref(),
+                        extra,
+                    )
+                    .await
+                }
                 TraditionalProviderKind::Custom => {
-                    custom_translate(&api_key, source_text, target_lang, endpoint.as_deref())
+                    custom_translate(&api_key, source_text, target_lang, endpoint.as_deref()).await
                 }
                 _ => Err(AeroError::TranslationApiError(
                     "provider not yet implemented".to_string(),
@@ -62,27 +68,33 @@ pub fn translate(
 }
 
 #[instrument(skip(api_key), fields(text_len = text.len(), target_lang = %target_lang), err(Debug))]
-fn google_translate(api_key: &str, text: &str, target_lang: &str) -> Result<String, AeroError> {
+async fn google_translate(
+    api_key: &str,
+    text: &str,
+    target_lang: &str,
+) -> Result<String, AeroError> {
     let url = format!("https://translation.googleapis.com/language/translate/v2?key={api_key}");
     let body = serde_json::json!({
         "q": text,
         "target": target_lang,
     });
     debug!("calling Google Translate API");
-    let resp = reqwest::blocking::Client::new()
+    let resp = reqwest::Client::new()
         .post(&url)
         .json(&body)
         .send()
+        .await
         .map_err(|e| AeroError::TranslationApiError(e.to_string()))?;
     if !resp.status().is_success() {
         let status = resp.status();
-        let body = resp.text().unwrap_or_default();
+        let body = resp.text().await.unwrap_or_default();
         return Err(AeroError::TranslationApiError(format!(
             "HTTP {status}: {body}"
         )));
     }
     let data: serde_json::Value = resp
         .json()
+        .await
         .map_err(|e| AeroError::TranslationApiError(e.to_string()))?;
     data["data"]["translations"][0]["translatedText"]
         .as_str()
@@ -91,7 +103,7 @@ fn google_translate(api_key: &str, text: &str, target_lang: &str) -> Result<Stri
 }
 
 #[instrument(skip(api_key), fields(text_len = text.len(), target_lang = %target_lang), err(Debug))]
-fn deepl_translate(
+async fn deepl_translate(
     api_key: &str,
     text: &str,
     target_lang: &str,
@@ -100,21 +112,23 @@ fn deepl_translate(
     let base = endpoint.unwrap_or("https://api-free.deepl.com");
     let url = format!("{base}/v2/translate");
     debug!("calling DeepL API");
-    let resp = reqwest::blocking::Client::new()
+    let resp = reqwest::Client::new()
         .post(&url)
         .header("Authorization", format!("DeepL-Auth-Key {api_key}"))
         .form(&[("text", text), ("target_lang", target_lang)])
         .send()
+        .await
         .map_err(|e| AeroError::TranslationApiError(e.to_string()))?;
     if !resp.status().is_success() {
         let status = resp.status();
-        let body = resp.text().unwrap_or_default();
+        let body = resp.text().await.unwrap_or_default();
         return Err(AeroError::TranslationApiError(format!(
             "HTTP {status}: {body}"
         )));
     }
     let data: serde_json::Value = resp
         .json()
+        .await
         .map_err(|e| AeroError::TranslationApiError(e.to_string()))?;
     data["translations"][0]["text"]
         .as_str()
@@ -123,7 +137,7 @@ fn deepl_translate(
 }
 
 #[instrument(skip(api_key, extra), fields(text_len = text.len(), target_lang = %target_lang), err(Debug))]
-fn azure_translate(
+async fn azure_translate(
     api_key: &str,
     text: &str,
     target_lang: &str,
@@ -136,7 +150,7 @@ fn azure_translate(
     let body = serde_json::json!([{ "Text": text }]);
 
     debug!("calling Azure Translator API");
-    let mut req = reqwest::blocking::Client::new()
+    let mut req = reqwest::Client::new()
         .post(&url)
         .header("Ocp-Apim-Subscription-Key", api_key)
         .header("Content-Type", "application/json")
@@ -148,16 +162,18 @@ fn azure_translate(
 
     let resp = req
         .send()
+        .await
         .map_err(|e| AeroError::TranslationApiError(e.to_string()))?;
     if !resp.status().is_success() {
         let status = resp.status();
-        let body = resp.text().unwrap_or_default();
+        let body = resp.text().await.unwrap_or_default();
         return Err(AeroError::TranslationApiError(format!(
             "HTTP {status}: {body}"
         )));
     }
     let data: serde_json::Value = resp
         .json()
+        .await
         .map_err(|e| AeroError::TranslationApiError(e.to_string()))?;
     data[0]["translations"][0]["text"]
         .as_str()
@@ -166,7 +182,7 @@ fn azure_translate(
 }
 
 #[instrument(skip(api_key, extra), fields(text_len = text.len(), target_lang = %target_lang), err(Debug))]
-fn baidu_translate(
+async fn baidu_translate(
     api_key: &str,
     text: &str,
     target_lang: &str,
@@ -185,7 +201,7 @@ fn baidu_translate(
     let url = format!("{base}/api/trans/vip/translate");
 
     debug!("calling Baidu Translate API");
-    let resp = reqwest::blocking::Client::new()
+    let resp = reqwest::Client::new()
         .post(&url)
         .form(&[
             ("q", text),
@@ -196,16 +212,18 @@ fn baidu_translate(
             ("sign", &sign),
         ])
         .send()
+        .await
         .map_err(|e| AeroError::TranslationApiError(e.to_string()))?;
     if !resp.status().is_success() {
         let status = resp.status();
-        let body = resp.text().unwrap_or_default();
+        let body = resp.text().await.unwrap_or_default();
         return Err(AeroError::TranslationApiError(format!(
             "HTTP {status}: {body}"
         )));
     }
     let data: serde_json::Value = resp
         .json()
+        .await
         .map_err(|e| AeroError::TranslationApiError(e.to_string()))?;
     if let Some(error_code) = data["error_code"].as_str() {
         let error_msg = data["error_msg"].as_str().unwrap_or("unknown error");
@@ -220,7 +238,7 @@ fn baidu_translate(
 }
 
 #[instrument(skip(api_key), fields(text_len = text.len(), target_lang = %target_lang), err(Debug))]
-fn custom_translate(
+async fn custom_translate(
     api_key: &str,
     text: &str,
     target_lang: &str,
@@ -230,7 +248,7 @@ fn custom_translate(
         AeroError::TranslationApiError("Custom provider endpoint is required".to_string())
     })?;
     debug!("calling custom translation API");
-    let resp = reqwest::blocking::Client::new()
+    let resp = reqwest::Client::new()
         .post(url)
         .header("Authorization", format!("Bearer {api_key}"))
         .form(&[
@@ -240,16 +258,18 @@ fn custom_translate(
             ("api_key", api_key),
         ])
         .send()
+        .await
         .map_err(|e| AeroError::TranslationApiError(e.to_string()))?;
     if !resp.status().is_success() {
         let status = resp.status();
-        let body = resp.text().unwrap_or_default();
+        let body = resp.text().await.unwrap_or_default();
         return Err(AeroError::TranslationApiError(format!(
             "HTTP {status}: {body}"
         )));
     }
     let data: serde_json::Value = resp
         .json()
+        .await
         .map_err(|e| AeroError::TranslationApiError(e.to_string()))?;
 
     // LibreTranslate returns [{"translatedText": "..."}]

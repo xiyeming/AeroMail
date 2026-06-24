@@ -1,8 +1,8 @@
 <script setup lang="ts">
-import { computed, nextTick, onMounted, ref, watch } from 'vue';
+import { computed, nextTick, onMounted, onUnmounted, ref, watch } from 'vue';
 import { useI18n } from 'vue-i18n';
-import { useRoute } from 'vue-router';
-import { Star, Archive, Paperclip, Check } from 'lucide-vue-next';
+import { useRoute, useRouter } from 'vue-router';
+import { Star, Archive, Paperclip, Check, MailOpen, Mail, Trash2, X, CheckSquare } from 'lucide-vue-next';
 import { useMailStore } from '@/stores/mail';
 import { useAccountStore } from '@/stores/account';
 import { useToastStore } from '@/stores/toast';
@@ -13,6 +13,7 @@ import type { MailHeader } from '@/types/mail';
 
 const { t } = useI18n();
 const route = useRoute();
+const router = useRouter();
 const mailStore = useMailStore();
 const accountStore = useAccountStore();
 const toastStore = useToastStore();
@@ -55,13 +56,14 @@ const showMoveDialog = ref(false);
 const moveTargetMailId = ref<string | null>(null);
 const searchQuery = ref('');
 const listContainerRef = ref<HTMLElement | null>(null);
+const sentinelRef = ref<HTMLElement | null>(null);
+let scrollObserver: IntersectionObserver | null = null;
 
 onMounted(async () => {
   if (accountStore.accounts.length === 0) {
     await accountStore.loadAccounts();
   }
-  if (accountStore.accounts.length > 0) {
-    const accountId = accountStore.accounts[0].id;
+  for (const accountId of accountStore.selectedAccountIds) {
     await mailStore.loadFolders(accountId);
   }
 });
@@ -69,9 +71,22 @@ onMounted(async () => {
 watch(
   currentFolderId,
   async (folderId) => {
-    if (folderId) {
+    if (!folderId || route.path === '/') return;
+    mailStore.closeReader();
+    listContainerRef.value?.scrollTo(0, 0);
+    await mailStore.loadMails(folderId);
+    await checkLoadMore();
+  },
+  { immediate: true }
+);
+
+watch(
+  () => [route.path, accountStore.selectedAccountIds.join(',')],
+  async ([path]) => {
+    if (path === '/') {
+      mailStore.closeReader();
       listContainerRef.value?.scrollTo(0, 0);
-      await mailStore.loadMails(folderId);
+      await mailStore.loadInboxMails(accountStore.selectedAccountIds);
       await checkLoadMore();
     }
   },
@@ -82,18 +97,32 @@ watch(
   () => statusStore.syncingAccounts,
   async (syncing, previous) => {
     if (previous && previous > 0 && syncing === 0) {
-      const accountId = mailStore.currentAccountId || accountStore.accounts[0]?.id;
-      if (accountId) {
+      const accountIds =
+        accountStore.selectedAccountIds.length > 0
+          ? accountStore.selectedAccountIds
+          : accountStore.accounts.map((a) => a.id);
+      for (const accountId of accountIds) {
         await mailStore.loadFolders(accountId);
       }
-      if (currentFolderId.value) {
-        await mailStore.loadMails(currentFolderId.value);
+      if (route.path === '/') {
+        await mailStore.refreshInboxMails(accountStore.selectedAccountIds);
+      } else if (currentFolderId.value) {
+        await mailStore.refreshMails(currentFolderId.value);
       }
     }
   }
 );
 
 const currentFolderUnread = computed(() => {
+  if (route.path === '/') {
+    return mailStore.folders
+      .filter(
+        (f) =>
+          accountStore.selectedAccountIds.includes(f.accountId) &&
+          (f.path.toLowerCase() === 'inbox' || f.name.toLowerCase() === 'inbox')
+      )
+      .reduce((sum, f) => sum + f.unreadCount, 0);
+  }
   const folder = mailStore.folders.find((f) => f.id === currentFolderId.value);
   return folder?.unreadCount ?? 0;
 });
@@ -117,7 +146,7 @@ const displayedMails = computed(() => {
   );
 });
 
-const selectedCount = computed(() => mailStore.selectedMailIds.size);
+const selectedCount = computed(() => mailStore.selectedMailIds.length);
 const hasSelection = computed(() => selectedCount.value > 0);
 
 function formatDate(timestamp: number | null): string {
@@ -137,19 +166,23 @@ function formatDate(timestamp: number | null): string {
   }
 }
 
-function handleScroll(event: Event) {
-  const target = event.target as HTMLElement;
-  if (target.scrollTop + target.clientHeight >= target.scrollHeight - 100) {
-    if (mailStore.hasMore && !mailStore.loadingMore) {
-      void loadMoreMails();
-    }
+function getAccountName(accountId: string): string {
+  return accountStore.accounts.find((a) => a.id === accountId)?.name ?? '';
+}
+
+function isReadingRoute(): boolean {
+  return route.path === '/' || route.path.startsWith('/folder/');
+}
+
+function ensureReadingRoute() {
+  if (!isReadingRoute()) {
+    void router.push('/');
   }
 }
 
-async function loadMoreMails() {
+function loadMoreMails() {
   if (!mailStore.hasMore || mailStore.loadingMore || mailStore.loading) return;
-  await mailStore.loadMails(currentFolderId.value, false);
-  await checkLoadMore();
+  void mailStore.loadMails(currentFolderId.value, false);
 }
 
 async function checkLoadMore() {
@@ -166,6 +199,54 @@ async function checkLoadMore() {
   }
 }
 
+function disconnectObserver() {
+  if (scrollObserver) {
+    scrollObserver.disconnect();
+    scrollObserver = null;
+  }
+}
+
+function setupInfiniteScroll() {
+  disconnectObserver();
+  const sentinel = sentinelRef.value;
+  if (!sentinel) return;
+
+  scrollObserver = new IntersectionObserver(
+    (entries) => {
+      if (
+        entries[0]?.isIntersecting &&
+        mailStore.hasMore &&
+        !mailStore.loadingMore &&
+        !mailStore.loading
+      ) {
+        void loadMoreMails();
+      }
+    },
+    {
+      root: listContainerRef.value,
+      rootMargin: '0px 0px 200px 0px',
+    }
+  );
+  scrollObserver.observe(sentinel);
+}
+
+onMounted(() => {
+  void setupInfiniteScroll();
+});
+
+onUnmounted(() => {
+  disconnectObserver();
+});
+
+watch(
+  () => mailStore.mails.length,
+  async () => {
+    await nextTick();
+    setupInfiniteScroll();
+    await checkLoadMore();
+  }
+);
+
 function handleContextMenu(e: MouseEvent, mail: MailHeader) {
   e.preventDefault();
   contextMenu.value = {
@@ -181,23 +262,33 @@ function handleRowClick(e: MouseEvent, mail: MailHeader) {
     mailStore.toggleSelection(mail.id, e.ctrlKey || e.metaKey, e.shiftKey);
     return;
   }
-  if (mailStore.selectedMailIds.size > 0) {
+  if (mailStore.selectedMailIds.length > 0) {
     mailStore.toggleSelection(mail.id, false, false);
     return;
   }
   void mailStore.selectMail(mail.id);
+  ensureReadingRoute();
 }
 
 function handleRowKeyDown(e: KeyboardEvent, mail: MailHeader) {
   if (e.key === 'Enter' || e.key === ' ') {
     e.preventDefault();
     void mailStore.selectMail(mail.id);
+    ensureReadingRoute();
   }
 }
 
 function handleCheckboxChange(mailId: string, e: Event) {
   const event = e as MouseEvent;
-  mailStore.toggleSelection(mailId, event.ctrlKey || event.metaKey, event.shiftKey);
+  if (event.shiftKey && mailStore.lastSelectedIndex >= 0) {
+    mailStore.toggleSelection(mailId, false, true);
+  } else if (event.ctrlKey || event.metaKey) {
+    mailStore.toggleSelection(mailId, true, false);
+  } else if (isSelected(mailId)) {
+    mailStore.removeFromSelection(mailId);
+  } else {
+    mailStore.addToSelection(mailId);
+  }
 }
 
 function toggleStar(mailId: string) {
@@ -215,6 +306,7 @@ function closeContextMenu() {
 
 function handleContextOpen(mailId: string) {
   mailStore.selectMail(mailId);
+  ensureReadingRoute();
 }
 
 function handleContextStar(mailId: string) {
@@ -255,11 +347,15 @@ async function handleMoveToFolder(folderId: string) {
 }
 
 function isSelected(mailId: string): boolean {
-  return mailStore.selectedMailIds.has(mailId);
+  return mailStore.selectedMailIds.includes(mailId);
 }
 
 function deselectAll() {
   mailStore.clearBulkSelection();
+}
+
+function invertSelection() {
+  mailStore.invertSelection();
 }
 
 async function bulkArchive() {
@@ -323,13 +419,7 @@ async function bulkMarkRead(isRead: boolean) {
     </div>
 
     <!-- Mail list -->
-    <div
-      v-else
-      ref="listContainerRef"
-      class="flex-1 overflow-y-auto"
-      role="list"
-      @scroll="handleScroll"
-    >
+    <div v-else ref="listContainerRef" class="flex-1 overflow-y-auto" role="list">
       <div
         v-for="mail in displayedMails"
         :key="mail.id"
@@ -338,9 +428,10 @@ async function bulkMarkRead(isRead: boolean) {
         :aria-selected="mailStore.selectedMailId === mail.id"
         class="group relative cursor-pointer border-b border-border px-3 py-2.5 transition-colors hover:bg-raised focus:outline-none focus:ring-2 focus:ring-inset focus:ring-accent"
         :class="[
-          !mail.isRead ? 'bg-raised/30' : '',
+          !mail.isRead ? 'bg-accent/15' : '',
           isSelected(mail.id) ? 'bg-accent-subtle' : '',
-          mailStore.selectedMailId === mail.id ? 'border-l-2 border-l-accent' : '',
+          mailStore.selectedMailId === mail.id ? 'border-l-4 border-l-accent' : '',
+          !mail.isRead && mailStore.selectedMailId !== mail.id ? 'border-l-4 border-l-accent' : '',
         ]"
         @click="handleRowClick($event, mail)"
         @keydown="handleRowKeyDown($event, mail)"
@@ -348,8 +439,8 @@ async function bulkMarkRead(isRead: boolean) {
       >
         <div class="flex items-center gap-3">
           <label
-            class="relative flex h-4 w-4 shrink-0 cursor-pointer items-center justify-center rounded border border-border bg-base transition-colors hover:border-accent peer-focus-within:ring-2 peer-focus-within:ring-accent"
-            :class="isSelected(mail.id) ? 'border-accent bg-accent text-white' : 'text-transparent'"
+            class="relative flex h-4 w-4 shrink-0 cursor-pointer items-center justify-center rounded border transition-colors hover:border-accent peer-focus-within:ring-2 peer-focus-within:ring-accent"
+            :class="isSelected(mail.id) ? 'border-accent bg-accent text-white' : 'border-border bg-base text-transparent'"
           >
             <input
               type="checkbox"
@@ -365,22 +456,23 @@ async function bulkMarkRead(isRead: boolean) {
             <div class="flex items-center justify-between gap-2">
               <div class="flex items-center gap-2 min-w-0">
                 <span
-                  v-if="!mail.isRead"
-                  class="h-1.5 w-1.5 shrink-0 rounded-full bg-accent"
-                  aria-hidden="true"
-                />
-                <span
-                  class="truncate text-sm font-medium"
-                  :class="!mail.isRead ? 'text-primary' : 'text-secondary'"
+                  class="truncate text-sm"
+                  :class="!mail.isRead ? 'font-bold text-primary' : 'font-medium text-secondary'"
                 >
                   {{ mail.fromName || mail.fromAddress || t('mail.unknownSender') }}
+                </span>
+                <span
+                  v-if="accountStore.accounts.length > 1"
+                  class="shrink-0 rounded bg-elevated px-1.5 py-0.5 text-[10px] text-tertiary"
+                >
+                  {{ getAccountName(mail.accountId) }}
                 </span>
               </div>
               <span class="shrink-0 text-xs text-tertiary">{{ formatDate(mail.date) }}</span>
             </div>
             <div
               class="mt-0.5 truncate text-sm"
-              :class="!mail.isRead ? 'text-primary' : 'text-secondary'"
+              :class="!mail.isRead ? 'font-bold text-primary' : 'text-secondary'"
             >
               {{ mail.subject || t('mail.noSubject') }}
             </div>
@@ -418,60 +510,85 @@ async function bulkMarkRead(isRead: boolean) {
         </div>
       </div>
 
+      <!-- Infinite-scroll sentinel -->
+      <div ref="sentinelRef" class="h-2 w-full" aria-hidden="true" />
+
       <!-- Load more indicator -->
       <div
         v-if="mailStore.loadingMore"
-        class="flex items-center justify-center py-4 text-secondary"
+        class="flex items-center justify-center gap-2 py-4 text-secondary"
       >
         <div
           class="h-4 w-4 animate-spin rounded-full border-2 border-accent border-t-transparent"
         />
+        <span class="text-xs">{{ t('common.loading') }}</span>
+      </div>
+
+      <!-- End of list -->
+      <div
+        v-else-if="!mailStore.hasMore && displayedMails.length > 0"
+        class="py-4 text-center text-xs text-tertiary"
+      >
+        {{ t('mail.noMoreEmails') }}
       </div>
     </div>
 
     <!-- Bulk actions -->
     <div
       v-if="hasSelection"
-      class="flex shrink-0 items-center justify-between border-t border-border bg-raised px-4 py-2"
+      class="flex shrink-0 flex-wrap items-center justify-between gap-2 border-t border-border bg-raised px-3 py-2"
     >
-      <span class="text-sm text-secondary">{{
+      <span class="text-sm text-secondary whitespace-nowrap">{{
         t('mail.selectedCount', { count: selectedCount })
       }}</span>
-      <div class="flex items-center gap-2">
+      <div class="flex flex-wrap items-center gap-1.5">
         <button
           type="button"
-          class="rounded px-2 py-1 text-sm text-secondary transition-colors hover:bg-elevated"
+          class="inline-flex items-center gap-1 rounded-md px-2 py-1.5 text-sm text-secondary transition-colors hover:bg-elevated hover:text-primary"
           @click="bulkMarkRead(true)"
         >
-          {{ t('mail.markAsRead') }}
+          <MailOpen class="h-4 w-4" />
+          <span class="hidden sm:inline">{{ t('mail.markAsRead') }}</span>
         </button>
         <button
           type="button"
-          class="rounded px-2 py-1 text-sm text-secondary transition-colors hover:bg-elevated"
+          class="inline-flex items-center gap-1 rounded-md px-2 py-1.5 text-sm text-secondary transition-colors hover:bg-elevated hover:text-primary"
           @click="bulkMarkRead(false)"
         >
-          {{ t('mail.markAsUnread') }}
+          <Mail class="h-4 w-4" />
+          <span class="hidden sm:inline">{{ t('mail.markAsUnread') }}</span>
         </button>
         <button
           type="button"
-          class="rounded px-2 py-1 text-sm text-secondary transition-colors hover:bg-elevated"
+          class="inline-flex items-center gap-1 rounded-md px-2 py-1.5 text-sm text-secondary transition-colors hover:bg-elevated hover:text-primary"
           @click="bulkArchive"
         >
-          {{ t('mail.archive') }}
+          <Archive class="h-4 w-4" />
+          <span class="hidden sm:inline">{{ t('mail.archive') }}</span>
         </button>
         <button
           type="button"
-          class="rounded px-2 py-1 text-sm text-danger transition-colors hover:bg-danger-subtle"
+          class="inline-flex items-center gap-1 rounded-md px-2 py-1.5 text-sm text-danger transition-colors hover:bg-danger-subtle"
           @click="bulkDelete"
         >
-          {{ t('common.delete') }}
+          <Trash2 class="h-4 w-4" />
+          <span class="hidden sm:inline">{{ t('common.delete') }}</span>
         </button>
         <button
           type="button"
-          class="rounded px-2 py-1 text-sm text-tertiary transition-colors hover:bg-elevated"
+          class="inline-flex items-center gap-1 rounded-md px-2 py-1.5 text-sm text-secondary transition-colors hover:bg-elevated hover:text-primary"
+          @click="invertSelection"
+        >
+          <CheckSquare class="h-4 w-4" />
+          <span class="hidden sm:inline">{{ t('mail.invertSelection') }}</span>
+        </button>
+        <button
+          type="button"
+          class="inline-flex items-center gap-1 rounded-md px-2 py-1.5 text-sm text-tertiary transition-colors hover:bg-elevated hover:text-primary"
           @click="deselectAll"
         >
-          {{ t('mail.deselectAll') }}
+          <X class="h-4 w-4" />
+          <span class="hidden sm:inline">{{ t('mail.deselectAll') }}</span>
         </button>
       </div>
     </div>

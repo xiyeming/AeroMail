@@ -1,5 +1,8 @@
-use tauri::{AppHandle, Manager, Runtime, WebviewWindow};
+use tauri::{AppHandle, Manager, Runtime, State, WebviewWindow};
 use tracing::{debug, instrument};
+
+use crate::TrayMenuState;
+use crate::tray_labels;
 
 /// Applies window decorations from the backend with a short delay.
 ///
@@ -53,4 +56,26 @@ pub async fn confirmed_exit<R: Runtime>(app: AppHandle<R>) {
 #[tauri::command]
 pub async fn close_main_window<R: Runtime>(window: WebviewWindow<R>) -> Result<(), String> {
     window.close().map_err(|e| e.to_string())
+}
+
+/// Updates the system tray menu labels to match the application locale.
+///
+/// # Errors
+///
+/// Returns an error if the tray menu items cannot be updated.
+#[tauri::command]
+pub async fn set_tray_menu_locale(
+    locale: String,
+    tray_menu: State<'_, TrayMenuState>,
+) -> Result<(), String> {
+    let (show, quit) = tray_labels(&locale);
+    tray_menu
+        .show_item
+        .set_text(show)
+        .map_err(|e| e.to_string())?;
+    tray_menu
+        .quit_item
+        .set_text(quit)
+        .map_err(|e| e.to_string())?;
+    Ok(())
 }

@@ -29,7 +29,8 @@ pub async fn sync_draft_to_imap(
         }
     }
 
-    imap_client::append_message(&mut session, &drafts_folder, message_bytes).await?;
+    imap_client::append_message(&mut session, &drafts_folder, Some("\\Draft"), message_bytes)
+        .await?;
 
     let _ = session.logout().await;
 

@@ -2,6 +2,7 @@ use tauri::State;
 use tracing::{debug, instrument};
 
 use crate::AppState;
+use crate::error::AeroError;
 use crate::models::error::ErrorPayload;
 use crate::models::translation::{TranslationProvider, TranslationProviderSummary};
 
@@ -102,6 +103,33 @@ pub async fn translate_mail_text(
     let translation = state
         .translation_service
         .translate_mail(&text, &target_lang, &provider_id)
+        .await
+        .map_err(|e| e.to_payload())?;
+    Ok(translation)
+}
+
+/// Translates arbitrary text into the target language using the specified provider.
+///
+/// # Errors
+///
+/// Returns an error if the text is empty, the provider is not found,
+/// or the translation API call fails.
+#[tauri::command]
+#[instrument(skip(state), fields(text_len = text.len(), target_lang = %target_lang, provider_id = %provider_id), err(Debug))]
+pub async fn translate_text(
+    text: String,
+    target_lang: String,
+    provider_id: String,
+    state: State<'_, AppState>,
+) -> Result<String, ErrorPayload> {
+    debug!("translating selected text");
+    if text.trim().is_empty() {
+        return Err(AeroError::TranslationNoText.to_payload());
+    }
+    let translation = state
+        .translation_service
+        .translate_mail(&text, &target_lang, &provider_id)
+        .await
         .map_err(|e| e.to_payload())?;
     Ok(translation)
 }

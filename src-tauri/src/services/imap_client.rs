@@ -291,6 +291,80 @@ pub async fn move_mail_on_server(
     Ok(())
 }
 
+/// Updates the `\\Seen` flag for a mail on the IMAP server.
+///
+/// # Errors
+///
+/// Returns an error if the IMAP operation fails.
+#[instrument(skip_all, fields(folder_path = %folder_path, uid, seen), err(Debug))]
+pub async fn set_seen_on_server(
+    session: &mut ImapSession,
+    folder_path: &str,
+    uid: u32,
+    seen: bool,
+) -> Result<(), AeroError> {
+    use futures::TryStreamExt;
+
+    debug!("selecting folder for seen update");
+    session
+        .select(folder_path)
+        .await
+        .map_err(|e| AeroError::ImapConnectionFailed(e.to_string()))?;
+
+    let command = if seen {
+        "+FLAGS (\\Seen)"
+    } else {
+        "-FLAGS (\\Seen)"
+    };
+    let _updated: Vec<_> = session
+        .uid_store(format!("{uid}"), command)
+        .await
+        .map_err(|e| AeroError::ImapConnectionFailed(e.to_string()))?
+        .try_collect()
+        .await
+        .map_err(|e| AeroError::ImapConnectionFailed(e.to_string()))?;
+
+    debug!(seen, "updated seen flag on server");
+    Ok(())
+}
+
+/// Updates the `\\Flagged` flag for a mail on the IMAP server.
+///
+/// # Errors
+///
+/// Returns an error if the IMAP operation fails.
+#[instrument(skip_all, fields(folder_path = %folder_path, uid, flagged), err(Debug))]
+pub async fn set_flagged_on_server(
+    session: &mut ImapSession,
+    folder_path: &str,
+    uid: u32,
+    flagged: bool,
+) -> Result<(), AeroError> {
+    use futures::TryStreamExt;
+
+    debug!("selecting folder for flagged update");
+    session
+        .select(folder_path)
+        .await
+        .map_err(|e| AeroError::ImapConnectionFailed(e.to_string()))?;
+
+    let command = if flagged {
+        "+FLAGS (\\Flagged)"
+    } else {
+        "-FLAGS (\\Flagged)"
+    };
+    let _updated: Vec<_> = session
+        .uid_store(format!("{uid}"), command)
+        .await
+        .map_err(|e| AeroError::ImapConnectionFailed(e.to_string()))?
+        .try_collect()
+        .await
+        .map_err(|e| AeroError::ImapConnectionFailed(e.to_string()))?;
+
+    debug!(flagged, "updated flagged flag on server");
+    Ok(())
+}
+
 /// Converts an async-imap flag iterator into a list of flag strings.
 pub fn collect_flags<'a>(flags: impl Iterator<Item = Flag<'a>>) -> Vec<String> {
     flags.map(flag_to_string).collect()
@@ -369,7 +443,58 @@ pub async fn find_drafts_folder(session: &mut ImapSession) -> Result<String, Aer
     ))
 }
 
-/// Appends a raw RFC-2822 message to the given folder with the `\\Draft` flag.
+/// Finds the server's sent folder using common localized names.
+///
+/// # Errors
+///
+/// Returns an error if no sent folder can be located.
+#[instrument(skip_all, err(Debug))]
+pub async fn find_sent_folder(session: &mut ImapSession) -> Result<String, AeroError> {
+    use futures::StreamExt;
+
+    let mut stream = session
+        .list(None, Some("*"))
+        .await
+        .map_err(|e| AeroError::ImapConnectionFailed(e.to_string()))?;
+
+    let mut mailboxes = Vec::new();
+    while let Some(name_res) = stream.next().await {
+        let name = name_res.map_err(|e| AeroError::ImapConnectionFailed(e.to_string()))?;
+        mailboxes.push(name.name().to_string());
+    }
+
+    debug!(candidates = ?mailboxes, "searching for sent folder");
+
+    let candidates = [
+        "Sent",
+        "sent",
+        "Sent Items",
+        "Sent Messages",
+        "[Gmail]/Sent Mail",
+        "已发送",
+    ];
+    for candidate in &candidates {
+        if let Some(folder) = mailboxes
+            .iter()
+            .find(|name| name.eq_ignore_ascii_case(candidate))
+        {
+            debug!(folder = %folder, "found sent folder");
+            return Ok(folder.clone());
+        }
+    }
+    for folder in &mailboxes {
+        if folder.to_lowercase().contains("sent") {
+            debug!(folder = %folder, "found sent folder by substring");
+            return Ok(folder.clone());
+        }
+    }
+    warn!("Sent folder not found; candidates were: {:?}", mailboxes);
+    Err(AeroError::ImapAppendFailed(
+        "Sent folder not found".to_string(),
+    ))
+}
+
+/// Appends a raw RFC-2822 message to the given folder with optional flags.
 ///
 /// # Errors
 ///
@@ -378,11 +503,12 @@ pub async fn find_drafts_folder(session: &mut ImapSession) -> Result<String, Aer
 pub async fn append_message(
     session: &mut ImapSession,
     folder: &str,
+    flags: Option<&str>,
     message_bytes: &[u8],
 ) -> Result<(), AeroError> {
     debug!("appending message to folder");
     session
-        .append(folder, Some("\\Draft"), None, message_bytes)
+        .append(folder, flags, None, message_bytes)
         .await
         .map_err(|e| AeroError::ImapAppendFailed(e.to_string()))
 }

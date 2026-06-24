@@ -1,7 +1,9 @@
 <script setup lang="ts">
 import { computed, ref, watch } from 'vue';
 import { useI18n } from 'vue-i18n';
+import { ChevronDown } from 'lucide-vue-next';
 import { useAccountStore } from '@/stores/account';
+import BaseCheckbox from '@/components/BaseCheckbox.vue';
 import BaseSelect from '@/components/BaseSelect.vue';
 import type { AccountConfig, MailProvider } from '@/types/account';
 
@@ -39,6 +41,12 @@ const providerOptions = computed(() =>
   providers.map((p) => ({ value: p, label: t(`account.providerLabels.${p}`) }))
 );
 
+const tlsOptions = computed(() => [
+  { value: 'required', label: t('account.tlsModeRequired') },
+  { value: 'starttls', label: t('account.tlsModeStarttls') },
+  { value: 'none', label: t('account.tlsModeNone') },
+]);
+
 const providerDefaults: Record<MailProvider, { imap: string; smtp: string }> = {
   Gmail: { imap: 'imap.gmail.com', smtp: 'smtp.gmail.com' },
   Outlook: { imap: 'outlook.office365.com', smtp: 'smtp.office365.com' },
@@ -73,6 +81,15 @@ const password = ref('');
 const validationError = ref<string | null>(null);
 const testing = ref(false);
 const testMessage = ref<string | null>(null);
+const advancedOpen = ref(false);
+
+const storedPasswordMissing = computed(() => {
+  if (props.mode !== 'edit' || !props.initialConfig) return false;
+  return (
+    props.initialConfig.auth.type === 'Password' &&
+    props.initialConfig.auth.passwordEncrypted.length === 0
+  );
+});
 
 watch(
   () => props.initialConfig,
@@ -114,7 +131,11 @@ function validate(): boolean {
     validationError.value = t('account.errors.smtpRequired');
     return false;
   }
-  if (props.mode === 'add' && config.value.auth.type === 'Password' && !password.value) {
+  if (
+    config.value.auth.type === 'Password' &&
+    !password.value &&
+    (props.mode === 'add' || storedPasswordMissing.value)
+  ) {
     validationError.value = t('account.errors.passwordRequired');
     return false;
   }
@@ -228,6 +249,13 @@ function handleCancel() {
       </div>
     </div>
 
+    <div class="space-y-1.5">
+      <label for="account-imap-tls" class="text-sm text-secondary">{{
+        $t('account.imapTlsMode')
+      }}</label>
+      <BaseSelect id="account-imap-tls" v-model="config.imap.tlsMode" :options="tlsOptions" />
+    </div>
+
     <div class="grid grid-cols-2 gap-3">
       <div class="space-y-1.5">
         <label for="account-smtp-host" class="text-sm text-secondary">{{
@@ -254,6 +282,13 @@ function handleCancel() {
     </div>
 
     <div class="space-y-1.5">
+      <label for="account-smtp-tls" class="text-sm text-secondary">{{
+        $t('account.smtpTlsMode')
+      }}</label>
+      <BaseSelect id="account-smtp-tls" v-model="config.smtp.tlsMode" :options="tlsOptions" />
+    </div>
+
+    <div class="space-y-1.5">
       <label for="account-password" class="text-sm text-secondary">{{
         $t('account.password')
       }}</label>
@@ -267,6 +302,73 @@ function handleCancel() {
       <p v-if="mode === 'edit'" class="text-xs text-tertiary">
         {{ $t('account.passwordUnchangedHint') }}
       </p>
+      <p v-if="storedPasswordMissing" class="text-xs text-warning">
+        {{ $t('account.passwordMissingHint') }}
+      </p>
+    </div>
+
+    <div class="rounded-md border border-border bg-base">
+      <button
+        type="button"
+        class="flex w-full items-center justify-between p-3 text-sm font-medium text-secondary transition-colors hover:text-primary"
+        @click="advancedOpen = !advancedOpen"
+      >
+        {{ $t('account.advancedSettings') }}
+        <ChevronDown
+          class="h-4 w-4 text-tertiary transition-transform"
+          :class="advancedOpen ? 'rotate-180' : ''"
+        />
+      </button>
+      <div v-if="advancedOpen" class="space-y-4 p-3 pt-0">
+        <BaseCheckbox id="account-verify-certificate" v-model="config.advanced.verifyCertificate">
+          {{ $t('account.verifyCertificate') }}
+        </BaseCheckbox>
+
+        <div class="space-y-1.5">
+          <label for="account-ca-cert" class="text-sm text-secondary">{{
+            $t('account.caCertPath')
+          }}</label>
+          <input
+            id="account-ca-cert"
+            :value="config.advanced.caCertPath ?? ''"
+            type="text"
+            class="h-9 w-full rounded-md border border-border bg-elevated px-3 text-sm text-primary outline-none placeholder:text-tertiary focus:border-accent"
+            :placeholder="t('account.caCertPathPlaceholder')"
+            @input="config.advanced.caCertPath = ($event.target as HTMLInputElement).value || null"
+          />
+        </div>
+
+        <div class="grid grid-cols-2 gap-3">
+          <div class="space-y-1.5">
+            <label for="account-connect-timeout" class="text-sm text-secondary">{{
+              $t('account.connectTimeout')
+            }}</label>
+            <input
+              id="account-connect-timeout"
+              v-model.number="config.advanced.connectTimeoutSecs"
+              type="number"
+              min="1"
+              class="h-9 w-full rounded-md border border-border bg-elevated px-3 text-sm text-primary outline-none focus:border-accent"
+            />
+          </div>
+          <div class="space-y-1.5">
+            <label for="account-read-timeout" class="text-sm text-secondary">{{
+              $t('account.readTimeout')
+            }}</label>
+            <input
+              id="account-read-timeout"
+              v-model.number="config.advanced.readTimeoutSecs"
+              type="number"
+              min="1"
+              class="h-9 w-full rounded-md border border-border bg-elevated px-3 text-sm text-primary outline-none focus:border-accent"
+            />
+          </div>
+        </div>
+
+        <BaseCheckbox id="account-keepalive" v-model="config.advanced.keepalive">
+          {{ $t('account.keepalive') }}
+        </BaseCheckbox>
+      </div>
     </div>
 
     <p v-if="validationError || accountStore.error" class="text-sm text-danger">

@@ -1,8 +1,9 @@
 <template>
-  <div class="flex h-full flex-col bg-base text-primary">
+  <div class="relative flex h-full flex-col bg-base text-primary">
     <ComposeHeader
       :draft="store.draft"
       :accounts="accounts"
+      :sending="store.loading"
       @update:draft="store.setDraft"
       @send="store.sendMail"
     />
@@ -26,12 +27,22 @@
         $t('compose.saved')
       }}</span>
     </div>
+
+    <!-- Sending overlay -->
+    <div
+      v-if="store.loading"
+      class="absolute inset-0 z-50 flex flex-col items-center justify-center gap-3 bg-base/80 backdrop-blur-sm"
+    >
+      <Loader2 class="h-8 w-8 animate-spin text-accent" />
+      <p class="text-sm font-medium text-primary">{{ $t('compose.sending') }}</p>
+    </div>
   </div>
 </template>
 
 <script setup lang="ts">
 import { onMounted, computed } from 'vue';
 import { useRoute } from 'vue-router';
+import { Loader2 } from 'lucide-vue-next';
 import { useTauriInvoke } from '@/composables/useTauriInvoke';
 import { useComposeStore } from '@/stores/compose';
 import { useAccountStore } from '@/stores/account';

@@ -9,6 +9,7 @@ CREATE TABLE IF NOT EXISTS accounts (
     smtp_host TEXT NOT NULL,
     smtp_port INTEGER NOT NULL,
     tls_mode TEXT NOT NULL,
+    smtp_tls_mode TEXT NOT NULL DEFAULT 'required',
     auth_type TEXT NOT NULL,
     auth_credentials_encrypted BLOB,
     ca_cert_path TEXT,
@@ -135,6 +136,7 @@ CREATE TABLE IF NOT EXISTS ai_chat_messages (
     session_id TEXT NOT NULL,
     role TEXT NOT NULL,
     content TEXT NOT NULL,
+    thinking TEXT,
     created_at INTEGER NOT NULL
 )
 ";
@@ -142,6 +144,86 @@ CREATE TABLE IF NOT EXISTS ai_chat_messages (
 pub const AI_CHAT_MESSAGES_INDEX: &str = r"
 CREATE INDEX IF NOT EXISTS idx_ai_messages_session
 ON ai_chat_messages(session_id, created_at)
+";
+
+pub const AI_USAGE_LOGS_TABLE: &str = r"
+CREATE TABLE IF NOT EXISTS ai_usage_logs (
+    id TEXT PRIMARY KEY,
+    session_id TEXT,
+    provider_id TEXT NOT NULL,
+    model TEXT NOT NULL,
+    prompt_tokens INTEGER,
+    completion_tokens INTEGER,
+    total_tokens INTEGER,
+    estimated INTEGER DEFAULT 0,
+    cost REAL,
+    currency TEXT DEFAULT 'USD',
+    created_at INTEGER NOT NULL
+)
+";
+
+pub const AI_USAGE_LOGS_INDEX: &str = r"
+CREATE INDEX IF NOT EXISTS idx_ai_usage_session
+ON ai_usage_logs(session_id, created_at)
+";
+
+pub const AI_USAGE_PROVIDER_INDEX: &str = r"
+CREATE INDEX IF NOT EXISTS idx_ai_usage_provider
+ON ai_usage_logs(provider_id, created_at)
+";
+
+pub const AI_PROVIDER_PRICING_TABLE: &str = r"
+CREATE TABLE IF NOT EXISTS ai_provider_pricing (
+    id TEXT PRIMARY KEY,
+    provider_id TEXT NOT NULL,
+    model TEXT NOT NULL,
+    input_price_per_1k REAL NOT NULL,
+    output_price_per_1k REAL NOT NULL,
+    currency TEXT DEFAULT 'USD',
+    effective_from INTEGER,
+    UNIQUE(provider_id, model)
+)
+";
+
+pub const AI_MCP_SERVERS_TABLE: &str = r"
+CREATE TABLE IF NOT EXISTS ai_mcp_servers (
+    id TEXT PRIMARY KEY,
+    name TEXT NOT NULL,
+    transport TEXT NOT NULL,
+    command TEXT,
+    args TEXT,
+    url TEXT,
+    env_json TEXT,
+    is_enabled INTEGER DEFAULT 1,
+    created_at INTEGER NOT NULL,
+    updated_at INTEGER NOT NULL
+)
+";
+
+pub const AI_SKILLS_TABLE: &str = r"
+CREATE TABLE IF NOT EXISTS ai_skills (
+    id TEXT PRIMARY KEY,
+    name TEXT NOT NULL UNIQUE,
+    description TEXT NOT NULL,
+    input_schema_json TEXT NOT NULL,
+    command TEXT NOT NULL,
+    args TEXT,
+    working_dir TEXT,
+    timeout_seconds INTEGER,
+    is_enabled INTEGER DEFAULT 1,
+    created_at INTEGER NOT NULL,
+    updated_at INTEGER NOT NULL
+)
+";
+
+pub const AI_MCP_SERVERS_INDEX: &str = r"
+CREATE INDEX IF NOT EXISTS idx_ai_mcp_servers_enabled
+ON ai_mcp_servers(is_enabled)
+";
+
+pub const AI_SKILLS_INDEX: &str = r"
+CREATE INDEX IF NOT EXISTS idx_ai_skills_enabled
+ON ai_skills(is_enabled)
 ";
 
 pub const TRANSLATION_PROVIDERS_TABLE: &str = r"
@@ -180,6 +262,14 @@ pub const ALL_SCHEMAS: &[&str] = &[
     AI_CHAT_SESSIONS_TABLE,
     AI_CHAT_MESSAGES_TABLE,
     AI_CHAT_MESSAGES_INDEX,
+    AI_USAGE_LOGS_TABLE,
+    AI_USAGE_LOGS_INDEX,
+    AI_USAGE_PROVIDER_INDEX,
+    AI_PROVIDER_PRICING_TABLE,
+    AI_MCP_SERVERS_TABLE,
+    AI_SKILLS_TABLE,
+    AI_MCP_SERVERS_INDEX,
+    AI_SKILLS_INDEX,
     TRANSLATION_PROVIDERS_TABLE,
     TRANSLATIONS_TABLE,
     TRANSLATIONS_INDEX,

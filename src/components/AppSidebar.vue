@@ -11,10 +11,13 @@ import {
   Trash2,
   Settings,
   Plus,
+  ListTodo,
   ChevronDown,
 } from 'lucide-vue-next';
 import { useAccountStore } from '@/stores/account';
 import { useMailStore } from '@/stores/mail';
+import { useTodoStore } from '@/stores/todo';
+import BaseCheckbox from '@/components/BaseCheckbox.vue';
 
 const route = useRoute();
 const router = useRouter();
@@ -22,6 +25,7 @@ const router = useRouter();
 const { t } = useI18n();
 const accountStore = useAccountStore();
 const mailStore = useMailStore();
+const todoStore = useTodoStore();
 
 onMounted(() => {
   void accountStore.loadAccounts();
@@ -30,8 +34,13 @@ onMounted(() => {
 const popoverOpen = ref(false);
 
 function getUnreadCount(folderName: string): number | null {
-  const folder = mailStore.folders.find((f) => f.name === folderName || f.path === folderName);
-  return folder?.unreadCount || null;
+  const matching = mailStore.folders.filter(
+    (f) =>
+      accountStore.selectedAccountIds.includes(f.accountId) &&
+      (f.name === folderName || f.path === folderName)
+  );
+  const total = matching.reduce((sum, f) => sum + f.unreadCount, 0);
+  return total > 0 ? total : null;
 }
 
 const folders = computed(() => [
@@ -68,8 +77,25 @@ const folders = computed(() => [
   },
 ]);
 
-const currentAccount = computed(() => accountStore.accounts[0]);
-const accountInitial = computed(() => currentAccount.value?.name.charAt(0).toUpperCase() ?? 'A');
+const currentAccountLabel = computed(() => {
+  if (accountStore.selectedAccountIds.length === 0) {
+    return t('account.noAccounts');
+  }
+  if (accountStore.selectedAccountIds.length === 1) {
+    const account = accountStore.accounts.find(
+      (a) => a.id === accountStore.selectedAccountIds[0]
+    );
+    return account?.name ?? t('account.noAccounts');
+  }
+  return t('account.selectedCount', { count: accountStore.selectedAccountIds.length });
+});
+
+const accountInitial = computed(() => {
+  const first = accountStore.accounts.find((a) =>
+    accountStore.selectedAccountIds.includes(a.id)
+  );
+  return first?.name.charAt(0).toUpperCase() ?? 'A';
+});
 
 function isActiveFolder(path: string) {
   if (path === '/') return route.path === '/';
@@ -136,6 +162,24 @@ function closePopoverOnBlur(event: FocusEvent) {
           </RouterLink>
         </li>
       </ul>
+
+      <div class="mt-2 border-t border-border pt-2">
+        <button
+          type="button"
+          class="flex h-9 w-full items-center gap-3 rounded-md px-3 text-sm text-secondary transition-colors hover:bg-raised/60"
+          :class="todoStore.isPanelOpen ? 'bg-raised text-primary' : ''"
+          @click="todoStore.togglePanel()"
+        >
+          <ListTodo class="h-4 w-4" />
+          <span>{{ $t('nav.todos') }}</span>
+          <span
+            v-if="todoStore.pendingItems.length > 0"
+            class="ml-auto flex h-5 min-w-5 items-center justify-center rounded-full bg-accent px-2 text-xs font-medium text-white"
+          >
+            {{ todoStore.pendingItems.length }}
+          </span>
+        </button>
+      </div>
     </nav>
 
     <div class="border-t border-border p-2">
@@ -155,8 +199,8 @@ function closePopoverOnBlur(event: FocusEvent) {
           >
             {{ accountInitial }}
           </div>
-          <span class="flex-1 truncate text-left text-primary">{{
-            currentAccount?.name ?? $t('account.noAccounts')
+          <span class="flex-1 truncate text-left text-primary" tabindex="-1">{{
+            currentAccountLabel
           }}</span>
           <ChevronDown class="h-4 w-4 text-secondary" />
         </button>
@@ -171,15 +215,44 @@ function closePopoverOnBlur(event: FocusEvent) {
             <li
               v-for="account in accountStore.accounts"
               :key="account.id"
-              class="flex items-center gap-2 px-3 py-2 text-sm text-primary"
+              class="flex cursor-pointer items-center justify-between gap-2 px-3 py-2 text-sm text-primary transition-colors hover:bg-elevated"
               role="menuitem"
+              @click="accountStore.toggleAccountSelection(account.id)"
             >
-              <div
-                class="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-elevated text-xs font-medium"
-              >
-                {{ account.name.charAt(0).toUpperCase() }}
+              <div class="flex min-w-0 items-center gap-2">
+                <BaseCheckbox
+                  :model-value="accountStore.isAccountSelected(account.id)"
+                  class="shrink-0"
+                  @update:model-value="accountStore.toggleAccountSelection(account.id)"
+                  @click.stop
+                />
+                <div
+                  class="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-elevated text-xs font-medium"
+                >
+                  {{ account.name.charAt(0).toUpperCase() }}
+                </div>
+                <span class="truncate">{{ account.name }}</span>
               </div>
-              <span class="truncate">{{ account.name }}</span>
+              <button
+                type="button"
+                class="shrink-0 text-xs text-secondary transition-colors hover:text-primary"
+                @click.stop="accountStore.selectOnlyAccount(account.id)"
+              >
+                {{ $t('account.showOnly') }}
+              </button>
+            </li>
+            <li
+              v-if="!accountStore.allAccountsSelected"
+              class="border-t border-border"
+            >
+              <button
+                type="button"
+                class="w-full px-3 py-2 text-left text-sm text-secondary transition-colors hover:bg-elevated"
+                role="menuitem"
+                @click="accountStore.selectAllAccounts()"
+              >
+                {{ $t('account.showAll') }}
+              </button>
             </li>
             <li class="border-t border-border">
               <button

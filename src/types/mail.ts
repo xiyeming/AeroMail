@@ -40,6 +40,7 @@ export interface SyncProgress {
   syncedCount: number;
   totalCount: number;
   lastSyncTime: string | null;
+  message?: string;
 }
 
 export interface AttachmentInfo {

@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, computed, watch, nextTick, onMounted } from 'vue';
+import { ref, computed, watch, watchEffect, nextTick, onMounted, onUnmounted } from 'vue';
 import { useRouter } from 'vue-router';
 import { useI18n } from 'vue-i18n';
 import {
@@ -8,6 +8,8 @@ import {
   Trash2,
   Expand,
   Minimize2,
+  ChevronDown,
+  ChevronUp,
   Mail,
   Paperclip,
   Reply,
@@ -17,8 +19,11 @@ import {
   AlertTriangle,
   ShieldCheck,
   Sparkles,
+  X,
+  Loader2,
 } from 'lucide-vue-next';
 import { invoke } from '@tauri-apps/api/core';
+import { save } from '@tauri-apps/plugin-dialog';
 import AiQuickActions from '@/components/AiQuickActions.vue';
 import SandboxedHtml from '@/components/SandboxedHtml.vue';
 import TranslatePanel from '@/components/TranslatePanel.vue';
@@ -27,78 +32,93 @@ import { useAiStore } from '@/stores/ai';
 import { useMailStore } from '@/stores/mail';
 import { useToastStore } from '@/stores/toast';
 import { useSettingsStore } from '@/stores/settings';
+import { useTodoStore } from '@/stores/todo';
+import { useTranslation } from '@/composables/useTranslation';
 import type { AttachmentInfo } from '@/types/mail';
+import type { TranslationProviderSummary } from '@/types/translation';
 
 const { t } = useI18n();
 const router = useRouter();
-const { createSession, sendMessage } = useAiChat();
+const { summarizeMail, extractTodos } = useAiChat();
+const { translateText, listProviders: listTranslationProviders, getDefaultTargetLang } = useTranslation();
 const aiStore = useAiStore();
 const mailStore = useMailStore();
 const toast = useToastStore();
 const settingsStore = useSettingsStore();
+const todoStore = useTodoStore();
 
 const translatedText = ref<string | null>(null);
 const translatedLang = ref<string | null>(null);
-const showTranslation = ref(false);
+const translationCollapsed = ref(false);
 const showTranslatePanel = ref(false);
 const showDeleteConfirm = ref(false);
 const attachments = ref<AttachmentInfo[]>([]);
 const deleteDialogRef = ref<HTMLDivElement | null>(null);
 const trustedDomains = ref<string[]>([]);
 const temporarilyAllowedDomains = ref<string[]>([]);
+const inlineImageMap = ref<Record<string, string>>({});
+const cspBlockedDomains = ref<string[]>([]);
+const domRemoteDomains = ref<string[]>([]);
+const sandboxedHtmlRef = ref<InstanceType<typeof SandboxedHtml> | null>(null);
+const selectedText = ref('');
+const showSelectionMenu = ref(false);
+const selectionMenuX = ref(0);
+const selectionMenuY = ref(0);
+const selectionMenuRef = ref<HTMLDivElement | null>(null);
+const translationProviders = ref<TranslationProviderSummary[]>([]);
+const selectedTranslationProviderId = ref('');
+const translationTargetLang = ref(getDefaultTargetLang());
+const summaryText = ref('');
+const isSummarizing = ref(false);
 
-const currentMailId = computed(() => mailStore.selectedMailId);
-const mail = computed(() => mailStore.selectedMail);
-const isStarred = computed(() => mail.value?.isStarred ?? false);
-const isSpam = computed(() => mail.value?.isSpam ?? false);
-const isArchived = computed(() => mail.value?.isArchived ?? false);
-
-async function loadAttachments(mailId: string) {
-  try {
-    attachments.value = await invoke<AttachmentInfo[]>('get_attachments', { mailId });
-  } catch (e) {
-    console.error('Failed to load attachments:', e);
+async function loadTranslationProviders() {
+  translationProviders.value = await listTranslationProviders();
+  if (translationProviders.value.length > 0 && !selectedTranslationProviderId.value) {
+    selectedTranslationProviderId.value = translationProviders.value[0].id;
   }
 }
 
-async function downloadAttachment(att: AttachmentInfo) {
-  try {
-    const bytes = await invoke<number[]>('get_attachment_content', { attachmentId: att.id });
-    const uint8 = new Uint8Array(bytes);
-    const blob = new Blob([uint8], { type: att.mimeType || 'application/octet-stream' });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = att.filename;
-    document.body.appendChild(a);
-    a.click();
-    document.body.removeChild(a);
-    URL.revokeObjectURL(url);
-  } catch (e) {
-    console.error('Failed to download attachment:', e);
+function getSelectedText(): string {
+  return window.getSelection()?.toString()?.trim() ?? '';
+}
+
+function updateSelectionMenu(e?: MouseEvent) {
+  const text = getSelectedText();
+  if (!text) {
+    showSelectionMenu.value = false;
+    selectedText.value = '';
+    return;
   }
+  selectedText.value = text;
+  const event = e ?? window.event as MouseEvent | undefined;
+  if (event) {
+    selectionMenuX.value = event.clientX;
+    selectionMenuY.value = event.clientY - 8;
+  }
+  showSelectionMenu.value = true;
 }
 
-function formatSize(bytes: number): string {
-  if (bytes < 1024) return `${bytes} B`;
-  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
-  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+function handleIframeSelection(payload: { text: string; clientX: number; clientY: number }) {
+  if (!payload.text) return;
+  const iframe = sandboxedHtmlRef.value?.$refs.iframeRef as HTMLIFrameElement | undefined;
+  const rect = iframe?.getBoundingClientRect();
+  if (!rect) return;
+  selectedText.value = payload.text;
+  selectionMenuX.value = rect.left + payload.clientX;
+  selectionMenuY.value = rect.top + payload.clientY - 8;
+  showSelectionMenu.value = true;
 }
 
-const PROMPTS = {
-  summarize: 'Please summarize this email in 3 sentences.',
-  reply: 'Please write a polite reply draft for this email. Keep it concise.',
-  extractTodos: 'Please extract all action items from this email, listed by priority.',
-};
-
-async function handleQuickAction(promptKey: keyof typeof PROMPTS) {
-  if (!currentMailId.value) return;
-  if (!aiStore.isPanelOpen) aiStore.togglePanel();
-  const provider = aiStore.providers[0];
-  if (!provider) return;
+async function translateSelectedText() {
+  if (!selectedText.value || !selectedTranslationProviderId.value) return;
+  showSelectionMenu.value = false;
   try {
-    const session = await createSession(provider.id, currentMailId.value);
-    await sendMessage(session.id, PROMPTS[promptKey]);
+    const translated = await translateText(
+      selectedText.value,
+      translationTargetLang.value,
+      selectedTranslationProviderId.value
+    );
+    handleTranslated({ text: translated, lang: translationTargetLang.value });
   } catch (e) {
     toast.add({
       type: 'error',
@@ -108,15 +128,168 @@ async function handleQuickAction(promptKey: keyof typeof PROMPTS) {
   }
 }
 
+function hideSelectionMenu(e?: MouseEvent) {
+  if (e && selectionMenuRef.value?.contains(e.target as Node)) return;
+  showSelectionMenu.value = false;
+}
+
+function normalizeCid(cid: string): string {
+  return cid.trim().replace(/^<|>$/g, '').toLowerCase();
+}
+
+function uint8ArrayToBase64(bytes: Uint8Array): string {
+  let binary = '';
+  for (let i = 0; i < bytes.byteLength; i += 1) {
+    binary += String.fromCharCode(bytes[i]);
+  }
+  return btoa(binary);
+}
+
+const currentMailId = computed(() => mailStore.selectedMailId);
+const mail = computed(() => mailStore.selectedMail);
+const isStarred = computed(() => mail.value?.isStarred ?? false);
+const isSpam = computed(() => mail.value?.isSpam ?? false);
+const isArchived = computed(() => mail.value?.isArchived ?? false);
+
+async function loadAttachments(mailId: string) {
+  try {
+    const list = await invoke<AttachmentInfo[]>('get_attachments', { mailId });
+    attachments.value = list;
+
+    const map: Record<string, string> = {};
+    await Promise.all(
+      list
+        .filter((att) => att.contentId)
+        .map(async (att) => {
+          try {
+            const bytes = await invoke<number[]>('get_attachment_content', {
+              attachmentId: att.id,
+            });
+            const dataUrl = `data:${att.mimeType || 'application/octet-stream'};base64,${uint8ArrayToBase64(new Uint8Array(bytes))}`;
+            const fullCid = normalizeCid(att.contentId!);
+            map[fullCid] = dataUrl;
+            // HTML often references inline images by the local part only (cid:logo),
+            // while Content-ID headers include a domain suffix (<logo@domain.com>).
+            // Register both forms so either reference resolves.
+            const atIdx = fullCid.indexOf('@');
+            if (atIdx > 0) {
+              map[fullCid.slice(0, atIdx)] = dataUrl;
+            }
+          } catch (e) {
+            console.error(`Failed to load inline image ${att.filename}:`, e);
+          }
+        })
+    );
+    inlineImageMap.value = map;
+  } catch (e) {
+    console.error('Failed to load attachments:', e);
+  }
+}
+
+async function downloadAttachment(att: AttachmentInfo) {
+  try {
+    const targetPath = await save({ defaultPath: att.filename });
+    if (!targetPath) {
+      return;
+    }
+    await invoke('download_attachment', {
+      attachmentId: att.id,
+      targetPath,
+    });
+    toast.add({ type: 'success', message: t('mail.attachmentSaved') });
+  } catch (e) {
+    console.error('Failed to download attachment:', e);
+    toast.add({
+      type: 'error',
+      message: e instanceof Error ? e.message : String(e),
+      duration: 5000,
+    });
+  }
+}
+
+function formatSize(bytes: number): string {
+  if (bytes < 1024) return `${bytes} B`;
+  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
+  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+}
+
+async function autoSummarize() {
+  if (!currentMailId.value) return;
+  const providerId = aiStore.resolveProviderId();
+  if (!providerId) return;
+  isSummarizing.value = true;
+  try {
+    summaryText.value = await summarizeMail(currentMailId.value, providerId);
+  } catch (e) {
+    console.error('Failed to auto-summarize mail:', e);
+  } finally {
+    isSummarizing.value = false;
+  }
+}
+
+async function handleQuickAction(action: 'summarize' | 'extractTodos') {
+  if (!currentMailId.value) return;
+  const providerId = aiStore.resolveProviderId();
+  if (!providerId) {
+    toast.add({
+      type: 'error',
+      message: t('aiActions.noProvider'),
+      duration: 5000,
+    });
+    return;
+  }
+
+  if (action === 'summarize') {
+    isSummarizing.value = true;
+    try {
+      summaryText.value = await summarizeMail(currentMailId.value, providerId);
+    } catch (e) {
+      toast.add({
+        type: 'error',
+        message: e instanceof Error ? e.message : String(e),
+        duration: 5000,
+      });
+    } finally {
+      isSummarizing.value = false;
+    }
+    return;
+  }
+
+  if (action === 'extractTodos') {
+    try {
+      const items = await extractTodos(currentMailId.value, providerId);
+      todoStore.setFromAiTodos(items, currentMailId.value);
+      todoStore.openPanel();
+    } catch (e) {
+      toast.add({
+        type: 'error',
+        message: e instanceof Error ? e.message : String(e),
+        duration: 5000,
+      });
+    }
+    return;
+  }
+}
+
+function closeSummary() {
+  summaryText.value = '';
+}
+
 function handleTranslated(payload: { text: string; lang: string }) {
   translatedText.value = payload.text;
   translatedLang.value = payload.lang;
-  showTranslation.value = true;
+  translationCollapsed.value = false;
   showTranslatePanel.value = false;
 }
 
-function toggleTranslation() {
-  showTranslation.value = !showTranslation.value;
+function clearTranslation() {
+  translatedText.value = null;
+  translatedLang.value = null;
+  translationCollapsed.value = false;
+}
+
+function toggleTranslationCollapsed() {
+  translationCollapsed.value = !translationCollapsed.value;
 }
 
 function handleToggleStar() {
@@ -198,29 +371,34 @@ function extractRemoteDomains(html: string): string[] {
     }
   };
 
-  // src / href / data attributes (support protocol-relative URLs)
-  const attrRe = /(?:src|href|data-src|data-original|poster|background)\s*=\s*["']((?:https?:)?\/\/[^"']+)["']/gi;
+  // HTML attributes: src / href / poster / background / data-src / data-original
+  // Supports double-quoted, single-quoted, and unquoted values.
+  const attrRe =
+    /(?:src|href|poster|background|data-src|data-original)\s*=\s*(?:"((?:https?:)?\/\/[^"]*)"|'((?:https?:)?\/\/[^']*)'|((?:https?:)?\/\/[^\s>]+))/gi;
   let match: RegExpExecArray | null;
   while ((match = attrRe.exec(html)) !== null) {
-    capture(match[1]);
+    const url = match[1] || match[2] || match[3];
+    if (url) capture(url);
   }
 
-  // CSS url(...)
-  const urlRe = /url\((['"]?)((?:https?:)?\/\/[^"')]+)\1\)/gi;
+  // CSS url(...) including inline styles and <style> blocks
+  const urlRe = /url\(\s*(['"]?)((?:https?:)?\/\/[^"')]+)\1\s*\)/gi;
   while ((match = urlRe.exec(html)) !== null) {
     capture(match[2]);
   }
 
   // @import url(...)
-  const importRe = /@import\s+(?:url\()?["']((?:https?:)?\/\/[^"')]+)["']\)?/gi;
+  const importRe = /@import\s+(?:url\()?\s*["']((?:https?:)?\/\/[^"')]+)["']\s*\)?/gi;
   while ((match = importRe.exec(html)) !== null) {
     capture(match[1]);
   }
 
   // srcset attribute (comma-separated url descriptors, supports protocol-relative)
-  const srcsetRe = /srcset\s*=\s*["']([^"']+)["']/gi;
+  const srcsetRe = /srcset\s*=\s*(?:"([^"]*)"|'([^']*)'|([^\s>]+))/gi;
   while ((match = srcsetRe.exec(html)) !== null) {
-    for (const part of match[1].split(',')) {
+    const value = match[1] || match[2] || match[3];
+    if (!value) continue;
+    for (const part of value.split(',')) {
       const trimmed = part.trim();
       const spaceIdx = trimmed.search(/\s/);
       const url = spaceIdx > 0 ? trimmed.slice(0, spaceIdx) : trimmed;
@@ -234,8 +412,21 @@ function extractRemoteDomains(html: string): string[] {
 }
 
 const remoteDomains = computed(() => {
-  if (!mail.value?.bodyHtml) return [];
-  return extractRemoteDomains(mail.value.bodyHtml);
+  if (!mail.value?.bodyHtml) return domRemoteDomains.value;
+  const fromRegex = extractRemoteDomains(mail.value.bodyHtml);
+  const all = new Set([...fromRegex, ...cspBlockedDomains.value, ...domRemoteDomains.value]);
+  return Array.from(all).sort();
+});
+
+const processedBodyHtml = computed(() => {
+  const html = mail.value?.bodyHtml;
+  if (!html) return html ?? null;
+  const map = inlineImageMap.value;
+  if (Object.keys(map).length === 0) return html;
+  return html.replace(/cid:\s*<?([^>"'\s)]+)>?/gi, (match, cid: string) => {
+    const dataUrl = map[normalizeCid(cid)];
+    return dataUrl || match;
+  });
 });
 
 const allowedDomains = computed(() => [
@@ -277,8 +468,34 @@ async function loadTrustedDomains() {
   }
 }
 
+function handleSecurityViolation(violation: { domain: string; blockedUri: string }) {
+  console.log('[MailViewer] CSP violation:', violation);
+  if (!cspBlockedDomains.value.includes(violation.domain)) {
+    cspBlockedDomains.value.push(violation.domain);
+  }
+}
+
+function handleRemoteDomains(domains: string[]) {
+  console.log('[MailViewer] remote domains from iframe DOM:', domains);
+  const merged = new Set([...domRemoteDomains.value, ...domains]);
+  domRemoteDomains.value = Array.from(merged);
+}
+
 onMounted(() => {
   void loadTrustedDomains();
+  void aiStore.loadDefaultProvider().then(() => {
+    if (currentMailId.value) {
+      void autoSummarize();
+    }
+  });
+  void loadTranslationProviders();
+  document.addEventListener('mouseup', updateSelectionMenu);
+  document.addEventListener('mousedown', hideSelectionMenu);
+});
+
+onUnmounted(() => {
+  document.removeEventListener('mouseup', updateSelectionMenu);
+  document.removeEventListener('mousedown', hideSelectionMenu);
 });
 
 // Focus trap for delete dialog
@@ -319,17 +536,33 @@ watch(showDeleteConfirm, async (show) => {
   }
 });
 
+watch(allowedDomains, () => {
+  cspBlockedDomains.value = [];
+  domRemoteDomains.value = [];
+});
+
 watch(currentMailId, (newMailId) => {
   translatedText.value = null;
   translatedLang.value = null;
-  showTranslation.value = false;
+  translationCollapsed.value = false;
   showTranslatePanel.value = false;
   showDeleteConfirm.value = false;
   temporarilyAllowedDomains.value = [];
   attachments.value = [];
-  if (newMailId && mail.value?.hasAttachments) {
-    loadAttachments(newMailId);
+  inlineImageMap.value = {};
+  cspBlockedDomains.value = [];
+  domRemoteDomains.value = [];
+  summaryText.value = '';
+  if (newMailId) {
+    void loadAttachments(newMailId);
+    void autoSummarize();
   }
+});
+
+watchEffect(() => {
+  console.log('[MailViewer] remoteDomains:', remoteDomains.value);
+  console.log('[MailViewer] untrustedDomains:', untrustedDomains.value);
+  console.log('[MailViewer] showSecurityBanner:', showSecurityBanner.value);
 });
 </script>
 
@@ -360,7 +593,6 @@ watch(currentMailId, (newMailId) => {
       <div class="flex items-center justify-between border-b border-border px-3 py-2">
         <AiQuickActions
           @summarize="handleQuickAction('summarize')"
-          @reply="handleQuickAction('reply')"
           @extract-todos="handleQuickAction('extractTodos')"
         />
         <div class="flex items-center gap-1">
@@ -457,20 +689,44 @@ watch(currentMailId, (newMailId) => {
         <TranslatePanel :mail-id="currentMailId" @translated="handleTranslated" />
       </div>
 
-      <!-- Translation display -->
+      <!-- Translation result card -->
       <div
-        v-if="translatedText && showTranslation"
-        class="flex h-9 items-center justify-between border-b border-border bg-accent-subtle px-4"
+        v-if="translatedText"
+        class="border-b border-border bg-accent-subtle/30 px-6 py-3"
       >
-        <span class="text-xs text-accent">
-          {{ t('translation.translatedTo', { lang: translatedLang ?? 'target' }) }}
-        </span>
-        <button
-          class="text-xs text-accent underline hover:text-accent-hover"
-          @click="toggleTranslation"
+        <div class="flex items-center justify-between gap-3">
+          <div class="flex items-center gap-2">
+            <Languages class="h-4 w-4 text-accent" aria-hidden="true" />
+            <span class="text-xs font-medium text-accent">
+              {{ t('translation.translatedTo', { lang: translatedLang ?? 'target' }) }}
+            </span>
+          </div>
+          <div class="flex items-center gap-1">
+            <button
+              type="button"
+              class="rounded p-1 text-tertiary transition-colors hover:bg-raised hover:text-primary"
+              :title="translationCollapsed ? t('translation.expand') : t('translation.collapse')"
+              @click="toggleTranslationCollapsed"
+            >
+              <ChevronDown v-if="translationCollapsed" class="h-3.5 w-3.5" />
+              <ChevronUp v-else class="h-3.5 w-3.5" />
+            </button>
+            <button
+              type="button"
+              class="rounded p-1 text-tertiary transition-colors hover:bg-raised hover:text-primary"
+              :title="t('mail.close')"
+              @click="clearTranslation"
+            >
+              <X class="h-3.5 w-3.5" />
+            </button>
+          </div>
+        </div>
+        <div
+          v-show="!translationCollapsed"
+          class="mt-2 max-h-96 overflow-y-auto text-sm text-secondary"
         >
-          {{ t('translation.showOriginal') }}
-        </button>
+          {{ translatedText }}
+        </div>
       </div>
 
       <!-- Mail header -->
@@ -506,11 +762,37 @@ watch(currentMailId, (newMailId) => {
         </div>
       </div>
 
-      <!-- Remote content security banner -->
+      <!-- AI summary -->
       <div
-        v-if="showSecurityBanner"
-        class="border-b border-border bg-warning/10 px-6 py-3"
+        v-if="isSummarizing || summaryText"
+        class="border-b border-border bg-accent-subtle/30 px-6 py-3"
       >
+        <div class="flex items-start justify-between gap-3">
+          <div class="flex items-center gap-2">
+            <Sparkles class="h-4 w-4 text-accent" aria-hidden="true" />
+            <span class="text-xs font-medium text-accent">{{ t('aiActions.summaryTitle') }}</span>
+          </div>
+          <button
+            v-if="summaryText"
+            type="button"
+            class="rounded p-1 text-tertiary transition-colors hover:bg-raised hover:text-primary"
+            :title="t('mail.close')"
+            @click="closeSummary"
+          >
+            <X class="h-3.5 w-3.5" />
+          </button>
+        </div>
+        <div class="mt-1 text-sm text-secondary">
+          <div v-if="isSummarizing" class="flex items-center gap-2 text-xs text-tertiary">
+            <Loader2 class="h-3.5 w-3.5 animate-spin" />
+            {{ t('aiActions.summarizing') }}
+          </div>
+          <p v-else>{{ summaryText }}</p>
+        </div>
+      </div>
+
+      <!-- Remote content security banner -->
+      <div v-if="showSecurityBanner" class="border-b border-border bg-warning/10 px-6 py-3">
         <div class="flex items-start gap-3">
           <AlertTriangle class="mt-0.5 h-4 w-4 shrink-0 text-warning" aria-hidden="true" />
           <div class="flex-1">
@@ -549,27 +831,35 @@ watch(currentMailId, (newMailId) => {
         </div>
       </div>
 
+      <!-- Selected-text translate popup -->
+      <div
+        v-if="showSelectionMenu"
+        ref="selectionMenuRef"
+        class="fixed z-40 rounded-md border border-border bg-elevated px-2 py-1 shadow-lg"
+        :style="{ left: `${selectionMenuX}px`, top: `${selectionMenuY}px` }"
+      >
+        <button
+          type="button"
+          class="flex items-center gap-1 text-xs text-secondary transition-colors hover:text-primary"
+          @click="translateSelectedText"
+        >
+          <Languages class="h-3.5 w-3.5" />
+          {{ t('translation.translate') }}
+        </button>
+      </div>
+
       <!-- Mail body -->
       <div class="flex-1 overflow-y-auto px-6 py-4">
-        <div
-          v-if="translatedText && !showTranslation"
-          class="mb-4 rounded-lg bg-raised p-4 text-sm text-secondary"
-        >
-          {{ translatedText }}
-          <button
-            class="ml-2 text-xs text-accent underline hover:text-accent-hover"
-            @click="toggleTranslation"
-          >
-            {{ t('translation.showOriginal') }}
-          </button>
-        </div>
-
         <SandboxedHtml
-          v-if="mail.bodyHtml"
+          v-if="processedBodyHtml"
+          ref="sandboxedHtmlRef"
           :key="`${currentMailId}-${allowedDomains.join(',')}`"
-          :html="mail.bodyHtml"
+          :html="processedBodyHtml"
           :allowed-domains="allowedDomains"
           class="prose prose-sm max-w-none text-primary"
+          @security-violation="handleSecurityViolation"
+          @remote-domains="handleRemoteDomains"
+          @selection="handleIframeSelection"
         />
         <div v-else-if="mail.bodyText" class="whitespace-pre-wrap text-sm text-primary">
           {{ mail.bodyText }}

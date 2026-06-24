@@ -9,31 +9,40 @@ use commands::account::{
     update_account,
 };
 use commands::ai::{
-    create_chat_session, delete_ai_provider, delete_chat_session, get_chat_messages,
-    list_ai_providers, list_chat_sessions, send_chat_message, test_ai_provider, upsert_ai_provider,
+    clear_chat_session, create_chat_session, delete_ai_mcp_server, delete_ai_provider,
+    delete_ai_skill, delete_chat_session, extract_todos, get_ai_session_usage,
+    get_ai_usage_summary, get_chat_messages, list_ai_mcp_servers, list_ai_provider_pricing,
+    list_ai_providers, list_ai_skills, list_chat_sessions, quote_mail_to_chat, rename_chat_session,
+    send_chat_message, set_chat_session_provider, summarize_mail, test_ai_provider,
+    upsert_ai_mcp_server, upsert_ai_provider, upsert_ai_provider_pricing, upsert_ai_skill,
 };
 use commands::compose::{
     delete_draft, get_draft, get_drafts, prepare_reply, save_attachment, save_draft, send_mail,
     sync_draft_to_imap,
 };
 use commands::mail::{
-    archive_mail, delete_mail, get_attachment_content, get_attachments, get_mail_detail,
-    get_mail_list, get_unread_count, get_virtual_mail_list, get_virtual_unread_count, list_folders,
-    mark_mail_read, move_mail, toggle_mail_spam, toggle_mail_star,
+    archive_mail, delete_mail, download_attachment, get_attachment_content, get_attachments,
+    get_inbox_mail_list, get_mail_detail, get_mail_list, get_unread_count, get_virtual_mail_list,
+    get_virtual_unread_count, list_folders, mark_mail_read, move_mail, toggle_mail_spam,
+    toggle_mail_star,
 };
-use commands::search::{get_search_stats, index_pending_mails, search_mails};
+use commands::search::{
+    get_search_stats, index_pending_mails, search_mail_summaries, search_mails,
+};
 use commands::settings::{get_log_config, get_setting, set_log_config, set_setting};
-use commands::sync::{start_sync, stop_sync};
+use commands::sync::{fetch_older_mails, start_sync, stop_sync};
 use commands::translation::{
     delete_translation_provider, get_cached_translation, list_translation_providers,
-    translate_mail_text, upsert_translation_provider,
+    translate_mail_text, translate_text, upsert_translation_provider,
 };
 use commands::window::{
     apply_window_decorations, close_main_window, confirmed_exit, hide_main_window,
+    set_tray_menu_locale,
 };
 use db::pool::Database;
 use services::account_manager::AccountManager;
 use services::ai::AiService;
+use services::ai::tools::ToolRegistry;
 use services::logging::LogService;
 use services::search::SearchService;
 use services::sync::SyncService;
@@ -43,14 +52,16 @@ use std::sync::Arc;
 use tauri::Emitter;
 use tauri::Manager;
 use tauri::WindowEvent;
+use tauri::Wry;
 use tauri::image::Image;
-use tauri::menu::{MenuBuilder, MenuItemBuilder};
+use tauri::menu::{MenuBuilder, MenuItem, MenuItemBuilder};
 use tauri::tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent};
 use tokio::sync::RwLock;
 
 pub struct AppState {
     pub account_manager: Arc<RwLock<AccountManager>>,
     pub ai_service: Arc<RwLock<AiService>>,
+    pub tool_registry: Arc<RwLock<ToolRegistry>>,
     pub translation_service: TranslationService,
     pub sync_service: Arc<RwLock<SyncService>>,
     pub search_service: Arc<RwLock<SearchService>>,
@@ -67,7 +78,7 @@ impl AppState {
     /// # Errors
     ///
     /// Returns an error if the database cannot be opened or initialized.
-    pub fn new(app_handle: &tauri::AppHandle) -> Result<Self, crate::error::AeroError> {
+    pub async fn new(app_handle: &tauri::AppHandle) -> Result<Self, crate::error::AeroError> {
         let db = Arc::new(Database::new(app_handle)?);
         let account_manager = Arc::new(RwLock::new(AccountManager::new(Arc::clone(&db))));
         let ai_service = Arc::new(RwLock::new(AiService::new(Arc::clone(&db))));
@@ -102,9 +113,16 @@ impl AppState {
             Arc::clone(&account_manager),
         )));
 
+        let tool_registry = Arc::new(RwLock::new(ToolRegistry::new()));
+        if let (Ok(servers), Ok(skills)) = (db.list_ai_mcp_servers(), db.list_ai_skills()) {
+            let registry = Arc::clone(&tool_registry);
+            registry.write().await.refresh(&servers, &skills).await;
+        }
+
         Ok(Self {
             account_manager,
             ai_service,
+            tool_registry,
             translation_service,
             sync_service,
             search_service,
@@ -116,27 +134,51 @@ impl AppState {
     }
 }
 
+pub struct TrayMenuState {
+    pub show_item: MenuItem<Wry>,
+    pub quit_item: MenuItem<Wry>,
+}
+
 #[tauri::command]
 fn greet(name: &str) -> String {
     format!("Hello, {name}! You've been greeted from Rust.")
+}
+
+#[must_use]
+pub fn tray_labels(locale: &str) -> (&'static str, &'static str) {
+    if locale.starts_with("zh") {
+        ("显示 AeroMail", "退出")
+    } else {
+        ("Show AeroMail", "Quit")
+    }
 }
 
 #[allow(clippy::missing_errors_doc)]
 #[allow(clippy::too_many_lines)]
 pub fn run() {
     let run_result = tauri::Builder::default()
+        .plugin(tauri_plugin_dialog::init())
         .setup(|app| {
             let handle = app.handle().clone();
 
             // Hide to tray on minimize and ask before closing.
             // System tray icon with show/quit menu.
             let tray_menu_handle = app.handle();
-            let show_item =
-                MenuItemBuilder::with_id("show", "Show AeroMail").build(tray_menu_handle)?;
-            let quit_item = MenuItemBuilder::with_id("quit", "Quit").build(tray_menu_handle)?;
+            let initial_locale = Database::new(tray_menu_handle)
+                .ok()
+                .and_then(|db| db.get_setting("app.locale").ok().flatten())
+                .unwrap_or_else(|| "en".to_string());
+            let (show_label, quit_label) = tray_labels(&initial_locale);
+            let show_item = MenuItemBuilder::with_id("show", show_label).build(tray_menu_handle)?;
+            let quit_item = MenuItemBuilder::with_id("quit", quit_label).build(tray_menu_handle)?;
             let menu = MenuBuilder::new(tray_menu_handle)
                 .items(&[&show_item, &quit_item])
                 .build()?;
+
+            app.manage(TrayMenuState {
+                show_item,
+                quit_item,
+            });
 
             let icon = Image::from_bytes(include_bytes!("../icons/icon.png"))?;
 
@@ -174,7 +216,7 @@ pub fn run() {
                 .build(app)?;
 
             tauri::async_runtime::spawn(async move {
-                match AppState::new(&handle) {
+                match AppState::new(&handle).await {
                     Ok(state) => {
                         let system_title_bar = state
                             .db
@@ -247,18 +289,37 @@ pub fn run() {
             test_ai_provider,
             create_chat_session,
             send_chat_message,
+            summarize_mail,
+            extract_todos,
             list_chat_sessions,
             get_chat_messages,
             delete_chat_session,
+            clear_chat_session,
+            rename_chat_session,
+            quote_mail_to_chat,
+            set_chat_session_provider,
+            get_ai_usage_summary,
+            get_ai_session_usage,
+            upsert_ai_provider_pricing,
+            list_ai_provider_pricing,
+            list_ai_mcp_servers,
+            upsert_ai_mcp_server,
+            delete_ai_mcp_server,
+            list_ai_skills,
+            upsert_ai_skill,
+            delete_ai_skill,
             list_translation_providers,
             upsert_translation_provider,
             delete_translation_provider,
             translate_mail_text,
+            translate_text,
             get_cached_translation,
             start_sync,
             stop_sync,
+            fetch_older_mails,
             get_mail_list,
             get_virtual_mail_list,
+            get_inbox_mail_list,
             get_mail_detail,
             mark_mail_read,
             toggle_mail_star,
@@ -271,8 +332,10 @@ pub fn run() {
             move_mail,
             get_attachments,
             get_attachment_content,
+            download_attachment,
             search_mails,
             index_pending_mails,
+            search_mail_summaries,
             get_search_stats,
             save_draft,
             get_drafts,
@@ -286,6 +349,7 @@ pub fn run() {
             hide_main_window,
             confirmed_exit,
             close_main_window,
+            set_tray_menu_locale,
         ])
         .run(tauri::generate_context!());
 

@@ -1,6 +1,7 @@
 import eslint from '@eslint/js';
 import tseslint from 'typescript-eslint';
 import vueeslint from 'eslint-plugin-vue';
+import vueParser from 'vue-eslint-parser';
 import globals from 'globals';
 import prettier from 'eslint-config-prettier';
 
@@ -28,7 +29,7 @@ export default tseslint.config(
   {
     files: ['*.vue', '**/*.vue'],
     languageOptions: {
-      parser: vueeslint.parser,
+      parser: vueParser,
       parserOptions: {
         parser: tseslint.parser,
         sourceType: 'module',

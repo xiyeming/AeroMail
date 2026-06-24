@@ -19,11 +19,12 @@
       <div class="relative">
         <button
           type="button"
-          class="rounded-md bg-accent px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-accent-hover disabled:opacity-50 disabled:cursor-not-allowed"
-          :disabled="!canSend"
+          class="flex h-9 items-center gap-2 rounded-md bg-accent px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-accent-hover disabled:opacity-50 disabled:cursor-not-allowed"
+          :disabled="!canSend || sending"
           @click="$emit('send')"
         >
-          {{ $t('compose.send') }}
+          <Loader2 v-if="sending" class="h-4 w-4 animate-spin" />
+          <span>{{ sending ? $t('compose.sending') : $t('compose.send') }}</span>
         </button>
         <div
           v-if="!canSend"
@@ -69,6 +70,7 @@
 
 <script setup lang="ts">
 import { ref, computed, watch } from 'vue';
+import { Loader2 } from 'lucide-vue-next';
 import type { ComposeDraft } from '@/types/compose';
 import type { AccountSummary } from '@/types/account';
 import BaseSelect from '@/components/BaseSelect.vue';
@@ -77,6 +79,7 @@ import RecipientInput from './RecipientInput.vue';
 const props = defineProps<{
   draft: ComposeDraft;
   accounts: AccountSummary[];
+  sending?: boolean;
 }>();
 
 const emit = defineEmits<{

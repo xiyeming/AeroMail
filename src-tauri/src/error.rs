@@ -24,6 +24,8 @@ pub enum AeroError {
     AiRateLimited,
     #[error("AI context mail not found")]
     AiContextMailNotFound,
+    #[error("AI tool error: {0}")]
+    AiToolError(String),
     #[error("translation provider not found")]
     TranslationProviderNotFound,
     #[error("translation API error: {0}")]
@@ -109,6 +111,10 @@ impl AeroError {
             Self::AiContextMailNotFound => ErrorPayload {
                 code: "AI_CONTEXT_MAIL_NOT_FOUND".to_string(),
                 args: vec!["Context message not found".to_string()],
+            },
+            Self::AiToolError(msg) => ErrorPayload {
+                code: "AI_TOOL_ERROR".to_string(),
+                args: vec![format!("Smart assistant tool failed: {msg}")],
             },
             Self::TranslationProviderNotFound => ErrorPayload {
                 code: "TRANSLATION_PROVIDER_NOT_FOUND".to_string(),

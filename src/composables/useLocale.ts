@@ -1,3 +1,4 @@
+import { invoke } from '@tauri-apps/api/core';
 import { ref } from 'vue';
 import { useI18n } from 'vue-i18n';
 import type { Locale } from '@/i18n';
@@ -18,6 +19,14 @@ export function useLocale() {
     isReady.value = true;
   }
 
+  async function updateTrayLocale(value: Locale) {
+    try {
+      await invoke('set_tray_menu_locale', { locale: value });
+    } catch {
+      // Tray update is best-effort; ignore failures on web/non-Tauri builds.
+    }
+  }
+
   async function setLocale(value: Locale, persist = true) {
     if (!SUPPORTED_LOCALES.includes(value)) return;
     await loadLocaleMessages(value);
@@ -26,6 +35,7 @@ export function useLocale() {
     if (persist) {
       await settings.set(SETTINGS_KEY, value);
     }
+    await updateTrayLocale(value);
   }
 
   function resolveLocale(raw: string | null): Locale {

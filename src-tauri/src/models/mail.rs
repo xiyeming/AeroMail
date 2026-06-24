@@ -68,6 +68,7 @@ pub struct SyncProgress {
     pub synced_count: u32,
     pub total_count: u32,
     pub last_sync_time: Option<String>,
+    pub message: Option<String>,
 }
 
 /// Sync status variants.
@@ -76,7 +77,7 @@ pub struct SyncProgress {
 pub enum SyncStatus {
     Idle,
     Syncing,
-    Error(String),
+    Error,
     Completed,
 }
 

@@ -1,5 +1,6 @@
 use aes_gcm::aead::Aead;
 use aes_gcm::{Aes256Gcm, KeyInit, Nonce};
+use tracing::{info, warn};
 
 use crate::error::AeroError;
 
@@ -9,10 +10,62 @@ const VERSION: u8 = 1;
 const KEYRING_SERVICE: &str = "AeroMail";
 const KEYRING_USERNAME: &str = "master-key";
 
+static FALLBACK_KEY_PATH_OVERRIDE: std::sync::Mutex<Option<std::path::PathBuf>> =
+    std::sync::Mutex::new(None);
+
 /// Returns the path to the fallback master key file used when the OS keyring
 /// is unavailable.
+///
+/// The path can be overridden via `FALLBACK_KEY_PATH_OVERRIDE` (used by tests
+/// so they do not wipe the production key).
 fn fallback_key_path() -> Option<std::path::PathBuf> {
+    if let Ok(override_path) = FALLBACK_KEY_PATH_OVERRIDE.lock() {
+        if let Some(path) = override_path.as_ref() {
+            return Some(path.clone());
+        }
+    }
     dirs::data_local_dir().map(|dir| dir.join("AeroMail").join("master.key"))
+}
+
+/// Atomically writes the fallback master key to disk.
+fn write_fallback_key(path: &std::path::Path, hex_key: &str) -> Result<(), AeroError> {
+    let parent = path.parent().filter(|p| !p.as_os_str().is_empty());
+    let parent = parent.unwrap_or_else(|| std::path::Path::new("."));
+    std::fs::create_dir_all(parent).map_err(|e| {
+        AeroError::Internal(format!("failed to create fallback key directory: {e}"))
+    })?;
+
+    let tmp_path = path.with_extension("tmp");
+
+    #[cfg(unix)]
+    {
+        use std::io::Write;
+        use std::os::unix::fs::OpenOptionsExt;
+        let mut file = std::fs::OpenOptions::new()
+            .create(true)
+            .write(true)
+            .truncate(true)
+            .mode(0o600)
+            .open(&tmp_path)
+            .map_err(|e| {
+                AeroError::Internal(format!("failed to create fallback master key file: {e}"))
+            })?;
+        file.write_all(hex_key.as_bytes()).map_err(|e| {
+            AeroError::Internal(format!("failed to write fallback master key: {e}"))
+        })?;
+        drop(file);
+    }
+    #[cfg(not(unix))]
+    {
+        std::fs::write(&tmp_path, hex_key.as_bytes()).map_err(|e| {
+            AeroError::Internal(format!("failed to write fallback master key: {e}"))
+        })?;
+    }
+
+    std::fs::rename(&tmp_path, path)
+        .map_err(|e| AeroError::Internal(format!("failed to persist fallback master key: {e}")))?;
+
+    Ok(())
 }
 
 fn decode_hex_key(hex_key: &str) -> Result<[u8; KEY_LEN], AeroError> {
@@ -32,7 +85,10 @@ fn get_or_create_master_key() -> Result<[u8; KEY_LEN], AeroError> {
 
     // Prefer the OS keyring if it has a key.
     match entry.get_password() {
-        Ok(hex_key) if !hex_key.trim().is_empty() => return decode_hex_key(&hex_key),
+        Ok(hex_key) if !hex_key.trim().is_empty() => {
+            info!("loaded master key from OS keyring");
+            return decode_hex_key(&hex_key);
+        }
         Ok(_) | Err(keyring::Error::NoEntry) => {}
         Err(e) => {
             return Err(AeroError::Internal(format!(
@@ -47,7 +103,10 @@ fn get_or_create_master_key() -> Result<[u8; KEY_LEN], AeroError> {
             let hex_key = std::fs::read_to_string(&path).map_err(|e| {
                 AeroError::Internal(format!("failed to read fallback master key: {e}"))
             })?;
-            return decode_hex_key(&hex_key);
+            if !hex_key.trim().is_empty() {
+                info!(path = %path.display(), "loaded master key from fallback file");
+                return decode_hex_key(&hex_key);
+            }
         }
     }
 
@@ -56,37 +115,13 @@ fn get_or_create_master_key() -> Result<[u8; KEY_LEN], AeroError> {
     let key: [u8; KEY_LEN] = rand::random();
     let hex_key = hex::encode(key);
 
-    let _ = entry.set_password(&hex_key);
+    if let Err(e) = entry.set_password(&hex_key) {
+        warn!("failed to store master key in OS keyring: {e}");
+    }
 
     if let Some(path) = fallback_key_path() {
-        if let Some(parent) = path.parent() {
-            std::fs::create_dir_all(parent).map_err(|e| {
-                AeroError::Internal(format!("failed to create fallback key directory: {e}"))
-            })?;
-        }
-        #[cfg(unix)]
-        {
-            use std::io::Write;
-            use std::os::unix::fs::OpenOptionsExt;
-            let mut file = std::fs::OpenOptions::new()
-                .create(true)
-                .write(true)
-                .truncate(true)
-                .mode(0o600)
-                .open(&path)
-                .map_err(|e| {
-                    AeroError::Internal(format!("failed to create fallback master key file: {e}"))
-                })?;
-            file.write_all(hex_key.as_bytes()).map_err(|e| {
-                AeroError::Internal(format!("failed to write fallback master key: {e}"))
-            })?;
-        }
-        #[cfg(not(unix))]
-        {
-            std::fs::write(&path, hex_key.as_bytes()).map_err(|e| {
-                AeroError::Internal(format!("failed to write fallback master key: {e}"))
-            })?;
-        }
+        write_fallback_key(&path, &hex_key)?;
+        info!(path = %path.display(), "created new fallback master key file");
     }
 
     Ok(key)
@@ -163,6 +198,14 @@ mod tests {
 
     static KEYRING_LOCK: Mutex<()> = Mutex::new(());
 
+    fn setup_test_key_path() {
+        let temp_path =
+            std::env::temp_dir().join(format!("aeromail-test-master-key-{}", uuid::Uuid::new_v4()));
+        if let Ok(mut guard) = FALLBACK_KEY_PATH_OVERRIDE.lock() {
+            *guard = Some(temp_path);
+        }
+    }
+
     fn cleanup_test_key() {
         let entry = keyring::Entry::new(KEYRING_SERVICE, KEYRING_USERNAME).ok();
         let _ = entry.as_ref().and_then(|e| e.delete_credential().ok());
@@ -178,6 +221,7 @@ mod tests {
     #[test]
     fn roundtrip_password() -> Result<(), Box<dyn std::error::Error>> {
         let _guard = acquire_lock();
+        setup_test_key_path();
         cleanup_test_key();
         let plain = b"my-secret-password";
         let encrypted = encrypt_password(plain)?;
@@ -190,6 +234,7 @@ mod tests {
     #[test]
     fn legacy_plaintext_passthrough() -> Result<(), Box<dyn std::error::Error>> {
         let _guard = acquire_lock();
+        setup_test_key_path();
         cleanup_test_key();
         let plain = b"legacy-plaintext";
         let decrypted = decrypt_password(plain)?;
@@ -200,6 +245,7 @@ mod tests {
     #[test]
     fn key_consistency() -> Result<(), Box<dyn std::error::Error>> {
         let _guard = acquire_lock();
+        setup_test_key_path();
         cleanup_test_key();
         let k1 = get_or_create_master_key()?;
         let k2 = get_or_create_master_key()?;

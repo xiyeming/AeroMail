@@ -43,5 +43,55 @@ export interface AiChatMessage {
   sessionId: string;
   role: 'system' | 'user' | 'assistant';
   content: string;
+  thinking?: string | null;
   createdAt: number;
+}
+
+export interface AiUsageSummary {
+  providerId: string;
+  model: string;
+  totalPromptTokens: number;
+  totalCompletionTokens: number;
+  totalTokens: number;
+  totalCost: number;
+  currency: string;
+}
+
+export interface AiProviderPricing {
+  id: string;
+  providerId: string;
+  model: string;
+  inputPricePer1K: number;
+  outputPricePer1K: number;
+  currency: string;
+  effectiveFrom: number | null;
+}
+
+export type AiMcpTransport = 'stdio' | 'sse';
+
+export interface AiMcpServer {
+  id: string;
+  name: string;
+  transport: AiMcpTransport;
+  command?: string;
+  args?: string[];
+  url?: string;
+  envJson?: string;
+  isEnabled: boolean;
+  createdAt: number;
+  updatedAt: number;
+}
+
+export interface AiSkill {
+  id: string;
+  name: string;
+  description: string;
+  inputSchemaJson: string;
+  command: string;
+  args?: string[];
+  workingDir?: string;
+  timeoutSeconds?: number;
+  isEnabled: boolean;
+  createdAt: number;
+  updatedAt: number;
 }

@@ -1,10 +1,9 @@
 <script setup lang="ts">
 import { useI18n } from 'vue-i18n';
-import { Sparkles, Reply, ListTodo } from 'lucide-vue-next';
+import { Sparkles, ListTodo } from 'lucide-vue-next';
 
 const emit = defineEmits<{
   summarize: [];
-  reply: [];
   extractTodos: [];
 }>();
 
@@ -21,15 +20,6 @@ const { t } = useI18n();
     >
       <Sparkles class="h-3.5 w-3.5" />
       {{ t('aiActions.summarize') }}
-    </button>
-    <button
-      type="button"
-      class="flex h-8 items-center gap-1.5 rounded-md border border-border px-2 text-xs text-secondary transition-colors hover:bg-raised"
-      :title="t('aiActions.generateReply')"
-      @click="emit('reply')"
-    >
-      <Reply class="h-3.5 w-3.5" />
-      {{ t('aiActions.generateReply') }}
     </button>
     <button
       type="button"

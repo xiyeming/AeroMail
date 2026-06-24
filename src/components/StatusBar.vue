@@ -1,15 +1,50 @@
 <script setup lang="ts">
 import { computed } from 'vue';
 import { useI18n } from 'vue-i18n';
+import { RefreshCw } from 'lucide-vue-next';
+import { invoke } from '@tauri-apps/api/core';
 import { useStatusStore } from '@/stores/status';
+import { useAccountStore } from '@/stores/account';
+import { useToastStore } from '@/stores/toast';
 
 const { t, locale } = useI18n();
 const statusStore = useStatusStore();
+const accountStore = useAccountStore();
+const toastStore = useToastStore();
+
+const isSyncing = computed(() => statusStore.syncingAccounts > 0);
+
+async function handleRefresh() {
+  if (isSyncing.value) return;
+
+  if (accountStore.accounts.length === 0) {
+    await accountStore.loadAccounts();
+  }
+
+  const accountId = accountStore.accounts[0]?.id;
+  if (!accountId) {
+    toastStore.add({ type: 'error', message: t('account.noAccounts') });
+    return;
+  }
+
+  try {
+    await invoke('start_sync', { accountId });
+  } catch (e) {
+    console.error('Failed to start sync:', e);
+    toastStore.add({
+      type: 'error',
+      message: e instanceof Error ? e.message : String(e),
+    });
+  }
+}
 
 const syncText = computed(() => {
   const syncing = statusStore.syncingAccounts;
   if (syncing > 0) {
     return t('statusBar.syncing', { count: syncing, total: statusStore.syncStatus.length });
+  }
+  if (statusStore.errorAccounts > 0) {
+    return t('statusBar.syncFailed', { count: statusStore.errorAccounts });
   }
   return t('statusBar.syncComplete');
 });
@@ -57,7 +92,11 @@ const formattedLastSync = computed(() => {
       <span
         :class="[
           'h-2 w-2 rounded-full',
-          statusStore.syncingAccounts > 0 ? 'animate-pulse bg-accent' : 'bg-success',
+          statusStore.errorAccounts > 0
+            ? 'bg-danger'
+            : statusStore.syncingAccounts > 0
+              ? 'animate-pulse bg-accent'
+              : 'bg-success',
         ]"
         aria-hidden="true"
       />
@@ -73,6 +112,17 @@ const formattedLastSync = computed(() => {
     <span :class="statusStore.isOnline ? 'text-success' : 'text-warning'">
       {{ statusStore.isOnline ? t('statusBar.online') : t('statusBar.offline') }}
     </span>
-    <span class="ml-auto text-tertiary">{{ t('statusBar.version', { version: '0.1.0' }) }}</span>
+    <div class="ml-auto flex items-center gap-2">
+      <button
+        type="button"
+        class="flex h-6 w-6 items-center justify-center rounded text-secondary transition-colors hover:bg-raised hover:text-primary disabled:opacity-50"
+        :disabled="isSyncing"
+        :title="t('statusBar.refresh')"
+        @click="handleRefresh"
+      >
+        <RefreshCw class="h-3.5 w-3.5" :class="{ 'animate-spin': isSyncing }" />
+      </button>
+      <span class="text-tertiary">{{ t('statusBar.version', { version: '0.1.0' }) }}</span>
+    </div>
   </div>
 </template>

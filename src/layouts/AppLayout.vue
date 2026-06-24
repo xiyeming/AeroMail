@@ -8,15 +8,18 @@ import { useResponsive } from '@/composables/useResponsive';
 import { useWindowFrame } from '@/composables/useWindowFrame';
 import { useAiStore } from '@/stores/ai';
 import { useMailStore } from '@/stores/mail';
+import { useTodoStore } from '@/stores/todo';
 import AppSidebar from '@/components/AppSidebar.vue';
 import MailList from '@/components/MailList.vue';
 import StatusBar from '@/components/StatusBar.vue';
 import AiAssistantPanel from '@/components/AiAssistantPanel.vue';
+import TodoPanel from '@/components/TodoPanel.vue';
 import ToastContainer from '@/components/ToastContainer.vue';
 import CommandPalette from '@/components/CommandPalette.vue';
 
 const aiStore = useAiStore();
 const mailStore = useMailStore();
+const todoStore = useTodoStore();
 const { decorations } = useWindowFrame();
 const win = getCurrentWindow();
 
@@ -28,16 +31,33 @@ const showCustomTitleBar = computed(() => decorations.value === 'none');
 
 const showCloseConfirm = ref(false);
 let unlistenClose: UnlistenFn | undefined;
+let unlistenFocus: UnlistenFn | undefined;
 
 onMounted(async () => {
   unlistenClose = await listen('app://close-requested', () => {
     showCloseConfirm.value = true;
+  });
+
+  // When the window is minimized through the system title bar, it loses focus
+  // while `isMinimized()` is true. Hide it so it lands in the tray instead of
+  // staying in the taskbar.
+  unlistenFocus = await win.onFocusChanged(({ payload: focused }) => {
+    if (!focused) {
+      void win.isMinimized().then((minimized) => {
+        if (minimized) {
+          void win.hide();
+        }
+      });
+    }
   });
 });
 
 onUnmounted(() => {
   if (unlistenClose) {
     unlistenClose();
+  }
+  if (unlistenFocus) {
+    unlistenFocus();
   }
 });
 
@@ -144,6 +164,7 @@ function cancelClose() {
     </div>
 
     <AiAssistantPanel v-if="aiStore.isPanelOpen" />
+    <TodoPanel v-if="todoStore.isPanelOpen" />
     <ToastContainer />
     <CommandPalette />
 

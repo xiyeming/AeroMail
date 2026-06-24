@@ -1,5 +1,5 @@
-mod mail_parser;
-mod worker;
+pub(crate) mod mail_parser;
+pub(crate) mod worker;
 
 use std::collections::HashMap;
 use std::path::PathBuf;

@@ -107,9 +107,11 @@ impl AppState {
         )?));
 
         let drafts_dir = app_dir.join("drafts");
+        let attachments_dir_for_compose = app_dir.join("attachments");
         let compose_service = Arc::new(RwLock::new(crate::services::compose::ComposeService::new(
             Arc::clone(&db),
             drafts_dir,
+            attachments_dir_for_compose,
             Arc::clone(&account_manager),
         )));
 

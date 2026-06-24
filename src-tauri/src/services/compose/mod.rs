@@ -25,18 +25,21 @@ pub struct ComposeService {
     pub(crate) draft_service: DraftService,
     account_manager: Arc<RwLock<AccountManager>>,
     db: Arc<Database>,
+    attachments_dir: PathBuf,
 }
 
 impl ComposeService {
     pub fn new(
         db: Arc<Database>,
         drafts_dir: PathBuf,
+        attachments_dir: PathBuf,
         account_manager: Arc<RwLock<AccountManager>>,
     ) -> Self {
         Self {
             draft_service: DraftService::new(Arc::clone(&db), drafts_dir),
             account_manager,
             db,
+            attachments_dir,
         }
     }
 
@@ -109,11 +112,20 @@ impl ComposeService {
         smtp_sender::send_message(&account_config, message_bytes.clone()).await?;
 
         // Append a copy to the IMAP Sent folder so the message appears there.
-        if let Err(e) = Self::append_to_sent_folder(&account_config, &message_bytes).await {
-            warn!(
-                "Failed to append sent message to Sent folder for account {}: {}",
-                account_id, e
-            );
+        let sent_folder = Self::append_to_sent_folder(&account_config, &message_bytes)
+            .await
+            .ok();
+
+        // Always keep a local copy so the Sent virtual folder shows the mail
+        // immediately, even before the next IMAP sync.
+        if let Some(ref folder_path) = sent_folder {
+            if let Err(e) = self.save_local_sent_copy(&account_config, folder_path, &message_bytes)
+            {
+                warn!(
+                    "Failed to save local sent copy for account {}: {}",
+                    account_id, e
+                );
+            }
         }
 
         // Clean up local draft
@@ -122,12 +134,13 @@ impl ComposeService {
         Ok(())
     }
 
-    /// Appends a sent message to the account's IMAP Sent folder.
+    /// Appends a sent message to the account's IMAP Sent folder and returns the
+    /// folder path used.
     #[instrument(skip_all, fields(account_id = %config.id), err(Debug))]
     async fn append_to_sent_folder(
         config: &AccountConfig,
         message_bytes: &[u8],
-    ) -> Result<(), AeroError> {
+    ) -> Result<String, AeroError> {
         debug!("connecting to IMAP to append sent message");
         let mut session = imap_client::connect_imap(config).await?;
         let sent_folder = imap_client::find_sent_folder(&mut session).await?;
@@ -135,6 +148,56 @@ impl ComposeService {
             .await?;
         let _ = session.logout().await;
         debug!("sent message appended to folder");
+        Ok(sent_folder)
+    }
+
+    /// Saves a copy of a sent message into the local database under the Sent folder.
+    #[instrument(skip_all, fields(account_id = %config.id), err(Debug))]
+    fn save_local_sent_copy(
+        &self,
+        config: &AccountConfig,
+        folder_path: &str,
+        message_bytes: &[u8],
+    ) -> Result<(), AeroError> {
+        let parsed = crate::services::sync::mail_parser::parse_mail(message_bytes)?;
+        let folder_id = self
+            .db
+            .upsert_folder(&config.id, folder_path, folder_path, None)?;
+
+        let now = chrono::Utc::now().timestamp();
+        let mail_id = parsed
+            .message_id
+            .clone()
+            .unwrap_or_else(|| uuid::Uuid::new_v4().to_string());
+
+        let mail = crate::models::mail::MailDetail {
+            id: mail_id.clone(),
+            account_id: config.id.clone(),
+            folder_id,
+            uid: 0,
+            subject: parsed.subject,
+            from_name: parsed.from_name,
+            from_address: parsed.from_address,
+            to_addresses: parsed.to_addresses,
+            cc_addresses: parsed.cc_addresses,
+            date: parsed.date.or(Some(now)),
+            body_html: parsed.body_html,
+            body_text: parsed.body_text,
+            is_read: true,
+            is_starred: false,
+            is_archived: false,
+            is_spam: false,
+            flags: Some(serde_json::to_string(&vec![r"\Seen"]).unwrap_or_default()),
+            message_id: parsed.message_id,
+        };
+
+        self.db.upsert_mail(&mail)?;
+        crate::services::sync::worker::SyncWorker::save_attachments(
+            &mail_id,
+            &self.attachments_dir,
+            &self.db,
+            &parsed.attachments,
+        )?;
         Ok(())
     }
 

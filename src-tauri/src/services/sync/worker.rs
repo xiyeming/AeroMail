@@ -324,10 +324,17 @@ impl SyncWorker {
             debug!(uid, bytes = raw_message.len(), "fetched mail from server");
             let parsed = mail_parser::parse_mail(raw_message)?;
 
-            let mail_id = self
-                .db
-                .get_mail_id_by_uid(folder_id, uid)?
-                .unwrap_or_else(|| uuid::Uuid::new_v4().to_string());
+            let mail_id =
+                if let Some(message_id) = parsed.message_id.as_deref().filter(|s| !s.is_empty()) {
+                    self.db
+                        .get_mail_id_by_message_id(folder_id, message_id)?
+                        .or_else(|| self.db.get_mail_id_by_uid(folder_id, uid).ok().flatten())
+                        .unwrap_or_else(|| uuid::Uuid::new_v4().to_string())
+                } else {
+                    self.db
+                        .get_mail_id_by_uid(folder_id, uid)?
+                        .unwrap_or_else(|| uuid::Uuid::new_v4().to_string())
+                };
 
             let is_spam = is_spam_folder(folder_name);
             let is_seen = imap_client::is_seen_flag(fetch.flags());

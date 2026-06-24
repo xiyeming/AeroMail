@@ -1237,11 +1237,12 @@ impl Database {
              to_addresses, cc_addresses, date, body_html, body_text, is_read, is_starred, is_archived, is_spam, flags, message_id, created_at)
              VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16, ?17, ?18, ?19)
              ON CONFLICT(id) DO UPDATE SET
+               account_id=excluded.account_id, folder_id=excluded.folder_id, uid=excluded.uid,
                subject=excluded.subject, from_name=excluded.from_name, from_address=excluded.from_address,
                to_addresses=excluded.to_addresses, cc_addresses=excluded.cc_addresses,
                date=excluded.date, body_html=excluded.body_html, body_text=excluded.body_text,
-               is_read=excluded.is_read, is_starred=excluded.is_starred, flags=excluded.flags,
-               message_id=excluded.message_id",
+               is_read=excluded.is_read, is_starred=excluded.is_starred, is_archived=excluded.is_archived, is_spam=excluded.is_spam,
+               flags=excluded.flags, message_id=excluded.message_id",
             params![
                 &mail.id,
                 &mail.account_id,
@@ -1727,6 +1728,27 @@ impl Database {
         };
         let count: i64 = conn.query_row(&sql, [], |row| row.get(0))?;
         Ok(count as u32)
+    }
+
+    /// Gets a mail ID by its folder and message ID.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the database query fails.
+    pub fn get_mail_id_by_message_id(
+        &self,
+        folder_id: &str,
+        message_id: &str,
+    ) -> Result<Option<String>, AeroError> {
+        let conn = self.connection()?;
+        let mut stmt =
+            conn.prepare("SELECT id FROM mails WHERE folder_id = ?1 AND message_id = ?2 LIMIT 1")?;
+        let mut rows = stmt.query(rusqlite::params![folder_id, message_id])?;
+        if let Some(row) = rows.next()? {
+            Ok(Some(row.get(0)?))
+        } else {
+            Ok(None)
+        }
     }
 
     /// Gets the maximum UID in a folder.

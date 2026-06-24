@@ -100,7 +100,7 @@ function updateSelectionMenu(e?: MouseEvent) {
 
 function handleIframeSelection(payload: { text: string; clientX: number; clientY: number }) {
   if (!payload.text) return;
-  const iframe = sandboxedHtmlRef.value?.$refs.iframeRef as HTMLIFrameElement | undefined;
+  const iframe = sandboxedHtmlRef.value?.iframeRef as HTMLIFrameElement | undefined;
   const rect = iframe?.getBoundingClientRect();
   if (!rect) return;
   selectedText.value = payload.text;
@@ -211,20 +211,6 @@ function formatSize(bytes: number): string {
   if (bytes < 1024) return `${bytes} B`;
   if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
   return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
-}
-
-async function autoSummarize() {
-  if (!currentMailId.value) return;
-  const providerId = aiStore.resolveProviderId();
-  if (!providerId) return;
-  isSummarizing.value = true;
-  try {
-    summaryText.value = await summarizeMail(currentMailId.value, providerId);
-  } catch (e) {
-    console.error('Failed to auto-summarize mail:', e);
-  } finally {
-    isSummarizing.value = false;
-  }
 }
 
 async function handleQuickAction(action: 'summarize' | 'extractTodos') {
@@ -483,11 +469,7 @@ function handleRemoteDomains(domains: string[]) {
 
 onMounted(() => {
   void loadTrustedDomains();
-  void aiStore.loadDefaultProvider().then(() => {
-    if (currentMailId.value) {
-      void autoSummarize();
-    }
-  });
+  void aiStore.loadDefaultProvider();
   void loadTranslationProviders();
   document.addEventListener('mouseup', updateSelectionMenu);
   document.addEventListener('mousedown', hideSelectionMenu);
@@ -555,7 +537,6 @@ watch(currentMailId, (newMailId) => {
   summaryText.value = '';
   if (newMailId) {
     void loadAttachments(newMailId);
-    void autoSummarize();
   }
 });
 

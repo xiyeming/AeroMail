@@ -105,6 +105,7 @@ impl SyncService {
             progress_tx,
             attachments_dir: self.attachments_dir.clone(),
             wake_notify: Arc::clone(&wake_notify),
+            app_handle,
         };
 
         let handle = tokio::spawn(async move {

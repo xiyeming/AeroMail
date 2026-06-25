@@ -455,7 +455,8 @@ async function commitRename(sessionId: string) {
                     {{ mail.subject || $t('mail.noSubject') }}
                   </div>
                   <div class="truncate text-[11px] text-secondary">
-                    {{ $t('mail.from') }}: {{ mail.fromName || mail.fromAddress || $t('mail.unknownSender') }}
+                    {{ $t('mail.from') }}:
+                    {{ mail.fromName || mail.fromAddress || $t('mail.unknownSender') }}
                   </div>
                 </button>
               </template>

@@ -246,3 +246,45 @@ select option {
     transition-duration: 0.01ms !important;
   }
 }
+
+/* Custom thin scrollbars that stay behind overlays */
+::-webkit-scrollbar,
+*::-webkit-scrollbar {
+  width: 6px !important;
+  height: 6px !important;
+  background: transparent !important;
+}
+
+::-webkit-scrollbar-track,
+*::-webkit-scrollbar-track {
+  background: transparent !important;
+}
+
+::-webkit-scrollbar-thumb,
+*::-webkit-scrollbar-thumb {
+  background-color: var(--border-strong) !important;
+  border-radius: 9999px !important;
+}
+
+::-webkit-scrollbar-thumb:hover,
+*::-webkit-scrollbar-thumb:hover {
+  background-color: var(--text-tertiary) !important;
+}
+
+::-webkit-scrollbar-corner,
+*::-webkit-scrollbar-corner {
+  background: transparent !important;
+}
+
+* {
+  scrollbar-width: thin;
+  scrollbar-color: var(--border-strong) transparent;
+}
+
+/* Reserve scrollbar gutter so overlays don't get drawn under it */
+.overflow-y-auto,
+.overflow-x-auto,
+.overflow-auto,
+.thin-scrollbar {
+  scrollbar-gutter: stable;
+}

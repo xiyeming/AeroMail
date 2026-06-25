@@ -10,6 +10,7 @@ const props = defineProps<{
 const emit = defineEmits<{
   'security-violation': [{ domain: string; blockedUri: string }];
   'remote-domains': [domains: string[]];
+  'link-click': [url: string];
   load: [];
   selection: [{ text: string; clientX: number; clientY: number }];
 }>();
@@ -63,25 +64,11 @@ const srcdoc = computed(() => {
   <meta charset="utf-8">
   <meta http-equiv="Content-Security-Policy" content="${csp}">
   <style>
-    :root {
-      color-scheme: light;
-    }
-    body {
-      margin: 0;
-      padding: 0;
-    }
-    img {
-      max-width: 100%;
-      height: auto;
-    }
-    a {
-      pointer-events: none;
-    }
-    /* Center fixed-width emails inside the reading pane without altering their own layout. */
-    .email-wrapper {
-      display: table;
-      margin: 0 auto;
-    }
+    :root { color-scheme: light; }
+    body { margin: 0; padding: 0; }
+    img { max-width: 100%; height: auto; }
+    /* 居中邮件内容 */
+    .email-wrapper { margin: 0 auto; }
   </style>
 </head>
 <body><div class="email-wrapper">${props.html}</div></body>
@@ -108,6 +95,7 @@ function disconnectObserver() {
 function detachViolationListener() {
   clearAttachInterval();
   detachSelectionListener();
+  detachLinkClickListener();
   if (!iframeRef.value?.contentDocument) return;
   const doc = iframeRef.value.contentDocument;
   doc.removeEventListener('securitypolicyviolation', handleViolation);
@@ -137,8 +125,13 @@ function attachSelectionListener(): boolean {
     if (!text) return;
     emit('selection', { text, clientX: e.clientX, clientY: e.clientY });
   };
-  win.addEventListener('mouseup', selectionMouseupHandler);
-  return true;
+  try {
+    win.addEventListener('mouseup', selectionMouseupHandler);
+    return true;
+  } catch {
+    selectionMouseupHandler = null;
+    return false;
+  }
 }
 
 function ensureSelectionListener() {
@@ -284,6 +277,59 @@ function extractRemoteDomainsFromDom(): string[] {
   return Array.from(domains).sort();
 }
 
+let linkClickHandler: ((this: Document, ev: MouseEvent) => void) | null = null;
+
+function detachLinkClickListener() {
+  try {
+    const doc = iframeRef.value?.contentDocument;
+    if (doc && linkClickHandler) {
+      doc.removeEventListener('click', linkClickHandler);
+    }
+  } catch {
+    // iframe 可能已经导航离开；忽略清理错误
+  }
+  linkClickHandler = null;
+}
+
+function attachLinkClickListener(): boolean {
+  const doc = iframeRef.value?.contentDocument;
+  if (!doc) return false;
+  detachLinkClickListener();
+  linkClickHandler = (e: MouseEvent) => {
+    // 仅在按住 Ctrl (Windows/Linux) 或 Cmd (macOS) 时打开链接
+    if (!e.ctrlKey && !e.metaKey) return;
+    const target = e.target as HTMLElement;
+    // 向上查找最近的 <a> 标签（即使 a 有 pointer-events:none，子元素仍可点击）
+    const anchor = target.closest('a');
+    if (!anchor) return;
+    const href = anchor.getAttribute('href');
+    if (!href) return;
+    // 处理 http/https 链接和 mailto 链接
+    if (/^https?:\/\//i.test(href) || /^mailto:/i.test(href)) {
+      e.preventDefault();
+      e.stopPropagation();
+      emit('link-click', href);
+    }
+  };
+  try {
+    doc.addEventListener('click', linkClickHandler);
+    return true;
+  } catch {
+    linkClickHandler = null;
+    return false;
+  }
+}
+
+function ensureLinkClickListener() {
+  if (attachLinkClickListener()) return;
+  const interval = setInterval(() => {
+    if (attachLinkClickListener() || !iframeRef.value) {
+      clearInterval(interval);
+    }
+  }, 100);
+  setTimeout(() => clearInterval(interval), 3000);
+}
+
 function emitRemoteDomains() {
   const domains = extractRemoteDomainsFromDom();
   console.log('[SandboxedHtml] remote domains from DOM:', domains);
@@ -297,6 +343,7 @@ function adjustHeight() {
   disconnectObserver();
   ensureViolationListener();
   ensureSelectionListener();
+  ensureLinkClickListener();
   emitRemoteDomains();
   if (!iframeRef.value?.contentDocument?.body) return;
 
@@ -322,6 +369,7 @@ watch(srcdoc, () => {
   // srcdoc changes trigger a re-load; height will be re-applied via @load.
   disconnectObserver();
   detachViolationListener();
+  ensureSelectionListener();
 });
 
 watchEffect(() => {
@@ -338,6 +386,7 @@ onMounted(() => {
 onUnmounted(() => {
   disconnectObserver();
   detachViolationListener();
+  detachLinkClickListener();
 });
 
 defineExpose({ iframeRef });

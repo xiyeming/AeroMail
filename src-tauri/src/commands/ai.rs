@@ -495,6 +495,47 @@ pub async fn extract_todos(
     parse_todo_json(&result.content).map_err(|e| e.to_payload())
 }
 
+/// Assists with email composition using the specified AI provider.
+///
+/// # Errors
+///
+/// Returns an error if the provider is not found or the AI request fails.
+#[tauri::command]
+#[instrument(skip(state), fields(action = %action, provider_id = %provider_id), err(Debug))]
+pub async fn ai_compose_assist(
+    action: String,
+    content: String,
+    provider_id: String,
+    state: State<'_, AppState>,
+) -> Result<String, ErrorPayload> {
+    let prompt = match action.as_str() {
+        "write" => {
+            "You are a helpful email writing assistant. Write a professional email based on the following draft or notes. Use the same language as the input. Output only the email body, no extra commentary."
+        }
+        "polish" => {
+            "You are a helpful writing assistant. Polish and improve the following text while preserving its meaning. Use the same language as the input. Output only the improved text, no extra commentary."
+        }
+        "optimize-en" => {
+            "You are a helpful writing assistant. Optimize the following text in English to make it more natural, professional, and fluent. Output only the optimized English text, no extra commentary."
+        }
+        _ => {
+            "You are a helpful writing assistant. Improve the following text. Output only the improved text, no extra commentary."
+        }
+    };
+
+    let ai = state.ai_service.read().await;
+    let messages = vec![
+        ChatMessage::new("system", prompt),
+        ChatMessage::new("user", content),
+    ];
+    let result = ai
+        .complete(&provider_id, &messages, None)
+        .await
+        .map_err(|e| e.to_payload())?;
+    drop(ai);
+    Ok(result.content.trim().to_string())
+}
+
 fn parse_todo_json(content: &str) -> Result<Vec<String>, AeroError> {
     let trimmed = content.trim();
     let inner = trimmed

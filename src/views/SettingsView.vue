@@ -1035,8 +1035,12 @@ async function removeSkill(id: string) {
         >
           <div class="flex items-center gap-2">
             <span class="text-sm text-primary">{{ server.name }}</span>
-            <span class="rounded bg-raised px-2 py-0.5 text-xs text-secondary">{{ server.transport }}</span>
-            <span v-if="!server.isEnabled" class="text-xs text-tertiary">{{ $t('settings.disabled') }}</span>
+            <span class="rounded bg-raised px-2 py-0.5 text-xs text-secondary">{{
+              server.transport
+            }}</span>
+            <span v-if="!server.isEnabled" class="text-xs text-tertiary">{{
+              $t('settings.disabled')
+            }}</span>
           </div>
           <button
             type="button"
@@ -1103,7 +1107,9 @@ async function removeSkill(id: string) {
           />
         </div>
         <div class="flex items-center">
-          <BaseCheckbox id="mcp-enabled" v-model="mcpEnabled">{{ $t('settings.enabled') }}</BaseCheckbox>
+          <BaseCheckbox id="mcp-enabled" v-model="mcpEnabled">{{
+            $t('settings.enabled')
+          }}</BaseCheckbox>
         </div>
         <button
           type="button"
@@ -1151,7 +1157,9 @@ async function removeSkill(id: string) {
         >
           <div class="flex items-center gap-2">
             <span class="text-sm text-primary">{{ skill.name }}</span>
-            <span v-if="!skill.isEnabled" class="text-xs text-tertiary">{{ $t('settings.disabled') }}</span>
+            <span v-if="!skill.isEnabled" class="text-xs text-tertiary">{{
+              $t('settings.disabled')
+            }}</span>
           </div>
           <button
             type="button"
@@ -1174,7 +1182,9 @@ async function removeSkill(id: string) {
           />
         </div>
         <div>
-          <label class="mb-1 block text-sm text-secondary">{{ $t('settings.skillDescription') }}</label>
+          <label class="mb-1 block text-sm text-secondary">{{
+            $t('settings.skillDescription')
+          }}</label>
           <input
             v-model="skillDescription"
             type="text"
@@ -1210,7 +1220,9 @@ async function removeSkill(id: string) {
           />
         </div>
         <div>
-          <label class="mb-1 block text-sm text-secondary">{{ $t('settings.skillWorkingDir') }}</label>
+          <label class="mb-1 block text-sm text-secondary">{{
+            $t('settings.skillWorkingDir')
+          }}</label>
           <input
             v-model="skillWorkingDir"
             type="text"
@@ -1229,7 +1241,9 @@ async function removeSkill(id: string) {
           />
         </div>
         <div class="flex items-center">
-          <BaseCheckbox id="skill-enabled" v-model="skillEnabled">{{ $t('settings.enabled') }}</BaseCheckbox>
+          <BaseCheckbox id="skill-enabled" v-model="skillEnabled">{{
+            $t('settings.enabled')
+          }}</BaseCheckbox>
         </div>
         <button
           type="button"

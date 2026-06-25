@@ -6,10 +6,7 @@ const props = defineProps<{
 }>();
 
 function escapeHtml(text: string): string {
-  return text
-    .replace(/&/g, '&amp;')
-    .replace(/</g, '&lt;')
-    .replace(/>/g, '&gt;');
+  return text.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
 }
 
 function sanitizeHref(url: string): string {
@@ -25,7 +22,8 @@ const rendered = computed(() => {
   // Fenced code blocks
   html = html.replace(
     /```([\s\S]*?)```/g,
-    (_, code: string) => `<pre class="rounded-md bg-base px-2.5 py-2 text-xs overflow-x-auto"><code>${code.trim()}</code></pre>`
+    (_, code: string) =>
+      `<pre class="rounded-md bg-base px-2.5 py-2 text-xs overflow-x-auto"><code>${code.trim()}</code></pre>`
   );
 
   // Inline code
@@ -43,7 +41,10 @@ const rendered = computed(() => {
   });
 
   // Blockquotes
-  html = html.replace(/^&gt;\s*(.+)$/gm, '<blockquote class="border-l-2 border-border pl-2 text-secondary">$1</blockquote>');
+  html = html.replace(
+    /^&gt;\s*(.+)$/gm,
+    '<blockquote class="border-l-2 border-border pl-2 text-secondary">$1</blockquote>'
+  );
 
   // Process lists and paragraphs line by line
   const lines = html.split('\n');
@@ -88,7 +89,10 @@ const rendered = computed(() => {
   // Collapse multiple blank paragraph lines into a single break
   const joined = out
     .join('\n')
-    .replace(/<p class="min-h-\[1em\]"><\/p>(\n<p class="min-h-\[1em\]"><\/p>)+/g, '<p class="min-h-[1em]"></p>');
+    .replace(
+      /<p class="min-h-\[1em\]"><\/p>(\n<p class="min-h-\[1em\]"><\/p>)+/g,
+      '<p class="min-h-[1em]"></p>'
+    );
 
   return joined;
 });

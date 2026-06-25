@@ -2,13 +2,25 @@
 import { computed, nextTick, onMounted, onUnmounted, ref, watch } from 'vue';
 import { useI18n } from 'vue-i18n';
 import { useRoute, useRouter } from 'vue-router';
-import { Star, Archive, Paperclip, Check, MailOpen, Mail, Trash2, X, CheckSquare } from 'lucide-vue-next';
+import {
+  Star,
+  Archive,
+  Paperclip,
+  Check,
+  MailOpen,
+  Mail,
+  Trash2,
+  X,
+  CheckSquare,
+  Loader2,
+} from 'lucide-vue-next';
 import { useMailStore } from '@/stores/mail';
 import { useAccountStore } from '@/stores/account';
 import { useToastStore } from '@/stores/toast';
 import { useStatusStore } from '@/stores/status';
 import ContextMenu from '@/components/ContextMenu.vue';
 import MoveMailDialog from '@/components/MoveMailDialog.vue';
+import CustomScrollbar from '@/components/CustomScrollbar.vue';
 import type { MailHeader } from '@/types/mail';
 
 const { t } = useI18n();
@@ -55,9 +67,17 @@ const contextMenu = ref<{
 const showMoveDialog = ref(false);
 const moveTargetMailId = ref<string | null>(null);
 const searchQuery = ref('');
-const listContainerRef = ref<HTMLElement | null>(null);
+const scrollbarRef = ref<InstanceType<typeof CustomScrollbar> | null>(null);
 const sentinelRef = ref<HTMLElement | null>(null);
 let scrollObserver: IntersectionObserver | null = null;
+
+function getScrollElement(): HTMLElement | null {
+  return scrollbarRef.value?.getScrollElement() ?? null;
+}
+
+function scrollToTop() {
+  scrollbarRef.value?.scrollToTop();
+}
 
 onMounted(async () => {
   if (accountStore.accounts.length === 0) {
@@ -73,7 +93,7 @@ watch(
   async (folderId) => {
     if (!folderId || route.path === '/') return;
     mailStore.closeReader();
-    listContainerRef.value?.scrollTo(0, 0);
+    scrollToTop();
     await mailStore.loadMails(folderId);
     await checkLoadMore();
   },
@@ -85,7 +105,7 @@ watch(
   async ([path]) => {
     if (path === '/') {
       mailStore.closeReader();
-      listContainerRef.value?.scrollTo(0, 0);
+      scrollToTop();
       await mailStore.loadInboxMails(accountStore.selectedAccountIds);
       await checkLoadMore();
     }
@@ -187,7 +207,7 @@ function loadMoreMails() {
 
 async function checkLoadMore() {
   await nextTick();
-  const el = listContainerRef.value;
+  const el = getScrollElement();
   if (!el) return;
   if (
     el.scrollHeight <= el.clientHeight + 50 &&
@@ -223,7 +243,7 @@ function setupInfiniteScroll() {
       }
     },
     {
-      root: listContainerRef.value,
+      root: getScrollElement(),
       rootMargin: '0px 0px 200px 0px',
     }
   );
@@ -249,10 +269,32 @@ watch(
 
 function handleContextMenu(e: MouseEvent, mail: MailHeader) {
   e.preventDefault();
+
+  const offset = 2;
+  let x = e.clientX + offset;
+  let y = e.clientY + offset;
+
+  const container = getScrollElement();
+  if (container) {
+    const rect = container.getBoundingClientRect();
+    const menuHeight = 250;
+    const padding = 12;
+    const safeBottom = window.innerHeight - padding;
+
+    // Keep the menu within the scroll container's horizontal bounds when possible;
+    // the ContextMenu component will clamp against the viewport right edge.
+    x = Math.max(rect.left + padding, x);
+
+    // Anchor at cursor: open above when the menu would go off screen.
+    if (y + menuHeight > safeBottom) {
+      y = Math.max(padding, y - menuHeight);
+    }
+  }
+
   contextMenu.value = {
     show: true,
-    x: e.clientX,
-    y: e.clientY,
+    x,
+    y,
     mail,
   };
 }
@@ -419,119 +461,136 @@ async function bulkMarkRead(isRead: boolean) {
     </div>
 
     <!-- Mail list -->
-    <div v-else ref="listContainerRef" class="flex-1 overflow-y-auto" role="list">
-      <div
-        v-for="mail in displayedMails"
-        :key="mail.id"
-        role="button"
-        tabindex="0"
-        :aria-selected="mailStore.selectedMailId === mail.id"
-        class="group relative cursor-pointer border-b border-border px-3 py-2.5 transition-colors hover:bg-raised focus:outline-none focus:ring-2 focus:ring-inset focus:ring-accent"
-        :class="[
-          !mail.isRead ? 'bg-accent/15' : '',
-          isSelected(mail.id) ? 'bg-accent-subtle' : '',
-          mailStore.selectedMailId === mail.id ? 'border-l-4 border-l-accent' : '',
-          !mail.isRead && mailStore.selectedMailId !== mail.id ? 'border-l-4 border-l-accent' : '',
-        ]"
-        @click="handleRowClick($event, mail)"
-        @keydown="handleRowKeyDown($event, mail)"
-        @contextmenu="handleContextMenu($event, mail)"
-      >
-        <div class="flex items-center gap-3">
-          <label
-            class="relative flex h-4 w-4 shrink-0 cursor-pointer items-center justify-center rounded border transition-colors hover:border-accent peer-focus-within:ring-2 peer-focus-within:ring-accent"
-            :class="isSelected(mail.id) ? 'border-accent bg-accent text-white' : 'border-border bg-base text-transparent'"
-          >
-            <input
-              type="checkbox"
-              :checked="isSelected(mail.id)"
-              class="peer sr-only"
-              :aria-label="t('mail.select')"
-              @click.stop
-              @change="handleCheckboxChange(mail.id, $event)"
-            />
-            <Check class="h-3 w-3" />
-          </label>
-          <div class="flex-1 min-w-0">
-            <div class="flex items-center justify-between gap-2">
-              <div class="flex items-center gap-2 min-w-0">
-                <span
-                  class="truncate text-sm"
-                  :class="!mail.isRead ? 'font-bold text-primary' : 'font-medium text-secondary'"
-                >
-                  {{ mail.fromName || mail.fromAddress || t('mail.unknownSender') }}
-                </span>
-                <span
-                  v-if="accountStore.accounts.length > 1"
-                  class="shrink-0 rounded bg-elevated px-1.5 py-0.5 text-[10px] text-tertiary"
-                >
-                  {{ getAccountName(mail.accountId) }}
-                </span>
-              </div>
-              <span class="shrink-0 text-xs text-tertiary">{{ formatDate(mail.date) }}</span>
-            </div>
-            <div
-              class="mt-0.5 truncate text-sm"
-              :class="!mail.isRead ? 'font-bold text-primary' : 'text-secondary'"
+    <CustomScrollbar v-else ref="scrollbarRef" class="flex-1">
+      <div role="list">
+        <div
+          v-for="mail in displayedMails"
+          :key="mail.id"
+          role="button"
+          tabindex="0"
+          :aria-selected="mailStore.selectedMailId === mail.id"
+          class="group relative cursor-pointer border-b border-border px-3 py-2.5 transition-colors hover:bg-raised focus:outline-none focus:ring-2 focus:ring-inset focus:ring-accent"
+          :class="[
+            !mail.isRead ? 'bg-accent/15' : '',
+            isSelected(mail.id) ? 'bg-accent-subtle' : '',
+            mailStore.selectedMailId === mail.id ? 'border-l-4 border-l-accent' : '',
+            !mail.isRead && mailStore.selectedMailId !== mail.id
+              ? 'border-l-4 border-l-accent'
+              : '',
+            mailStore.deletingMailIds.has(mail.id) ? 'pointer-events-none opacity-60' : '',
+          ]"
+          @click="handleRowClick($event, mail)"
+          @keydown="handleRowKeyDown($event, mail)"
+          @contextmenu="handleContextMenu($event, mail)"
+        >
+          <div class="flex items-center gap-3">
+            <label
+              class="relative flex h-4 w-4 shrink-0 cursor-pointer items-center justify-center rounded border transition-colors hover:border-accent peer-focus-within:ring-2 peer-focus-within:ring-accent"
+              :class="
+                isSelected(mail.id)
+                  ? 'border-accent bg-accent text-white'
+                  : 'border-border bg-base text-transparent'
+              "
             >
-              {{ mail.subject || t('mail.noSubject') }}
-            </div>
-            <div class="mt-0.5 flex items-center gap-2">
-              <span class="truncate text-xs text-tertiary">
-                {{ mail.fromAddress }}
-              </span>
-              <Paperclip
-                v-if="mail.hasAttachments"
-                class="h-3.5 w-3.5 shrink-0 text-tertiary"
-                :aria-label="t('mail.hasAttachments')"
+              <input
+                type="checkbox"
+                :checked="isSelected(mail.id)"
+                class="peer sr-only"
+                :aria-label="t('mail.select')"
+                @click.stop
+                @change="handleCheckboxChange(mail.id, $event)"
               />
+              <Check class="h-3 w-3" />
+            </label>
+            <div class="flex-1 min-w-0">
+              <div class="flex items-center justify-between gap-2">
+                <div class="flex items-center gap-2 min-w-0">
+                  <span
+                    class="truncate text-sm"
+                    :class="!mail.isRead ? 'font-bold text-primary' : 'font-medium text-secondary'"
+                  >
+                    {{ mail.fromName || mail.fromAddress || t('mail.unknownSender') }}
+                  </span>
+                  <span
+                    v-if="accountStore.accounts.length > 1"
+                    class="shrink-0 rounded bg-elevated px-1.5 py-0.5 text-[10px] text-tertiary"
+                  >
+                    {{ getAccountName(mail.accountId) }}
+                  </span>
+                </div>
+                <span class="shrink-0 text-xs text-tertiary">{{ formatDate(mail.date) }}</span>
+              </div>
+              <div
+                class="mt-0.5 truncate text-sm"
+                :class="!mail.isRead ? 'font-bold text-primary' : 'text-secondary'"
+              >
+                {{ mail.subject || t('mail.noSubject') }}
+              </div>
+              <div class="mt-0.5 flex items-center gap-2">
+                <span class="truncate text-xs text-tertiary">
+                  {{ mail.fromAddress }}
+                </span>
+                <Paperclip
+                  v-if="mail.hasAttachments"
+                  class="h-3.5 w-3.5 shrink-0 text-tertiary"
+                  :aria-label="t('mail.hasAttachments')"
+                />
+              </div>
             </div>
-          </div>
 
-          <!-- Hover quick actions -->
-          <div class="hidden shrink-0 items-center gap-1 group-hover:flex">
-            <button
-              type="button"
-              class="rounded p-1 text-secondary transition-colors hover:bg-raised hover:text-primary"
-              :title="mail.isStarred ? t('mail.unstar') : t('mail.star')"
-              @click.stop="toggleStar(mail.id)"
-            >
-              <Star class="h-4 w-4" :class="mail.isStarred ? 'fill-warning text-warning' : ''" />
-            </button>
-            <button
-              type="button"
-              class="rounded p-1 text-secondary transition-colors hover:bg-raised hover:text-primary"
-              :title="t('mail.archive')"
-              @click.stop="archiveMail(mail.id)"
-            >
-              <Archive class="h-4 w-4" />
-            </button>
+            <!-- Hover quick actions -->
+            <div class="hidden shrink-0 items-center gap-1 group-hover:flex">
+              <template v-if="mailStore.deletingMailIds.has(mail.id)">
+                <Loader2 class="h-4 w-4 animate-spin text-accent" :title="t('mail.deleting')" />
+              </template>
+              <template v-else>
+                <button
+                  type="button"
+                  class="rounded p-1 text-secondary transition-colors hover:bg-raised hover:text-primary"
+                  :title="mail.isStarred ? t('mail.unstar') : t('mail.star')"
+                  @click.stop="toggleStar(mail.id)"
+                >
+                  <Star
+                    class="h-4 w-4"
+                    :class="mail.isStarred ? 'fill-warning text-warning' : ''"
+                  />
+                </button>
+                <button
+                  type="button"
+                  class="rounded p-1 text-secondary transition-colors hover:bg-raised hover:text-primary"
+                  :title="t('mail.archive')"
+                  @click.stop="archiveMail(mail.id)"
+                >
+                  <Archive class="h-4 w-4" />
+                </button>
+              </template>
+            </div>
           </div>
         </div>
-      </div>
 
-      <!-- Infinite-scroll sentinel -->
-      <div ref="sentinelRef" class="h-2 w-full" aria-hidden="true" />
+        <!-- Infinite-scroll sentinel -->
+        <div ref="sentinelRef" class="h-2 w-full" aria-hidden="true" />
 
-      <!-- Load more indicator -->
-      <div
-        v-if="mailStore.loadingMore"
-        class="flex items-center justify-center gap-2 py-4 text-secondary"
-      >
+        <!-- Load more indicator -->
         <div
-          class="h-4 w-4 animate-spin rounded-full border-2 border-accent border-t-transparent"
-        />
-        <span class="text-xs">{{ t('common.loading') }}</span>
-      </div>
+          v-if="mailStore.loadingMore"
+          class="flex items-center justify-center gap-2 py-4 text-secondary"
+        >
+          <div
+            class="h-4 w-4 animate-spin rounded-full border-2 border-accent border-t-transparent"
+          />
+          <span class="text-xs">{{ t('common.loading') }}</span>
+        </div>
 
-      <!-- End of list -->
-      <div
-        v-else-if="!mailStore.hasMore && displayedMails.length > 0"
-        class="py-4 text-center text-xs text-tertiary"
-      >
-        {{ t('mail.noMoreEmails') }}
+        <!-- End of list -->
+        <div
+          v-else-if="!mailStore.hasMore && displayedMails.length > 0"
+          class="py-4 text-center text-xs text-tertiary"
+        >
+          {{ t('mail.noMoreEmails') }}
+        </div>
       </div>
-    </div>
+    </CustomScrollbar>
 
     <!-- Bulk actions -->
     <div

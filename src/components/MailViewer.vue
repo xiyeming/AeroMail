@@ -40,7 +40,11 @@ import type { TranslationProviderSummary } from '@/types/translation';
 const { t } = useI18n();
 const router = useRouter();
 const { summarizeMail, extractTodos } = useAiChat();
-const { translateText, listProviders: listTranslationProviders, getDefaultTargetLang } = useTranslation();
+const {
+  translateText,
+  listProviders: listTranslationProviders,
+  getDefaultTargetLang,
+} = useTranslation();
 const aiStore = useAiStore();
 const mailStore = useMailStore();
 const toast = useToastStore();
@@ -83,6 +87,21 @@ function getSelectedText(): string {
   return window.getSelection()?.toString()?.trim() ?? '';
 }
 
+function clampMenuPosition(
+  x: number,
+  y: number,
+  menuWidth = 120,
+  menuHeight = 36
+): { x: number; y: number } {
+  const padding = 8;
+  const maxX = window.innerWidth - menuWidth - padding;
+  const maxY = window.innerHeight - menuHeight - padding;
+  return {
+    x: Math.max(padding, Math.min(x, maxX)),
+    y: Math.max(padding, Math.min(y, maxY)),
+  };
+}
+
 function updateSelectionMenu(e?: MouseEvent) {
   const text = getSelectedText();
   if (!text) {
@@ -91,27 +110,44 @@ function updateSelectionMenu(e?: MouseEvent) {
     return;
   }
   selectedText.value = text;
-  const event = e ?? window.event as MouseEvent | undefined;
+  const event = e ?? (window.event as MouseEvent | undefined);
   if (event) {
-    selectionMenuX.value = event.clientX;
-    selectionMenuY.value = event.clientY - 8;
+    const pos = clampMenuPosition(event.clientX, event.clientY - 8);
+    selectionMenuX.value = pos.x;
+    selectionMenuY.value = pos.y;
   }
   showSelectionMenu.value = true;
 }
 
 function handleIframeSelection(payload: { text: string; clientX: number; clientY: number }) {
   if (!payload.text) return;
-  const iframe = sandboxedHtmlRef.value?.iframeRef as HTMLIFrameElement | undefined;
-  const rect = iframe?.getBoundingClientRect();
-  if (!rect) return;
+  const iframe = sandboxedHtmlRef.value?.iframeRef;
+  if (!iframe) return;
+  const rect = iframe.getBoundingClientRect();
   selectedText.value = payload.text;
-  selectionMenuX.value = rect.left + payload.clientX;
-  selectionMenuY.value = rect.top + payload.clientY - 8;
+  const pos = clampMenuPosition(rect.left + payload.clientX, rect.top + payload.clientY - 8);
+  selectionMenuX.value = pos.x;
+  selectionMenuY.value = pos.y;
   showSelectionMenu.value = true;
 }
 
+function handleLinkClick(url: string) {
+  invoke('open_url', { url }).catch((e) => {
+    console.error('Failed to open link:', e);
+  });
+}
+
 async function translateSelectedText() {
-  if (!selectedText.value || !selectedTranslationProviderId.value) return;
+  if (!selectedText.value) return;
+  if (!selectedTranslationProviderId.value) {
+    toast.add({
+      type: 'warning',
+      message: t('translation.noProviders'),
+      duration: 4000,
+    });
+    showSelectionMenu.value = false;
+    return;
+  }
   showSelectionMenu.value = false;
   try {
     const translated = await translateText(
@@ -246,7 +282,7 @@ async function handleQuickAction(action: 'summarize' | 'extractTodos') {
     isExtractingTodos.value = true;
     try {
       const items = await extractTodos(currentMailId.value, providerId);
-      todoStore.setFromAiTodos(items, currentMailId.value);
+      await todoStore.setFromAiTodos(items, currentMailId.value);
       todoStore.openPanel();
     } catch (e) {
       toast.add({
@@ -304,11 +340,10 @@ function handleDelete() {
   showDeleteConfirm.value = true;
 }
 
-function confirmDelete() {
-  if (currentMailId.value) {
-    mailStore.deleteMail(currentMailId.value);
-    showDeleteConfirm.value = false;
-  }
+async function confirmDelete() {
+  if (!currentMailId.value) return;
+  await mailStore.deleteMail(currentMailId.value);
+  showDeleteConfirm.value = false;
 }
 
 function cancelDelete() {
@@ -544,11 +579,13 @@ watch(currentMailId, (newMailId) => {
   }
 });
 
-watchEffect(() => {
-  console.log('[MailViewer] remoteDomains:', remoteDomains.value);
-  console.log('[MailViewer] untrustedDomains:', untrustedDomains.value);
-  console.log('[MailViewer] showSecurityBanner:', showSecurityBanner.value);
-});
+if (import.meta.env.DEV) {
+  watchEffect(() => {
+    console.log('[MailViewer] remoteDomains:', remoteDomains.value);
+    console.log('[MailViewer] untrustedDomains:', untrustedDomains.value);
+    console.log('[MailViewer] showSecurityBanner:', showSecurityBanner.value);
+  });
+}
 </script>
 
 <template>
@@ -677,10 +714,7 @@ watchEffect(() => {
       </div>
 
       <!-- Translation result card -->
-      <div
-        v-if="translatedText"
-        class="border-b border-border bg-accent-subtle/30 px-6 py-3"
-      >
+      <div v-if="translatedText" class="border-b border-border bg-accent-subtle/30 px-6 py-3">
         <div class="flex items-center justify-between gap-3">
           <div class="flex items-center gap-2">
             <Languages class="h-4 w-4 text-accent" aria-hidden="true" />
@@ -819,21 +853,23 @@ watchEffect(() => {
       </div>
 
       <!-- Selected-text translate popup -->
-      <div
-        v-if="showSelectionMenu"
-        ref="selectionMenuRef"
-        class="fixed z-40 rounded-md border border-border bg-elevated px-2 py-1 shadow-lg"
-        :style="{ left: `${selectionMenuX}px`, top: `${selectionMenuY}px` }"
-      >
-        <button
-          type="button"
-          class="flex items-center gap-1 text-xs text-secondary transition-colors hover:text-primary"
-          @click="translateSelectedText"
+      <Teleport to="body">
+        <div
+          v-if="showSelectionMenu"
+          ref="selectionMenuRef"
+          class="fixed z-50 rounded-md border border-border bg-elevated px-2 py-1 shadow-lg"
+          :style="{ left: `${selectionMenuX}px`, top: `${selectionMenuY}px` }"
         >
-          <Languages class="h-3.5 w-3.5" />
-          {{ t('translation.translate') }}
-        </button>
-      </div>
+          <button
+            type="button"
+            class="flex items-center gap-1 text-xs text-secondary transition-colors hover:text-primary"
+            @click="translateSelectedText"
+          >
+            <Languages class="h-3.5 w-3.5" />
+            {{ t('translation.translate') }}
+          </button>
+        </div>
+      </Teleport>
 
       <!-- Mail body -->
       <div class="flex-1 overflow-y-auto px-6 py-4">
@@ -847,6 +883,7 @@ watchEffect(() => {
           @security-violation="handleSecurityViolation"
           @remote-domains="handleRemoteDomains"
           @selection="handleIframeSelection"
+          @link-click="handleLinkClick"
         />
         <div v-else-if="mail.bodyText" class="whitespace-pre-wrap text-sm text-primary">
           {{ mail.bodyText }}
@@ -921,9 +958,14 @@ watchEffect(() => {
             </button>
             <button
               type="button"
-              class="flex h-9 items-center justify-center rounded-md bg-danger px-3 text-sm text-white transition-colors hover:bg-danger-hover"
+              class="flex h-9 items-center justify-center rounded-md bg-danger px-3 text-sm text-white transition-colors hover:bg-danger-hover disabled:opacity-50"
+              :disabled="currentMailId ? mailStore.deletingMailIds.has(currentMailId) : false"
               @click="confirmDelete"
             >
+              <Loader2
+                v-if="currentMailId && mailStore.deletingMailIds.has(currentMailId)"
+                class="mr-1.5 h-4 w-4 animate-spin"
+              />
               {{ t('common.delete') }}
             </button>
           </div>

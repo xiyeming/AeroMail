@@ -50,7 +50,10 @@ pub async fn delete_draft(
     state: State<'_, AppState>,
 ) -> Result<(), ErrorPayload> {
     let compose = state.compose_service.read().await;
-    compose.delete_draft(&draft_id).map_err(|e| e.to_payload())
+    compose
+        .delete_draft(&draft_id)
+        .await
+        .map_err(|e| e.to_payload())
 }
 
 #[tauri::command]

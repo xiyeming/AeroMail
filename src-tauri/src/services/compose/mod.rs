@@ -63,7 +63,46 @@ impl ComposeService {
     }
 
     #[instrument(skip_all, fields(draft_id = %draft_id), err(Debug))]
-    pub fn delete_draft(&self, draft_id: &str) -> Result<(), AeroError> {
+    pub async fn delete_draft(&self, draft_id: &str) -> Result<(), AeroError> {
+        // Fetch the draft first so we can clean up the IMAP copy if it exists
+        let draft = self.draft_service.get_draft(draft_id)?;
+
+        if let Some(ref draft) = draft {
+            if let Some(uid) = draft.remote_uid {
+                if uid > 0 {
+                    match self.load_account_config(&draft.account_id).await {
+                        Ok(config) => match imap_client::connect_imap(&config).await {
+                            Ok(mut session) => {
+                                if let Ok(drafts_folder) =
+                                    imap_client::find_drafts_folder(&mut session).await
+                                {
+                                    if let Err(e) = imap_draft_sync::delete_uid(
+                                        &mut session,
+                                        &drafts_folder,
+                                        uid,
+                                    )
+                                    .await
+                                    {
+                                        warn!(
+                                            "Failed to delete IMAP draft {uid} in \
+                                                 {drafts_folder}: {e}"
+                                        );
+                                    }
+                                }
+                                let _ = session.logout().await;
+                            }
+                            Err(e) => {
+                                warn!("Failed to connect IMAP for draft cleanup: {e}");
+                            }
+                        },
+                        Err(e) => {
+                            warn!("Failed to load account config for draft cleanup: {e}");
+                        }
+                    }
+                }
+            }
+        }
+
         self.draft_service.delete_draft(draft_id)
     }
 

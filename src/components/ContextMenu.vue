@@ -30,18 +30,23 @@ const menuRef = ref<HTMLDivElement | null>(null);
 const itemRefs = ref<HTMLButtonElement[]>([]);
 
 const menuStyle = computed(() => {
-  const menuWidth = 200;
+  const menuWidth = 220;
   const menuHeight = 250;
-  const padding = 10;
+  const padding = 12;
 
   let x = props.x;
   let y = props.y;
 
-  if (x + menuWidth > window.innerWidth - padding) {
-    x = window.innerWidth - menuWidth - padding;
+  const maxRight = window.innerWidth - padding;
+  const maxBottom = window.innerHeight - padding;
+
+  // Expand to the right of the cursor; clamp the right edge to the viewport.
+  if (x + menuWidth > maxRight) {
+    x = Math.max(padding, maxRight - menuWidth);
   }
-  if (y + menuHeight > window.innerHeight - padding) {
-    y = window.innerHeight - menuHeight - padding;
+  // Expand downward by default; clamp the bottom edge to the viewport.
+  if (y + menuHeight > maxBottom) {
+    y = Math.max(padding, maxBottom - menuHeight);
   }
 
   return {

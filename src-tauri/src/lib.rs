@@ -9,8 +9,8 @@ use commands::account::{
     update_account,
 };
 use commands::ai::{
-    clear_chat_session, create_chat_session, delete_ai_mcp_server, delete_ai_provider,
-    delete_ai_skill, delete_chat_session, extract_todos, get_ai_session_usage,
+    ai_compose_assist, clear_chat_session, create_chat_session, delete_ai_mcp_server,
+    delete_ai_provider, delete_ai_skill, delete_chat_session, extract_todos, get_ai_session_usage,
     get_ai_usage_summary, get_chat_messages, list_ai_mcp_servers, list_ai_provider_pricing,
     list_ai_providers, list_ai_skills, list_chat_sessions, quote_mail_to_chat, rename_chat_session,
     send_chat_message, set_chat_session_provider, summarize_mail, test_ai_provider,
@@ -31,6 +31,7 @@ use commands::search::{
 };
 use commands::settings::{get_log_config, get_setting, set_log_config, set_setting};
 use commands::sync::{fetch_older_mails, start_sync, stop_sync};
+use commands::todo::{clear_completed_todos, delete_todo, list_todos, upsert_todo};
 use commands::translation::{
     delete_translation_provider, get_cached_translation, list_translation_providers,
     translate_mail_text, translate_text, upsert_translation_provider,
@@ -146,6 +147,12 @@ fn greet(name: &str) -> String {
     format!("Hello, {name}! You've been greeted from Rust.")
 }
 
+/// 在系统默认浏览器中打开指定 URL
+#[tauri::command]
+fn open_url(url: &str) -> Result<(), String> {
+    open::that(url).map_err(|e| format!("无法打开链接: {e}"))
+}
+
 #[must_use]
 pub fn tray_labels(locale: &str) -> (&'static str, &'static str) {
     if locale.starts_with("zh") {
@@ -160,6 +167,7 @@ pub fn tray_labels(locale: &str) -> (&'static str, &'static str) {
 pub fn run() {
     let run_result = tauri::Builder::default()
         .plugin(tauri_plugin_dialog::init())
+        .plugin(tauri_plugin_notification::init())
         .setup(|app| {
             let handle = app.handle().clone();
 
@@ -289,6 +297,7 @@ pub fn run() {
             upsert_ai_provider,
             delete_ai_provider,
             test_ai_provider,
+            ai_compose_assist,
             create_chat_session,
             send_chat_message,
             summarize_mail,
@@ -319,6 +328,10 @@ pub fn run() {
             start_sync,
             stop_sync,
             fetch_older_mails,
+            list_todos,
+            upsert_todo,
+            delete_todo,
+            clear_completed_todos,
             get_mail_list,
             get_virtual_mail_list,
             get_inbox_mail_list,
@@ -352,6 +365,7 @@ pub fn run() {
             confirmed_exit,
             close_main_window,
             set_tray_menu_locale,
+            open_url,
         ])
         .run(tauri::generate_context!());
 

@@ -15,9 +15,7 @@ export const useAccountStore = defineStore('account', () => {
   const accountCount = computed(() => accounts.value.length);
   const selectedAccountCount = computed(() => selectedAccountIds.value.length);
   const allAccountsSelected = computed(
-    () =>
-      accounts.value.length > 0 &&
-      selectedAccountIds.value.length === accounts.value.length
+    () => accounts.value.length > 0 && selectedAccountIds.value.length === accounts.value.length
   );
 
   function loadSelectedAccounts(): string[] {

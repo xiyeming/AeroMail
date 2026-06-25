@@ -5,5 +5,6 @@ pub mod mail;
 pub mod search;
 pub mod settings;
 pub mod sync;
+pub mod todo;
 pub mod translation;
 pub mod window;

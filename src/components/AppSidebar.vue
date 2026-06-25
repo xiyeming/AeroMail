@@ -82,18 +82,14 @@ const currentAccountLabel = computed(() => {
     return t('account.noAccounts');
   }
   if (accountStore.selectedAccountIds.length === 1) {
-    const account = accountStore.accounts.find(
-      (a) => a.id === accountStore.selectedAccountIds[0]
-    );
+    const account = accountStore.accounts.find((a) => a.id === accountStore.selectedAccountIds[0]);
     return account?.name ?? t('account.noAccounts');
   }
   return t('account.selectedCount', { count: accountStore.selectedAccountIds.length });
 });
 
 const accountInitial = computed(() => {
-  const first = accountStore.accounts.find((a) =>
-    accountStore.selectedAccountIds.includes(a.id)
-  );
+  const first = accountStore.accounts.find((a) => accountStore.selectedAccountIds.includes(a.id));
   return first?.name.charAt(0).toUpperCase() ?? 'A';
 });
 
@@ -241,10 +237,7 @@ function closePopoverOnBlur(event: FocusEvent) {
                 {{ $t('account.showOnly') }}
               </button>
             </li>
-            <li
-              v-if="!accountStore.allAccountsSelected"
-              class="border-t border-border"
-            >
+            <li v-if="!accountStore.allAccountsSelected" class="border-t border-border">
               <button
                 type="button"
                 class="w-full px-3 py-2 text-left text-sm text-secondary transition-colors hover:bg-elevated"

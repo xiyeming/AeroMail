@@ -1,7 +1,7 @@
 #![allow(clippy::missing_errors_doc)]
 
 use tauri::State;
-use tracing::{debug, instrument};
+use tracing::{debug, instrument, warn};
 
 use crate::AppState;
 use crate::error::AeroError;
@@ -166,6 +166,30 @@ pub async fn get_unread_count(
     db.count_unread(&account_id).map_err(|e| e.to_payload())
 }
 
+fn is_trash_folder(folder: &crate::models::mail::FolderInfo) -> bool {
+    let lower_path = folder.path.to_lowercase();
+    let lower_name = folder.name.to_lowercase();
+    [
+        "trash",
+        "deleted",
+        "deleted items",
+        "deleted messages",
+        "bin",
+        "[gmail]/trash",
+        "[gmail]/bin",
+    ]
+    .iter()
+    .any(|name| lower_path == *name || lower_name == *name)
+}
+
+fn find_trash_folder_id(
+    db: &crate::db::pool::Database,
+    account_id: &str,
+) -> Result<Option<String>, crate::error::AeroError> {
+    let folders = db.list_folders(account_id)?;
+    Ok(folders.into_iter().find(is_trash_folder).map(|f| f.id))
+}
+
 #[tauri::command]
 #[instrument(skip(state), fields(mail_id = %mail_id), err(Debug))]
 pub async fn delete_mail(mail_id: String, state: State<'_, AppState>) -> Result<(), ErrorPayload> {
@@ -175,10 +199,41 @@ pub async fn delete_mail(mail_id: String, state: State<'_, AppState>) -> Result<
         .map_err(|e| e.to_payload())?
         .ok_or_else(|| AeroError::MailNotFound(mail_id.clone()).to_payload())?;
 
-    debug!(account_id = %mail.account_id, folder_id = %mail.folder_id, uid = mail.uid, "deleting mail on server");
-    sync_delete_to_imap(&state, &mail.account_id, &mail.folder_id, mail.uid).await?;
+    let current_folder = db
+        .get_folder_by_id(&mail.folder_id)
+        .map_err(|e| e.to_payload())?
+        .ok_or_else(|| AeroError::MailNotFound(mail.folder_id.clone()).to_payload())?;
 
-    db.delete_mail(&mail_id).map_err(|e| e.to_payload())
+    // If the mail is already in a trash folder, delete it permanently.
+    if is_trash_folder(&current_folder) {
+        debug!(account_id = %mail.account_id, folder_id = %mail.folder_id, uid = mail.uid, "permanently deleting mail on server");
+        sync_delete_to_imap(&state, &mail.account_id, &mail.folder_id, mail.uid).await?;
+        db.delete_mail(&mail_id).map_err(|e| e.to_payload())?;
+        return Ok(());
+    }
+
+    // Otherwise move the mail to the account's trash folder.
+    let Some(trash_folder_id) =
+        find_trash_folder_id(db, &mail.account_id).map_err(|e| e.to_payload())?
+    else {
+        warn!(account_id = %mail.account_id, "no trash folder found; falling back to permanent delete");
+        sync_delete_to_imap(&state, &mail.account_id, &mail.folder_id, mail.uid).await?;
+        db.delete_mail(&mail_id).map_err(|e| e.to_payload())?;
+        return Ok(());
+    };
+
+    debug!(account_id = %mail.account_id, folder_id = %mail.folder_id, uid = mail.uid, target_folder_id = %trash_folder_id, "moving mail to trash");
+    sync_move_to_imap(
+        &state,
+        &mail.account_id,
+        &mail.folder_id,
+        mail.uid,
+        &trash_folder_id,
+    )
+    .await?;
+
+    db.move_mail(&mail_id, &trash_folder_id)
+        .map_err(|e| e.to_payload())
 }
 
 #[tauri::command]

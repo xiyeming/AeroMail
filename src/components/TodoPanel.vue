@@ -2,6 +2,8 @@
 import { ref, nextTick, computed } from 'vue';
 import { ListTodo, Plus, Trash2, X, Check, Bell, Clock } from 'lucide-vue-next';
 import { useTodoStore } from '@/stores/todo';
+import DateTimePicker from '@/components/DateTimePicker.vue';
+import BaseCheckbox from '@/components/BaseCheckbox.vue';
 
 const todoStore = useTodoStore();
 
@@ -19,12 +21,10 @@ const sortedItems = computed(() => {
   });
 });
 
-function handleAdd() {
+async function handleAdd() {
   if (!newTodoText.value.trim()) return;
-  const reminderAt = newTodoReminder.value
-    ? new Date(newTodoReminder.value).getTime()
-    : undefined;
-  todoStore.addTodo(newTodoText.value, undefined, reminderAt);
+  const reminderAt = newTodoReminder.value ? new Date(newTodoReminder.value).getTime() : undefined;
+  await todoStore.addTodo(newTodoText.value, undefined, reminderAt);
   newTodoText.value = '';
   newTodoReminder.value = '';
 }
@@ -38,21 +38,17 @@ function handleKeydown(event: KeyboardEvent) {
 function startEdit(item: { id: string; text: string; reminderAt?: number }) {
   editingId.value = item.id;
   editText.value = item.text;
-  editReminder.value = item.reminderAt
-    ? new Date(item.reminderAt).toISOString().slice(0, 16)
-    : '';
+  editReminder.value = item.reminderAt ? new Date(item.reminderAt).toISOString().slice(0, 16) : '';
   void nextTick(() => {
     editInputRef.value?.focus();
   });
 }
 
-function commitEdit() {
+async function commitEdit() {
   if (editingId.value) {
-    const reminderAt = editReminder.value
-      ? new Date(editReminder.value).getTime()
-      : undefined;
-    todoStore.updateText(editingId.value, editText.value);
-    todoStore.setReminder(editingId.value, reminderAt);
+    const reminderAt = editReminder.value ? new Date(editReminder.value).getTime() : undefined;
+    await todoStore.updateText(editingId.value, editText.value);
+    await todoStore.setReminder(editingId.value, reminderAt);
   }
   editingId.value = null;
   editText.value = '';
@@ -73,12 +69,17 @@ function handleEditKeydown(event: KeyboardEvent) {
   }
 }
 
-function clearCompleted() {
-  todoStore.clearCompleted();
+async function clearCompleted() {
+  await todoStore.clearCompleted();
 }
 
 function formatReminder(timestamp: number): string {
   return new Date(timestamp).toLocaleString();
+}
+
+function formatReminderString(value: string): string {
+  const ts = new Date(value).getTime();
+  return Number.isNaN(ts) ? '' : formatReminder(ts);
 }
 
 function clearNewReminder() {
@@ -129,15 +130,12 @@ function clearEditReminder() {
             :key="item.id"
             class="group flex items-start gap-2 rounded-md p-1.5 transition-colors hover:bg-raised"
           >
-            <button
-              type="button"
-              class="mt-1 flex h-4 w-4 shrink-0 items-center justify-center rounded border border-border bg-base transition-colors hover:border-accent"
-              :class="{ 'border-accent bg-accent text-white': item.done }"
+            <BaseCheckbox
+              class="mt-1 shrink-0"
+              :model-value="item.done"
               :aria-label="item.done ? $t('todo.markUndone') : $t('todo.markDone')"
-              @click.stop="todoStore.toggleDone(item.id)"
-            >
-              <Check v-if="item.done" class="h-3 w-3" />
-            </button>
+              @update:model-value="todoStore.setDone(item.id, $event)"
+            />
             <div class="min-w-0 flex-1">
               <div v-if="editingId === item.id" class="space-y-2">
                 <input
@@ -149,22 +147,13 @@ function clearEditReminder() {
                   @blur="commitEdit"
                 />
                 <div class="flex items-center gap-2">
-                  <label
-                    class="relative flex h-7 w-7 shrink-0 cursor-pointer items-center justify-center rounded border border-border transition-colors"
-                    :class="editReminder ? 'border-accent/50 text-accent' : 'text-secondary hover:text-primary'"
-                    :title="$t('todo.reminder')"
+                  <DateTimePicker v-model="editReminder" />
+                  <div
+                    v-if="editReminder"
+                    class="flex min-w-0 flex-1 items-center gap-1 text-xs text-tertiary"
                   >
-                    <Bell class="h-3.5 w-3.5" />
-                    <input
-                      v-model="editReminder"
-                      type="datetime-local"
-                      class="absolute inset-0 opacity-0 cursor-pointer"
-                      @blur="commitEdit"
-                    />
-                  </label>
-                  <div v-if="editReminder" class="flex min-w-0 flex-1 items-center gap-1 text-xs text-tertiary">
                     <Clock class="h-3 w-3 shrink-0" />
-                    <span class="truncate">{{ formatReminder(new Date(editReminder).getTime()) }}</span>
+                    <span class="truncate">{{ formatReminderString(editReminder) }}</span>
                     <button
                       type="button"
                       class="ml-1 rounded p-0.5 text-tertiary hover:text-primary"
@@ -190,10 +179,7 @@ function clearEditReminder() {
                   <Bell class="h-3 w-3" />
                   {{ formatReminder(item.reminderAt) }}
                 </p>
-                <p
-                  v-if="item.completedAt"
-                  class="mt-0.5 text-xs text-tertiary"
-                >
+                <p v-if="item.completedAt" class="mt-0.5 text-xs text-tertiary">
                   {{ $t('todo.completedAt', { time: formatReminder(item.completedAt) }) }}
                 </p>
               </div>
@@ -209,7 +195,10 @@ function clearEditReminder() {
           </li>
         </ul>
 
-        <div v-else class="flex flex-1 flex-col items-center justify-center gap-2 py-8 text-secondary">
+        <div
+          v-else
+          class="flex flex-1 flex-col items-center justify-center gap-2 py-8 text-secondary"
+        >
           <ListTodo class="h-10 w-10 opacity-20" />
           <p class="text-sm">{{ $t('todo.noItems') }}</p>
         </div>
@@ -224,18 +213,7 @@ function clearEditReminder() {
             :placeholder="$t('todo.placeholder')"
             @keydown="handleKeydown"
           />
-          <label
-            class="relative flex h-9 w-9 shrink-0 cursor-pointer items-center justify-center rounded-md border border-border transition-colors"
-            :class="newTodoReminder ? 'border-accent/50 text-accent' : 'text-secondary hover:text-primary hover:bg-raised'"
-            :title="$t('todo.reminder')"
-          >
-            <Bell class="h-4 w-4" />
-            <input
-              v-model="newTodoReminder"
-              type="datetime-local"
-              class="absolute inset-0 opacity-0 cursor-pointer"
-            />
-          </label>
+          <DateTimePicker v-model="newTodoReminder" />
           <button
             type="button"
             class="flex h-9 w-9 shrink-0 items-center justify-center rounded-md bg-accent text-white transition-colors hover:bg-accent-hover disabled:opacity-50"

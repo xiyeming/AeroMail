@@ -1543,9 +1543,21 @@ impl Database {
     /// Returns an error if the database write fails.
     pub fn mark_mail_read(&self, mail_id: &str, is_read: bool) -> Result<(), AeroError> {
         let conn = self.connection()?;
+        // 先获取邮件所属的 folder_id
+        let folder_id: String = conn.query_row(
+            "SELECT folder_id FROM mails WHERE id = ?1",
+            [mail_id],
+            |row| row.get(0),
+        )?;
         conn.execute(
             "UPDATE mails SET is_read = ?1 WHERE id = ?2",
             (is_read as i64, mail_id),
+        )?;
+        // 同步更新 folders 表的 unread_count
+        let unread_delta = if is_read { -1 } else { 1 };
+        conn.execute(
+            "UPDATE folders SET unread_count = MAX(0, unread_count + ?1) WHERE id = ?2",
+            (unread_delta, &folder_id),
         )?;
         drop(conn);
         Ok(())
@@ -1622,6 +1634,19 @@ impl Database {
         format!("LOWER(f.path) IN ({names}) OR LOWER(f.name) IN ({names})")
     }
 
+    fn trash_folder_condition() -> String {
+        let names = Self::quoted_in_list(&[
+            "trash",
+            "deleted",
+            "deleted items",
+            "deleted messages",
+            "bin",
+            "[gmail]/trash",
+            "[gmail]/bin",
+        ]);
+        format!("LOWER(f.path) IN ({names}) OR LOWER(f.name) IN ({names})")
+    }
+
     /// Lists mails for a virtual folder.
     ///
     /// # Errors
@@ -1670,6 +1695,18 @@ impl Database {
                      EXISTS(SELECT 1 FROM attachments WHERE mail_id = m.id) as has_attachments
                      FROM mails m JOIN folders f ON m.folder_id = f.id
                      WHERE (m.is_spam = 1 OR {condition})
+                     ORDER BY m.date DESC, m.uid DESC
+                     LIMIT ?1 OFFSET ?2"
+                )
+            }
+            "trash" => {
+                let condition = Self::trash_folder_condition();
+                format!(
+                    "SELECT m.id, m.account_id, m.folder_id, m.uid, m.subject, m.from_name, m.from_address,
+                     m.date, m.is_read, m.is_starred, m.is_archived, m.is_spam,
+                     EXISTS(SELECT 1 FROM attachments WHERE mail_id = m.id) as has_attachments
+                     FROM mails m JOIN folders f ON m.folder_id = f.id
+                     WHERE {condition}
                      ORDER BY m.date DESC, m.uid DESC
                      LIMIT ?1 OFFSET ?2"
                 )
@@ -1723,6 +1760,13 @@ impl Database {
             }
             "archived" => {
                 "SELECT COUNT(*) FROM mails WHERE is_read = 0 AND is_archived = 1".to_string()
+            }
+            "trash" => {
+                let condition = Self::trash_folder_condition();
+                format!(
+                    "SELECT COUNT(*) FROM mails m JOIN folders f ON m.folder_id = f.id
+                     WHERE m.is_read = 0 AND {condition}"
+                )
             }
             _ => return Ok(0),
         };
@@ -2223,5 +2267,100 @@ impl Database {
         })?;
         rows.collect::<Result<Vec<_>, _>>()
             .map_err(|e| AeroError::Database(e.to_string()))
+    }
+
+    // ---- Todo CRUD ----
+
+    /// Lists all todos ordered by creation time descending.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the database query fails.
+    #[allow(clippy::significant_drop_tightening)]
+    pub fn list_todos(&self) -> Result<Vec<crate::models::todo::TodoItem>, AeroError> {
+        let conn = self.connection()?;
+        let mut stmt = conn.prepare(
+            "SELECT id, text, done, mail_id, created_at, completed_at, reminder_at, notified_at, completion_log_json
+             FROM todos ORDER BY created_at DESC",
+        )?;
+        let rows = stmt.query_map([], |row| {
+            let completion_log_json: Option<String> = row.get(8)?;
+            let completion_log = completion_log_json
+                .and_then(|s| serde_json::from_str::<Vec<i64>>(&s).ok())
+                .unwrap_or_default();
+            Ok(crate::models::todo::TodoItem {
+                id: row.get(0)?,
+                text: row.get(1)?,
+                done: row.get::<_, i64>(2)? != 0,
+                mail_id: row.get(3)?,
+                created_at: row.get(4)?,
+                completed_at: row.get(5)?,
+                reminder_at: row.get(6)?,
+                notified_at: row.get(7)?,
+                completion_log,
+            })
+        })?;
+        rows.collect::<Result<Vec<_>, _>>()
+            .map_err(|e| AeroError::Database(e.to_string()))
+    }
+
+    /// Inserts or updates a todo item.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the database write fails.
+    pub fn upsert_todo(&self, todo: &crate::models::todo::TodoItem) -> Result<(), AeroError> {
+        let conn = self.connection()?;
+        let completion_log_json = serde_json::to_string(&todo.completion_log).unwrap_or_default();
+        conn.execute(
+            "INSERT INTO todos (id, text, done, mail_id, created_at, completed_at, reminder_at, notified_at, completion_log_json)
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9)
+             ON CONFLICT(id) DO UPDATE SET
+               text = excluded.text,
+               done = excluded.done,
+               mail_id = excluded.mail_id,
+               created_at = excluded.created_at,
+               completed_at = excluded.completed_at,
+               reminder_at = excluded.reminder_at,
+               notified_at = excluded.notified_at,
+               completion_log_json = excluded.completion_log_json",
+            (
+                &todo.id,
+                &todo.text,
+                todo.done as i64,
+                &todo.mail_id,
+                todo.created_at,
+                todo.completed_at,
+                todo.reminder_at,
+                todo.notified_at,
+                completion_log_json,
+            ),
+        )?;
+        drop(conn);
+        Ok(())
+    }
+
+    /// Deletes a todo by ID.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the database write fails.
+    pub fn delete_todo(&self, id: &str) -> Result<(), AeroError> {
+        let conn = self.connection()?;
+        conn.execute("DELETE FROM todos WHERE id = ?1", [id])?;
+        drop(conn);
+        Ok(())
+    }
+
+    /// Deletes all completed todos and returns the number removed.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the database write fails.
+    pub fn clear_completed_todos(&self) -> Result<usize, AeroError> {
+        let conn = self.connection()?;
+        let removed = conn.execute("DELETE FROM todos WHERE done = 1", [])?;
+        drop(conn);
+        Ok(removed)
     }
 }

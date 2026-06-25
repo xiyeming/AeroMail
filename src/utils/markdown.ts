@@ -1,8 +1,5 @@
 export function escapeHtml(text: string): string {
-  return text
-    .replace(/&/g, '&amp;')
-    .replace(/</g, '&lt;')
-    .replace(/>/g, '&gt;');
+  return text.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
 }
 
 function sanitizeHref(url: string): string {
@@ -178,7 +175,7 @@ function convertNode(node: Node): string {
       return `\`${children}\``;
     case 'pre': {
       const code = element.querySelector('code');
-      const codeText = code ? code.textContent ?? children : children;
+      const codeText = code ? (code.textContent ?? children) : children;
       return `\`\`\`\n${codeText.trim()}\n\`\`\`\n\n`;
     }
     case 'blockquote':

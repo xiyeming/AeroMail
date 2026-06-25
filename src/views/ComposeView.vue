@@ -8,6 +8,7 @@
       @send="store.sendMail"
     />
     <ComposeEditor
+      ref="editorRef"
       :model-value="store.draft.bodyHtml"
       @change="({ html, text }) => store.updateBody(html, text)"
       @image-pasted="handleImagePasted"
@@ -63,6 +64,7 @@ const { t } = useI18n();
 
 const accounts = computed(() => accountStore.accounts);
 const isAttaching = ref(false);
+const editorRef = ref<InstanceType<typeof ComposeEditor> | null>(null);
 
 onMounted(async () => {
   await accountStore.loadAccounts();
@@ -135,8 +137,9 @@ async function handleImagePasted(file: File) {
       data: Array.from(new Uint8Array(arrayBuffer)),
     });
     store.draft.attachments.push(attachment);
-    const imgHtml = `<img src="cid:${contentId}" alt="${attachment.filename}" />`;
-    store.draft.bodyHtml += imgHtml;
+    // Use base64 preview in editor; cid: reference is for final email only
+    const imgHtml = `<img src="data:${file.type};base64,${base64}" alt="${attachment.filename}" data-cid="${contentId}" />`;
+    editorRef.value?.insertHtml(imgHtml);
     await store.saveNow();
   } catch (e) {
     toast.add({
@@ -205,11 +208,15 @@ async function addAttachment() {
     }
   };
 
-  input.addEventListener('cancel', () => {
-    if (input.parentNode) {
-      document.body.removeChild(input);
-    }
-  }, { once: true });
+  input.addEventListener(
+    'cancel',
+    () => {
+      if (input.parentNode) {
+        document.body.removeChild(input);
+      }
+    },
+    { once: true }
+  );
 
   input.click();
 }

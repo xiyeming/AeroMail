@@ -251,6 +251,28 @@ CREATE INDEX IF NOT EXISTS idx_translations_lookup
 ON translations(source_hash, target_lang, provider_id)
 ";
 
+pub const TODOS_TABLE: &str = r"
+CREATE TABLE IF NOT EXISTS todos (
+    id TEXT PRIMARY KEY,
+    text TEXT NOT NULL,
+    done INTEGER NOT NULL DEFAULT 0,
+    mail_id TEXT,
+    created_at INTEGER NOT NULL,
+    completed_at INTEGER,
+    reminder_at INTEGER,
+    notified_at INTEGER,
+    completion_log_json TEXT
+)
+";
+
+pub const TODOS_DONE_INDEX: &str = r"
+CREATE INDEX IF NOT EXISTS idx_todos_done ON todos(done)
+";
+
+pub const TODOS_MAIL_ID_INDEX: &str = r"
+CREATE INDEX IF NOT EXISTS idx_todos_mail_id ON todos(mail_id)
+";
+
 pub const ALL_SCHEMAS: &[&str] = &[
     ACCOUNTS_TABLE,
     FOLDERS_TABLE,
@@ -273,4 +295,7 @@ pub const ALL_SCHEMAS: &[&str] = &[
     TRANSLATION_PROVIDERS_TABLE,
     TRANSLATIONS_TABLE,
     TRANSLATIONS_INDEX,
+    TODOS_TABLE,
+    TODOS_DONE_INDEX,
+    TODOS_MAIL_ID_INDEX,
 ];

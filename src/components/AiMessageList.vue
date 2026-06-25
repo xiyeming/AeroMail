@@ -87,10 +87,7 @@ function quoteKey(msgId: string, index: number): string {
         ]"
       >
         <template v-if="msg.role === 'user'">
-          <div
-            v-if="parseMessage(msg.content).quotes.length > 0"
-            class="mb-2 flex flex-col gap-2"
-          >
+          <div v-if="parseMessage(msg.content).quotes.length > 0" class="mb-2 flex flex-col gap-2">
             <div
               v-for="(quote, idx) in parseMessage(msg.content).quotes"
               :key="idx"
@@ -101,7 +98,9 @@ function quoteKey(msgId: string, index: number): string {
                 <span>{{ quote.label }}</span>
               </div>
               <div class="mt-1 text-xs font-medium">{{ quote.subject || t('mail.noSubject') }}</div>
-              <div class="text-[11px] text-secondary">{{ quote.from || t('mail.unknownSender') }}</div>
+              <div class="text-[11px] text-secondary">
+                {{ quote.from || t('mail.unknownSender') }}
+              </div>
               <div
                 v-if="expandedQuotes.has(quoteKey(msg.id, idx))"
                 class="mt-1 max-h-32 overflow-y-auto text-[11px] text-secondary whitespace-pre-wrap"
@@ -113,9 +112,9 @@ function quoteKey(msgId: string, index: number): string {
                 class="mt-1 text-[11px] text-secondary transition-colors hover:text-primary"
                 @click="toggleQuote(quoteKey(msg.id, idx))"
               >
-                <span v-if="expandedQuotes.has(quoteKey(msg.id, idx))"
-                  >{{ t('mail.collapseQuote') }}</span
-                >
+                <span v-if="expandedQuotes.has(quoteKey(msg.id, idx))">{{
+                  t('mail.collapseQuote')
+                }}</span>
                 <span v-else>{{ t('mail.expandQuote') }}</span>
               </button>
             </div>

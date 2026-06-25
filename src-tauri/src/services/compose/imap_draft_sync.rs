@@ -38,7 +38,7 @@ pub async fn sync_draft_to_imap(
     Ok(0)
 }
 
-async fn delete_uid(
+pub async fn delete_uid(
     session: &mut imap_client::ImapSession,
     folder: &str,
     uid: u32,

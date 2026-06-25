@@ -129,9 +129,8 @@ export const useComposeStore = defineStore('compose', () => {
   }
 
   async function sendMail() {
-    if (!draft.value.id) {
-      await saveToBackend();
-    }
+    // Save immediately (non-debounced) to ensure recipients are persisted
+    await saveNow();
     if (!draft.value.id) {
       useToastStore().add({
         type: 'error',

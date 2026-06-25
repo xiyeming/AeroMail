@@ -3,6 +3,7 @@ use std::sync::Arc;
 use std::time::Duration;
 
 use futures::StreamExt;
+use tauri_plugin_notification::NotificationExt;
 use tokio::sync::{Notify, RwLock, mpsc};
 use tokio::time::sleep;
 use tracing::{debug, error, info, instrument, warn};
@@ -109,6 +110,7 @@ pub struct SyncWorker {
     pub progress_tx: mpsc::Sender<SyncProgress>,
     pub attachments_dir: PathBuf,
     pub wake_notify: Arc<Notify>,
+    pub app_handle: tauri::AppHandle,
 }
 
 impl SyncWorker {
@@ -430,6 +432,9 @@ impl SyncWorker {
 
         let sync_days = load_sync_mail_days(&self.db)?;
 
+        // Track the highest UID before sync to detect truly new messages
+        let prev_max_uid = max_uid;
+
         let synced_count = if needs_full_sync {
             info!(
                 "Account {}: Full sync for {} (UIDVALIDITY changed)",
@@ -518,6 +523,13 @@ impl SyncWorker {
                         })
                         .await;
 
+                    // Count mails in INBOX before fetch to detect genuinely new ones
+                    let inbox_count_before = if folder_name.eq_ignore_ascii_case("INBOX") {
+                        i64::from(self.db.count_mails_in_folder(&folder_id)?)
+                    } else {
+                        0
+                    };
+
                     count = self
                         .fetch_and_upsert_range(
                             session,
@@ -529,6 +541,16 @@ impl SyncWorker {
                             count + total,
                         )
                         .await?;
+
+                    // Notify based on genuinely new DB rows, not fetched count
+                    if prev_max_uid > 0 && folder_name.eq_ignore_ascii_case("INBOX") {
+                        let inbox_count_after = self.db.count_mails_in_folder(&folder_id)?;
+                        let diff = i64::from(inbox_count_after) - inbox_count_before;
+                        let new_mails = u32::try_from(diff.max(0)).unwrap_or(u32::MAX);
+                        if new_mails > 0 {
+                            self.send_new_mail_notification(new_mails);
+                        }
+                    }
                 }
             }
 
@@ -544,6 +566,45 @@ impl SyncWorker {
         )?;
 
         Ok(synced_count)
+    }
+
+    /// Sends a system notification for newly arrived messages in INBOX.
+    fn send_new_mail_notification(&self, count: u32) {
+        let locale = self
+            .db
+            .get_setting("app.locale")
+            .ok()
+            .flatten()
+            .unwrap_or_else(|| {
+                // Fallback: detect from system locale
+                sys_locale().unwrap_or_else(|| "en".to_string())
+            });
+
+        let is_zh = locale.starts_with("zh");
+
+        let title = "AeroMail".to_string();
+        let body = if is_zh {
+            if count == 1 {
+                "1 封新邮件".to_string()
+            } else {
+                format!("{count} 封新邮件")
+            }
+        } else if count == 1 {
+            "1 new message".to_string()
+        } else {
+            format!("{count} new messages")
+        };
+
+        if let Err(e) = self
+            .app_handle
+            .notification()
+            .builder()
+            .title(&title)
+            .body(&body)
+            .show()
+        {
+            warn!(error = %e, "failed to send new mail notification");
+        }
     }
 
     /// Saves parsed attachments to disk and records them in the database.
@@ -630,4 +691,36 @@ pub fn unique_filename(name: &str, used: &std::collections::HashSet<String>) -> 
         }
     }
     format!("{}_{}", name, uuid::Uuid::new_v4())
+}
+
+/// Returns the system locale string (e.g. "zh-CN", "en-US").
+fn sys_locale() -> Option<String> {
+    #[cfg(target_os = "linux")]
+    {
+        std::env::var("LANG")
+            .ok()
+            .filter(|v| !v.is_empty() && *v != "C" && *v != "POSIX")
+            .map(|v| v.split('.').next().unwrap_or(&v).to_string())
+    }
+    #[cfg(target_os = "macos")]
+    {
+        std::process::Command::new("defaults")
+            .args(["read", "AppleGlobalDomain", "AppleLanguages"])
+            .output()
+            .ok()
+            .and_then(|o| String::from_utf8(o.stdout).ok())
+            .and_then(|s| {
+                s.lines()
+                    .next()
+                    .map(|l| l.trim().trim_matches('"').to_string())
+            })
+    }
+    #[cfg(target_os = "windows")]
+    {
+        std::env::var("LANG").ok().filter(|v| !v.is_empty())
+    }
+    #[cfg(not(any(target_os = "linux", target_os = "macos", target_os = "windows")))]
+    {
+        None
+    }
 }

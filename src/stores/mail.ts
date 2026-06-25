@@ -5,7 +5,7 @@ import type { MailHeader, MailDetail, FolderInfo } from '@/types/mail';
 
 const PAGE_SIZE = 50;
 
-const VIRTUAL_FOLDERS = ['starred', 'sent', 'archived', 'spam'];
+const VIRTUAL_FOLDERS = ['starred', 'sent', 'archived', 'spam', 'trash'];
 
 export const useMailStore = defineStore('mail', () => {
   const mails = ref<MailHeader[]>([]);
@@ -21,6 +21,7 @@ export const useMailStore = defineStore('mail', () => {
   const hasMore = ref(true);
   const error = ref<string | null>(null);
   const isReadingMode = ref(false);
+  const deletingMailIds = ref<Set<string>>(new Set());
 
   const totalUnread = computed(() => folders.value.reduce((sum, f) => sum + f.unreadCount, 0));
 
@@ -47,7 +48,6 @@ export const useMailStore = defineStore('mail', () => {
     try {
       if (reset) {
         loading.value = true;
-        mails.value = [];
         hasMore.value = true;
       } else {
         loadingMore.value = true;
@@ -60,6 +60,7 @@ export const useMailStore = defineStore('mail', () => {
         offset,
       });
 
+      // 先获取数据再替换，避免先清空导致列表闪烁
       if (reset) {
         mails.value = newMails;
       } else {
@@ -82,7 +83,6 @@ export const useMailStore = defineStore('mail', () => {
     try {
       if (reset) {
         loading.value = true;
-        mails.value = [];
         hasMore.value = true;
       } else {
         loadingMore.value = true;
@@ -100,10 +100,8 @@ export const useMailStore = defineStore('mail', () => {
         }
       );
 
-      // When the local page is empty and we expect more, ask the backend to
-      // backfill older messages from the IMAP server, then try the same page
-      // again. Only do this for real folders; virtual folders have no remote
-      // older-mail source.
+      // 当本地页为空且期望有更多数据时，请求后端从 IMAP 服务器回填旧邮件
+      // 仅对真实文件夹执行；虚拟文件夹无远程旧邮件源
       if (!reset && newMails.length === 0 && hasMore.value && !isVirtual) {
         const fetched = await invoke<number>('fetch_older_mails', {
           folderId,
@@ -118,6 +116,7 @@ export const useMailStore = defineStore('mail', () => {
         }
       }
 
+      // 先获取数据再替换，避免先清空导致列表闪烁
       if (reset) {
         mails.value = newMails;
       } else {
@@ -214,14 +213,9 @@ export const useMailStore = defineStore('mail', () => {
       selectedMail.value = await invoke<MailDetail>('get_mail_detail', { mailId });
       selectedMailId.value = mailId;
 
-      // Mark as read
+      // Mark as read — markRead handles local state + folder unread count
       if (selectedMail.value && !selectedMail.value.isRead) {
         await markRead(mailId, true);
-        // Update in list
-        const mail = mails.value.find((m) => m.id === mailId);
-        if (mail) {
-          mail.isRead = true;
-        }
       }
     } catch (e) {
       error.value = e instanceof Error ? e.message : String(e);
@@ -235,6 +229,16 @@ export const useMailStore = defineStore('mail', () => {
   async function markRead(mailId: string, isRead: boolean) {
     try {
       await invoke('mark_mail_read', { mailId, isRead });
+      // Update local state immediately
+      const mail = mails.value.find((m) => m.id === mailId);
+      if (mail && mail.isRead !== isRead) {
+        mail.isRead = isRead;
+        // Update folder unread count
+        const folder = folders.value.find((f) => f.id === mail.folderId);
+        if (folder) {
+          folder.unreadCount = Math.max(0, folder.unreadCount + (isRead ? -1 : 1));
+        }
+      }
     } catch (e) {
       error.value = e instanceof Error ? e.message : String(e);
     }
@@ -305,6 +309,7 @@ export const useMailStore = defineStore('mail', () => {
   }
 
   async function deleteMail(mailId: string) {
+    deletingMailIds.value.add(mailId);
     try {
       await invoke('delete_mail', { mailId });
       // Remove from list
@@ -316,8 +321,14 @@ export const useMailStore = defineStore('mail', () => {
       if (selectedMailId.value === mailId) {
         clearSelection();
       }
+      // If currently viewing trash, refresh so the moved mail appears.
+      if (currentFolderId.value === 'trash') {
+        await refreshMails('trash');
+      }
     } catch (e) {
       error.value = e instanceof Error ? e.message : String(e);
+    } finally {
+      deletingMailIds.value.delete(mailId);
     }
   }
 
@@ -399,9 +410,7 @@ export const useMailStore = defineStore('mail', () => {
 
   function invertSelection() {
     const current = new Set(selectedMailIds.value);
-    selectedMailIds.value = mails.value
-      .filter((m) => !current.has(m.id))
-      .map((m) => m.id);
+    selectedMailIds.value = mails.value.filter((m) => !current.has(m.id)).map((m) => m.id);
     lastSelectedIndex.value = -1;
   }
 
@@ -409,18 +418,18 @@ export const useMailStore = defineStore('mail', () => {
   async function bulkMarkRead(isRead: boolean) {
     for (const mailId of selectedMailIds.value) {
       await markRead(mailId, isRead);
-      const mail = mails.value.find((m) => m.id === mailId);
-      if (mail) {
-        mail.isRead = isRead;
-      }
     }
   }
 
   async function bulkDelete() {
-    for (const mailId of selectedMailIds.value) {
-      await deleteMail(mailId);
+    const ids = [...selectedMailIds.value];
+    try {
+      for (const mailId of ids) {
+        await deleteMail(mailId);
+      }
+    } finally {
+      clearBulkSelection();
     }
-    clearBulkSelection();
   }
 
   async function moveMail(mailId: string, targetFolderId: string) {
@@ -460,6 +469,7 @@ export const useMailStore = defineStore('mail', () => {
     hasMore,
     error,
     isReadingMode,
+    deletingMailIds,
     totalUnread,
     loadFolders,
     loadMails,

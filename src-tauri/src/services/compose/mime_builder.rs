@@ -62,21 +62,207 @@ fn content_type(mime: &str) -> ContentType {
     })
 }
 
+/// Wraps HTML content in a full document with inline styles for email clients.
+/// Email clients (Gmail, Outlook, etc.) strip `<style>` blocks and `<head>`,
+/// so all styling must be inline.
+fn wrap_html_for_email(html: &str) -> String {
+    format!(
+        "<!DOCTYPE html>\n<html>\n<head><meta charset=\"utf-8\"><meta name=\"viewport\" content=\"width=device-width,initial-scale=1\"></head>\n<body style=\"margin:0;padding:0;font-family:Arial,Helvetica,sans-serif;font-size:14px;color:#333;line-height:1.6;\">\n{html}\n</body>\n</html>"
+    )
+}
+
+/// 为 Tiptap 生成的语义 HTML 注入内联样式，确保邮件客户端正确显示。
+/// 邮件客户端（Gmail、Outlook 等）会剥离 `<style>` 块，所有样式必须内联。
+fn inject_inline_styles(html: &str) -> String {
+    let mut result = html.to_string();
+
+    // 表格：添加默认边框和内边距（仅当元素没有 style 属性时）
+    result = inject_style_if_missing(
+        &result,
+        "<table",
+        "border-collapse:collapse;border-spacing:0;width:100%;",
+    );
+    result = inject_style_if_missing(
+        &result,
+        "<th",
+        "border:1px solid #ccc;padding:6px 8px;text-align:left;background:#f5f5f5;font-weight:600;",
+    );
+    result = inject_style_if_missing(
+        &result,
+        "<td",
+        "border:1px solid #ccc;padding:6px 8px;text-align:left;vertical-align:top;",
+    );
+
+    // 代码块：添加等宽字体和背景
+    result = inject_style_if_missing(
+        &result,
+        "<pre",
+        "margin:0.5em 0;padding:0.75em 1em;background:#f6f8fa;border-radius:6px;overflow-x:auto;white-space:pre;font-size:0.9em;line-height:1.45;",
+    );
+    result = inject_style_if_missing(
+        &result,
+        "<code",
+        "font-family:'SFMono-Regular',Consolas,'Liberation Mono',Menlo,monospace;font-size:0.9em;",
+    );
+
+    result
+}
+
+/// 如果 HTML 标签没有 style 属性，则注入指定的内联样式。
+fn inject_style_if_missing(html: &str, tag: &str, style: &str) -> String {
+    use std::fmt::Write;
+    let mut result = String::with_capacity(html.len() + 256);
+    let tag_lower = tag.to_lowercase();
+    let mut pos = 0;
+
+    while let Some(offset) = rest_lower(html, pos).find(&tag_lower) {
+        let abs_pos = pos + offset;
+        result.push_str(&html[pos..abs_pos]);
+
+        // 找到标签的结束位置（> 或 />）
+        let tag_content_start = abs_pos + tag.len();
+        if let Some(gt_offset) = html[tag_content_start..].find('>') {
+            let tag_end = tag_content_start + gt_offset;
+            let tag_content = &html[tag_content_start..tag_end];
+
+            if tag_content.to_lowercase().contains("style=") {
+                // 已有 style 属性，保留原样
+                result.push_str(&html[abs_pos..=tag_end]);
+            } else {
+                // 没有 style 属性，注入
+                result.push_str(tag);
+                let _ = write!(result, " style=\"{style}\"");
+                result.push_str(&html[tag_content_start..=tag_end]);
+            }
+            pos = tag_end + 1;
+        } else {
+            // 没有找到 >，保留原样
+            result.push_str(&html[abs_pos..]);
+            pos = html.len();
+            break;
+        }
+    }
+
+    result.push_str(&html[pos..]);
+    result
+}
+
+/// 辅助函数：返回从 pos 开始的子串（小写），用于大小写不敏感搜索。
+fn rest_lower(s: &str, pos: usize) -> String {
+    s[pos..].to_lowercase()
+}
+
+/// Strips HTML tags from a string, returning plain text.
+fn strip_html_tags(html: &str) -> String {
+    let mut result = String::with_capacity(html.len());
+    let mut in_tag = false;
+    for ch in html.chars() {
+        match ch {
+            '<' => in_tag = true,
+            '>' => in_tag = false,
+            _ if !in_tag => result.push(ch),
+            _ => {}
+        }
+    }
+    // Collapse whitespace and trim
+    result
+        .split_whitespace()
+        .collect::<Vec<&str>>()
+        .join(" ")
+        .trim()
+        .to_string()
+}
+
+/// Converts `<img src="data:..." data-cid="...">` to `<img src="cid:...">` for email MIME.
+fn convert_inline_images_to_cid(html: &str) -> String {
+    // Replace data-cid images with cid: references
+    let mut result = html.to_string();
+
+    // Find all <img> tags with data-cid attribute and replace their src
+    while let Some(start) = result.find("data-cid=\"") {
+        // Find the opening <img tag before data-cid
+        let before_data_cid = &result[..start];
+        let tag_start = before_data_cid.rfind("<img").unwrap_or(0);
+
+        // Find the closing > of the img tag
+        let after_data_cid = &result[start + 10..];
+        if let Some(tag_end_in_rest) = after_data_cid.find('>') {
+            let tag_end = start + 10 + tag_end_in_rest + 1;
+            let img_tag = &result[tag_start..tag_end];
+
+            // Extract the cid value
+            if let Some(cid_start) = img_tag.find("data-cid=\"") {
+                let cid_value_start = cid_start + 10;
+                if let Some(cid_end) = img_tag[cid_value_start..].find('"') {
+                    let cid = &img_tag[cid_value_start..cid_value_start + cid_end];
+
+                    // Replace the entire img tag: remove data-cid, change src to cid:
+                    let new_tag = img_tag
+                        .replace(&format!("data-cid=\"{cid}\""), "")
+                        .replacen("src=\"data:", &format!("src=\"cid:{cid}\""), 1);
+
+                    // But we need to handle the base64 src properly
+                    // Find and replace the src attribute completely
+                    if let Some(src_start) = new_tag.find("src=\"") {
+                        let src_val_start = src_start + 5;
+                        if let Some(src_end) = new_tag[src_val_start..].find('"') {
+                            let old_src = &new_tag[src_val_start..src_val_start + src_end];
+                            let fixed_tag = new_tag.replace(
+                                &format!("src=\"{old_src}\""),
+                                &format!("src=\"cid:{cid}\""),
+                            );
+                            result = format!(
+                                "{}{}{}",
+                                &result[..tag_start],
+                                fixed_tag,
+                                &result[tag_end..]
+                            );
+                            continue;
+                        }
+                    }
+
+                    result = format!("{}{}{}", &result[..tag_start], new_tag, &result[tag_end..]);
+                }
+            }
+        } else {
+            break;
+        }
+    }
+
+    result
+}
+
 fn build_body_and_attachments(
     draft: &ComposeDraft,
     attachment_bytes: &[(String, Vec<u8>)],
 ) -> Result<MultiPart, AeroError> {
+    // Convert base64 inline images back to cid: references for email
+    let html = convert_inline_images_to_cid(&draft.body_html);
+
+    // 为语义 HTML 注入内联样式（表格边框、代码块背景等）
+    let html = inject_inline_styles(&html);
+
+    // Wrap HTML in a full document with inline styles for email clients
+    let html = wrap_html_for_email(&html);
+
+    // Ensure body_text is never empty (some clients show nothing if text/plain is empty)
+    let text = if draft.body_text.trim().is_empty() {
+        strip_html_tags(&html)
+    } else {
+        draft.body_text.clone()
+    };
+
     // Build alternative body (text + html)
     let body_part = MultiPart::alternative()
         .singlepart(
             SinglePart::builder()
                 .header(content_type("text/plain; charset=utf-8"))
-                .body(draft.body_text.clone()),
+                .body(text),
         )
         .singlepart(
             SinglePart::builder()
                 .header(content_type("text/html; charset=utf-8"))
-                .body(draft.body_html.clone()),
+                .body(html),
         );
 
     if draft.attachments.is_empty() {

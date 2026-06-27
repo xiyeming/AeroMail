@@ -198,8 +198,10 @@ defineExpose({ insertHtml });
 
 :deep(.ProseMirror table) {
   border-collapse: collapse;
-  width: 100%;
+  table-layout: fixed;
+  width: fit-content;
   margin: 0.5em 0;
+  min-width: 200px;
 }
 
 :deep(.ProseMirror th),
@@ -221,10 +223,16 @@ defineExpose({ insertHtml });
 :deep(.ProseMirror .column-resize-handle) {
   background-color: var(--accent);
   width: 3px;
+  opacity: 0.6;
+  cursor: col-resize;
 }
 
-:deep(.ProseMirror table:hover .column-resize-handle) {
+:deep(.ProseMirror .column-resize-handle:hover) {
   opacity: 1;
+}
+
+:deep(.ProseMirror .resize-cursor) {
+  cursor: col-resize;
 }
 
 :deep(.ProseMirror a) {

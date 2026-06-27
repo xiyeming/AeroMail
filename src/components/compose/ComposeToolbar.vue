@@ -258,7 +258,8 @@ function onLinkRemove() {
 }
 
 function insertTable() {
-  props.editor.chain().focus().insertTable({ rows: 3, cols: 3, withHeaderRow: true }).run();
+  const colWidth = 200;
+  props.editor.chain().focus().insertTable({ rows: 3, cols: 3, withHeaderRow: true, colWidth: [colWidth, colWidth, colWidth] }).run();
 }
 
 function insertHorizontalRule() {

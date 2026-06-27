@@ -161,6 +161,14 @@ export function useTiptap(options: UseTiptapOptions) {
       unsetHighlight: () => ed.chain().focus().unsetHighlight().run(),
       insertTable: () =>
         ed.chain().focus().insertTable({ rows: 3, cols: 3, withHeaderRow: true }).run(),
+      insertTableWithWidth: (width?: number) => {
+        const tableWidth = width ?? 600;
+        const colWidth = Math.floor(tableWidth / 3);
+        ed.chain()
+          .focus()
+          .insertTable({ rows: 3, cols: 3, withHeaderRow: true, colWidth: [colWidth, colWidth, colWidth] })
+          .run();
+      },
       insertImage: (src: string) => ed.chain().focus().setImage({ src }).run(),
       insertHorizontalRule: () => ed.chain().focus().setHorizontalRule().run(),
       insertHardBreak: () => ed.chain().focus().setHardBreak().run(),

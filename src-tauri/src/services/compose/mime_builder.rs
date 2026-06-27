@@ -97,26 +97,28 @@ fn inject_inline_styles(html: &str) -> String {
     let mut result = html.to_string();
 
     // --- 结构元素默认样式 ---
+    // 使用 merge_style_defaults 确保 Tiptap 已有的 text-align 等 inline style
+    // 不会丢失 margin、line-height 等基础排版属性。
 
-    // 段落：间距
-    result = inject_style_if_missing(
+    // 段落：Tiptap 可能已有 text-align style，需合并而非覆盖
+    result = merge_style_defaults(
         &result,
         "<p",
         "margin:0.5em 0;line-height:1.6;",
     );
 
     // 标题
-    result = inject_style_if_missing(
+    result = merge_style_defaults(
         &result,
         "<h1",
         "margin:0.67em 0;font-size:2em;font-weight:700;line-height:1.3;",
     );
-    result = inject_style_if_missing(
+    result = merge_style_defaults(
         &result,
         "<h2",
         "margin:0.5em 0;font-size:1.5em;font-weight:700;line-height:1.3;",
     );
-    result = inject_style_if_missing(
+    result = merge_style_defaults(
         &result,
         "<h3",
         "margin:0.5em 0;font-size:1.17em;font-weight:700;line-height:1.3;",
@@ -164,7 +166,7 @@ fn inject_inline_styles(html: &str) -> String {
     result = inject_style_if_missing(
         &result,
         "<table",
-        "border-collapse:collapse;border-spacing:0;width:100%;",
+        "border-collapse:collapse;border-spacing:0;max-width:100%;",
     );
     result = inject_style_if_missing(
         &result,
@@ -221,6 +223,97 @@ fn inject_style_if_missing(html: &str, tag: &str, style: &str) -> String {
             pos = tag_end + 1;
         } else {
             // 没有找到 >，保留原样
+            result.push_str(&html[abs_pos..]);
+            pos = html.len();
+            break;
+        }
+    }
+
+    result.push_str(&html[pos..]);
+    result
+}
+
+/// 合并默认样式到已有 style 属性中。与 `inject_style_if_missing` 不同，
+/// 此函数不会跳过已有 style 的元素，而是将默认样式中缺失的 CSS 属性
+/// 追加到已有 style 的末尾，确保 Tiptap 生成的 text-align 等样式不丢失
+/// margin、line-height 等基础排版属性。
+fn merge_style_defaults(html: &str, tag: &str, defaults: &str) -> String {
+    use std::fmt::Write;
+    let mut result = String::with_capacity(html.len() + 256);
+    let tag_lower = tag.to_lowercase();
+    let mut pos = 0;
+
+    // 解析默认样式为 (property, value) 列表
+    let default_props: Vec<(&str, &str)> = defaults
+        .split(';')
+        .filter_map(|decl| {
+            let decl = decl.trim();
+            if decl.is_empty() { return None; }
+            let (prop, val) = decl.split_once(':')?;
+            Some((prop.trim(), val.trim()))
+        })
+        .collect();
+
+    while let Some(offset) = rest_lower(html, pos).find(&tag_lower) {
+        let abs_pos = pos + offset;
+        result.push_str(&html[pos..abs_pos]);
+
+        let tag_content_start = abs_pos + tag.len();
+        if let Some(gt_offset) = html[tag_content_start..].find('>') {
+            let tag_end = tag_content_start + gt_offset;
+            let tag_content = &html[tag_content_start..tag_end];
+
+            if tag_content.to_lowercase().contains("style=") {
+                // 已有 style：提取现有值，追加缺失的默认属性
+                let style_start = tag_content.to_lowercase().find("style=").unwrap();
+                let after_style = &tag_content[style_start + 6..];
+                let quote = after_style.chars().next().unwrap_or('"');
+                let after_quote = &after_style[1..];
+                if let Some(style_end) = after_quote.find(quote) {
+                    let existing_style = &after_quote[..style_end];
+                    let before_style = &tag_content[..style_start];
+                    let after_close = &after_quote[style_end + 1..];
+
+                    // 检查哪些默认属性在现有 style 中缺失
+                    let mut missing: Vec<String> = Vec::new();
+                    for (prop, val) in &default_props {
+                        let prop_lower = prop.to_lowercase();
+                        let already_has = existing_style.split(';').any(|d| {
+                            d.trim().starts_with(&*prop_lower)
+                        });
+                        if !already_has {
+                            missing.push(format!("{prop}:{val}"));
+                        }
+                    }
+
+                    if missing.is_empty() {
+                        // 没有缺失属性，保留原样
+                        result.push_str(&html[abs_pos..=tag_end]);
+                    } else {
+                        // 追加缺失属性
+                        result.push_str(tag);
+                        result.push_str(before_style);
+                        let _ = write!(result, "style=\"{existing_style}");
+                        if !existing_style.trim().ends_with(';') {
+                            result.push(';');
+                        }
+                        for m in &missing {
+                            let _ = write!(result, "{m};");
+                        }
+                        result.push(quote);
+                        result.push_str(after_close);
+                    }
+                } else {
+                    result.push_str(&html[abs_pos..=tag_end]);
+                }
+            } else {
+                // 没有 style 属性，直接注入全部默认样式
+                result.push_str(tag);
+                let _ = write!(result, " style=\"{defaults}\"");
+                result.push_str(&html[tag_content_start..=tag_end]);
+            }
+            pos = tag_end + 1;
+        } else {
             result.push_str(&html[abs_pos..]);
             pos = html.len();
             break;

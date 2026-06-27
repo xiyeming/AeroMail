@@ -71,7 +71,21 @@ const srcdoc = computed(() => {
     .email-wrapper { margin: 0 auto; }
   </style>
 </head>
-<body><div class="email-wrapper">${props.html}</div></body>
+<body><div class="email-wrapper">${props.html}</div>
+<script>
+  document.addEventListener('click', function(e) {
+    var a = e.target.closest && e.target.closest('a');
+    if (!a) return;
+    var href = a.getAttribute('href');
+    if (!href) return;
+    if (/^https?:\/\//i.test(href) || /^mailto:/i.test(href)) {
+      e.preventDefault();
+      e.stopPropagation();
+      window.parent.postMessage({ type: 'aeromail:link-click', url: href }, '*');
+    }
+  });
+</script>
+</body>
 </html>`;
 });
 
@@ -376,15 +390,23 @@ watchEffect(() => {
   }
 });
 
+function handleWindowMessage(event: MessageEvent) {
+  if (event.data?.type === 'aeromail:link-click' && event.data.url) {
+    emit('link-click', event.data.url);
+  }
+}
+
 onMounted(() => {
   ensureViolationListener();
   adjustHeight();
+  window.addEventListener('message', handleWindowMessage);
 });
 
 onUnmounted(() => {
   disconnectObserver();
   detachViolationListener();
   detachLinkClickListener();
+  window.removeEventListener('message', handleWindowMessage);
 });
 
 defineExpose({ iframeRef });
@@ -395,7 +417,7 @@ defineExpose({ iframeRef });
     ref="iframeRef"
     :class="className"
     :srcdoc="srcdoc"
-    sandbox="allow-same-origin"
+    sandbox="allow-same-origin allow-scripts"
     style="width: 100%; border: none; min-height: 100px"
     title="Email content"
     @load="adjustHeight"

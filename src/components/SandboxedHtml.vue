@@ -84,7 +84,7 @@ const srcdoc = computed(() => {
       window.parent.postMessage({ type: 'aeromail:link-click', url: href }, '*');
     }
   });
-</script>
+<\/script>
 </body>
 </html>`;
 });

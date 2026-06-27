@@ -454,10 +454,12 @@ const processedBodyHtml = computed(() => {
   });
 });
 
-const allowedDomains = computed(() => [
-  ...trustedDomains.value,
-  ...temporarilyAllowedDomains.value,
-]);
+const allowedDomains = computed(() => {
+  // 只传递当前邮件中出现的已授权域名，而非所有历史授权域名
+  const currentDomains = new Set(remoteDomains.value);
+  const relevant = trustedDomains.value.filter((d) => currentDomains.has(d) || d === '*');
+  return [...relevant, ...temporarilyAllowedDomains.value];
+});
 
 const untrustedDomains = computed(() =>
   remoteDomains.value.filter(

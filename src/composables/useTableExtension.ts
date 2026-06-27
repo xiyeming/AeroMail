@@ -129,9 +129,10 @@ export const AlignedTable = Table.extend({
     };
   },
 
-  addNodeView() {
-    return ({ node, HTMLAttributes }: { node: Node; HTMLAttributes: Record<string, unknown> }) => {
-      return new AlignedTableView(node, this.options.cellMinWidth ?? 25, null, HTMLAttributes);
+  addOptions() {
+    return {
+      ...this.parent?.(),
+      View: AlignedTableView,
     };
   },
 

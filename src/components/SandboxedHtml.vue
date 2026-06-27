@@ -68,7 +68,7 @@ const srcdoc = computed(() => {
     body { margin: 0; padding: 0; }
     img { max-width: 100%; height: auto; }
     /* 居中邮件内容 */
-    .email-wrapper { margin: 0 auto; }
+    .email-wrapper { margin: 0 auto; max-width: 100%; box-sizing: border-box; }
   </style>
 </head>
 <body><div class="email-wrapper">${props.html}</div>

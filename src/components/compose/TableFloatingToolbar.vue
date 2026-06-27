@@ -123,24 +123,60 @@ function setCellBgColor(color: string) {
   props.editor.chain().focus().setCellAttribute('style', `background-color: ${color}`).run();
 }
 
-function setTableAlign(align: 'left' | 'center' | 'right') {
+const currentTableAlign = ref<'left' | 'center' | 'right'>('left');
+
+function detectTableAlign() {
   const { state } = props.editor;
   const { selection } = state;
-  // Find the table node
-  let tableNode = null;
-  let tablePos = -1;
-  state.doc.nodesBetween(selection.from, selection.to, (node, pos) => {
-    if (node.type.name === 'table' && !tableNode) {
-      tableNode = node;
-      tablePos = pos;
-    }
+  let foundTable = false;
+  state.doc.nodesBetween(selection.from, selection.to, (node) => {
+    if (node.type.name === 'table') foundTable = true;
   });
-  if (tableNode && tablePos >= 0) {
-    const tr = state.tr.setNodeMarkup(tablePos, undefined, {
-      ...tableNode.attrs,
-      style: `margin-${align === 'center' ? 'left' : align}: ${align === 'center' ? 'auto' : align === 'right' ? '0' : '0'};${align === 'center' ? 'margin-right:auto;' : ''}`,
-    });
-    props.editor.view.dispatch(tr);
+  if (!foundTable) return;
+  // 检查 tableWrapper 的 margin 来判断当前对齐
+  const tableEl = props.editor.view.domAtPos(selection.from);
+  let el = tableEl.node as HTMLElement;
+  if (el.nodeType === 3) el = el.parentElement!;
+  const wrapper = el.closest?.('.tableWrapper') || el.closest?.('table')?.parentElement;
+  if (wrapper) {
+    const style = wrapper.getAttribute('style') || '';
+    if (style.includes('margin-left:auto') && style.includes('margin-right:auto')) {
+      currentTableAlign.value = 'center';
+    } else if (style.includes('margin-left:auto')) {
+      currentTableAlign.value = 'right';
+    } else {
+      currentTableAlign.value = 'left';
+    }
+  }
+}
+
+function setTableAlign(align: 'left' | 'center' | 'right') {
+  currentTableAlign.value = align;
+  const { state } = props.editor;
+  const { from } = state.selection;
+  // 找到 tableWrapper DOM 元素并修改其 margin
+  try {
+    const resolved = props.editor.view.domAtPos(from);
+    let el = resolved.node as HTMLElement;
+    if (el.nodeType === 3) el = el.parentElement!;
+    const wrapper = el.closest?.('.tableWrapper') || el.closest?.('table')?.parentElement;
+    if (wrapper) {
+      let marginStyle = '';
+      switch (align) {
+        case 'left':
+          marginStyle = 'margin:0.5em 0;margin-right:auto;';
+          break;
+        case 'center':
+          marginStyle = 'margin:0.5em auto;';
+          break;
+        case 'right':
+          marginStyle = 'margin:0.5em 0;margin-left:auto;';
+          break;
+      }
+      wrapper.setAttribute('style', marginStyle);
+    }
+  } catch {
+    // fallback: 忽略
   }
 }
 
@@ -149,8 +185,9 @@ function setCellTextAlign(align: 'left' | 'center' | 'right') {
 }
 
 onMounted(() => {
-  props.editor.on('selectionUpdate', checkTableSelection);
+  props.editor.on('selectionUpdate', () => { checkTableSelection(); detectTableAlign(); });
   props.editor.on('transaction', checkTableSelection);
+  detectTableAlign();
 });
 
 onUnmounted(() => {
@@ -158,8 +195,8 @@ onUnmounted(() => {
   props.editor.off('transaction', checkTableSelection);
 });
 
-function btnClass() {
-  return 'flex h-7 w-7 items-center justify-center rounded text-secondary transition-colors hover:bg-raised hover:text-primary disabled:opacity-40';
+function btnClass(active = false) {
+  return `flex h-7 w-7 items-center justify-center rounded transition-colors hover:bg-raised hover:text-primary disabled:opacity-40 ${active ? 'bg-accent/20 text-accent' : 'text-secondary'}`;
 }
 </script>
 
@@ -252,14 +289,30 @@ function btnClass() {
         <div class="mx-0.5 h-4 w-px bg-border" />
 
         <!-- Cell text alignment -->
-        <button type="button" :class="btnClass()" :title="t('table.alignLeft')" @click="setCellTextAlign('left')">
+        <div class="mx-0.5 h-4 w-px bg-border" />
+
+        <!-- 表格位置 -->
+        <button type="button" :class="btnClass(currentTableAlign === 'left')" :title="t('table.tablePosition') + ': ' + t('table.alignLeft')" @click="setTableAlign('left')">
           <AlignLeft class="h-3.5 w-3.5" />
         </button>
-        <button type="button" :class="btnClass()" :title="t('table.alignCenter')" @click="setCellTextAlign('center')">
+        <button type="button" :class="btnClass(currentTableAlign === 'center')" :title="t('table.tablePosition') + ': ' + t('table.alignCenter')" @click="setTableAlign('center')">
           <AlignCenter class="h-3.5 w-3.5" />
         </button>
-        <button type="button" :class="btnClass()" :title="t('table.alignRight')" @click="setCellTextAlign('right')">
+        <button type="button" :class="btnClass(currentTableAlign === 'right')" :title="t('table.tablePosition') + ': ' + t('table.alignRight')" @click="setTableAlign('right')">
           <AlignRight class="h-3.5 w-3.5" />
+        </button>
+
+        <div class="mx-0.5 h-4 w-px bg-border" />
+
+        <!-- 单元格文字对齐 -->
+        <button type="button" :class="btnClass()" :title="t('table.cellTextAlign') + ': ' + t('table.alignLeft')" @click="setCellTextAlign('left')">
+          <AlignLeft class="h-3 w-3" />
+        </button>
+        <button type="button" :class="btnClass()" :title="t('table.cellTextAlign') + ': ' + t('table.alignCenter')" @click="setCellTextAlign('center')">
+          <AlignCenter class="h-3 w-3" />
+        </button>
+        <button type="button" :class="btnClass()" :title="t('table.cellTextAlign') + ': ' + t('table.alignRight')" @click="setCellTextAlign('right')">
+          <AlignRight class="h-3 w-3" />
         </button>
       </div>
     </Transition>

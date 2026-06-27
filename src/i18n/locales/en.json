@@ -174,7 +174,9 @@
     "alignLeft": "Align left",
     "alignCenter": "Align center",
     "alignRight": "Align right",
-    "tableAlign": "Table alignment"
+    "tableAlign": "Table alignment",
+    "tablePosition": "Table position",
+    "cellTextAlign": "Text align"
   },
   "account": {
     "addAccount": "Add account",

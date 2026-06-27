@@ -200,7 +200,7 @@ defineExpose({ insertHtml });
   border-collapse: collapse;
   table-layout: fixed;
   width: fit-content;
-  margin: 0.5em 0;
+  margin: 0;
   min-width: 200px;
 }
 
@@ -223,16 +223,56 @@ defineExpose({ insertHtml });
 :deep(.ProseMirror .column-resize-handle) {
   background-color: var(--accent);
   width: 3px;
-  opacity: 0.6;
+  opacity: 0.5;
   cursor: col-resize;
+  position: relative;
 }
 
 :deep(.ProseMirror .column-resize-handle:hover) {
   opacity: 1;
+  background-color: var(--accent-hover, var(--accent));
+  width: 4px;
+  box-shadow: 0 0 6px rgba(59, 130, 246, 0.4);
 }
 
 :deep(.ProseMirror .resize-cursor) {
   cursor: col-resize;
+}
+
+/* 拖拽进行中：高亮整个表格边框和当前列 */
+:deep(.ProseMirror table.column-resize-active) {
+  box-shadow: 0 0 0 2px var(--accent);
+  border-radius: 4px;
+}
+
+:deep(.ProseMirror table.column-resize-active col) {
+  transition: none;
+}
+
+:deep(.ProseMirror table.column-resize-active td),
+:deep(.ProseMirror table.column-resize-active th) {
+  transition: background-color 0.15s ease;
+}
+
+:deep(.ProseMirror table.column-resize-active .column-resize-handle) {
+  opacity: 1;
+  background-color: var(--accent);
+  width: 4px;
+  box-shadow: 0 0 8px rgba(59, 130, 246, 0.5);
+}
+
+/* 表格整体样式增强 */
+:deep(.ProseMirror table:hover) {
+  outline: 1px solid var(--border);
+  outline-offset: 2px;
+  border-radius: 2px;
+}
+
+/* tableWrapper 定位支持 */
+:deep(.ProseMirror .tableWrapper) {
+  overflow-x: auto;
+  margin: 0.5em 0;
+  transition: margin 0.2s ease;
 }
 
 :deep(.ProseMirror a) {

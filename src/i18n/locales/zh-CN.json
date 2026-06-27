@@ -174,7 +174,9 @@
     "alignLeft": "左对齐",
     "alignCenter": "居中",
     "alignRight": "右对齐",
-    "tableAlign": "表格对齐"
+    "tableAlign": "表格对齐",
+    "tablePosition": "表格位置",
+    "cellTextAlign": "文字对齐"
   },
   "account": {
     "addAccount": "添加账户",

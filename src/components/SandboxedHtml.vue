@@ -296,8 +296,6 @@ function attachLinkClickListener(): boolean {
   if (!doc) return false;
   detachLinkClickListener();
   linkClickHandler = (e: MouseEvent) => {
-    // 仅在按住 Ctrl (Windows/Linux) 或 Cmd (macOS) 时打开链接
-    if (!e.ctrlKey && !e.metaKey) return;
     const target = e.target as HTMLElement;
     // 向上查找最近的 <a> 标签（即使 a 有 pointer-events:none，子元素仍可点击）
     const anchor = target.closest('a');

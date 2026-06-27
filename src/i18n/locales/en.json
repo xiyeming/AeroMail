@@ -169,7 +169,12 @@
     "mergeCells": "Merge cells",
     "splitCell": "Split cell",
     "toggleHeader": "Toggle header row",
-    "deleteTable": "Delete table"
+    "deleteTable": "Delete table",
+    "cellBgColor": "Cell background",
+    "alignLeft": "Align left",
+    "alignCenter": "Align center",
+    "alignRight": "Align right",
+    "tableAlign": "Table alignment"
   },
   "account": {
     "addAccount": "Add account",

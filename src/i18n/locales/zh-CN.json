@@ -169,7 +169,12 @@
     "mergeCells": "合并单元格",
     "splitCell": "拆分单元格",
     "toggleHeader": "切换表头行",
-    "deleteTable": "删除表格"
+    "deleteTable": "删除表格",
+    "cellBgColor": "单元格背景色",
+    "alignLeft": "左对齐",
+    "alignCenter": "居中",
+    "alignRight": "右对齐",
+    "tableAlign": "表格对齐"
   },
   "account": {
     "addAccount": "添加账户",

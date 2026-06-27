@@ -64,19 +64,103 @@ fn content_type(mime: &str) -> ContentType {
 
 /// Wraps HTML content in a full document with inline styles for email clients.
 /// Email clients (Gmail, Outlook, etc.) strip `<style>` blocks and `<head>`,
-/// so all styling must be inline.
+/// so all styling must be inline. A minimal `<style>` block is included as a
+/// progressive-enhancement fallback for clients that preserve it (Apple Mail,
+/// Thunderbird), while inline attributes ensure baseline rendering everywhere.
 fn wrap_html_for_email(html: &str) -> String {
     format!(
-        "<!DOCTYPE html>\n<html>\n<head><meta charset=\"utf-8\"><meta name=\"viewport\" content=\"width=device-width,initial-scale=1\"></head>\n<body style=\"margin:0;padding:0;font-family:Arial,Helvetica,sans-serif;font-size:14px;color:#333;line-height:1.6;\">\n{html}\n</body>\n</html>"
+        r#"<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <style>
+    /* Progressive enhancement: clients that keep <style> get better defaults */
+    body {{ margin:0; padding:0; font-family:Arial,Helvetica,sans-serif; font-size:14px; color:#333; line-height:1.6; }}
+    a {{ color:#2563eb; text-decoration:underline; }}
+    img {{ max-width:100%; height:auto; }}
+    table {{ border-collapse:collapse; }}
+  </style>
+</head>
+<body style="margin:0;padding:0;font-family:Arial,Helvetica,sans-serif;font-size:14px;color:#333;line-height:1.6;">
+{html}
+</body>
+</html>"#
     )
 }
 
 /// 为 Tiptap 生成的语义 HTML 注入内联样式，确保邮件客户端正确显示。
 /// 邮件客户端（Gmail、Outlook 等）会剥离 `<style>` 块，所有样式必须内联。
+/// Tiptap 的 TextStyle 扩展已为字体、字号、颜色生成 inline style，
+/// 此函数补充结构元素（段落、列表、标题、引用、链接等）的默认样式。
 fn inject_inline_styles(html: &str) -> String {
     let mut result = html.to_string();
 
-    // 表格：添加默认边框和内边距（仅当元素没有 style 属性时）
+    // --- 结构元素默认样式 ---
+
+    // 段落：间距
+    result = inject_style_if_missing(
+        &result,
+        "<p",
+        "margin:0.5em 0;line-height:1.6;",
+    );
+
+    // 标题
+    result = inject_style_if_missing(
+        &result,
+        "<h1",
+        "margin:0.67em 0;font-size:2em;font-weight:700;line-height:1.3;",
+    );
+    result = inject_style_if_missing(
+        &result,
+        "<h2",
+        "margin:0.5em 0;font-size:1.5em;font-weight:700;line-height:1.3;",
+    );
+    result = inject_style_if_missing(
+        &result,
+        "<h3",
+        "margin:0.5em 0;font-size:1.17em;font-weight:700;line-height:1.3;",
+    );
+
+    // 列表
+    result = inject_style_if_missing(
+        &result,
+        "<ul",
+        "margin:0.5em 0;padding-left:1.5em;",
+    );
+    result = inject_style_if_missing(
+        &result,
+        "<ol",
+        "margin:0.5em 0;padding-left:1.5em;",
+    );
+    result = inject_style_if_missing(
+        &result,
+        "<li",
+        "margin:0.25em 0;",
+    );
+
+    // 引用块
+    result = inject_style_if_missing(
+        &result,
+        "<blockquote",
+        "margin:0.5em 0;padding-left:1em;border-left:3px solid #ccc;color:#666;",
+    );
+
+    // 链接
+    result = inject_style_if_missing(
+        &result,
+        "<a",
+        "color:#2563eb;text-decoration:underline;",
+    );
+
+    // 水平线
+    result = inject_style_if_missing(
+        &result,
+        "<hr",
+        "border:none;border-top:1px solid #ccc;margin:1em 0;",
+    );
+
+    // --- 表格样式 ---
     result = inject_style_if_missing(
         &result,
         "<table",
@@ -93,7 +177,7 @@ fn inject_inline_styles(html: &str) -> String {
         "border:1px solid #ccc;padding:6px 8px;text-align:left;vertical-align:top;",
     );
 
-    // 代码块：添加等宽字体和背景
+    // --- 代码样式 ---
     result = inject_style_if_missing(
         &result,
         "<pre",

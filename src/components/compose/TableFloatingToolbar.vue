@@ -12,6 +12,10 @@ import {
   ArrowDown,
   ArrowLeft,
   ArrowRight,
+  AlignLeft,
+  AlignCenter,
+  AlignRight,
+  PaintBucket,
 } from 'lucide-vue-next';
 
 const props = defineProps<{
@@ -98,6 +102,52 @@ function toggleHeaderRow() {
   props.editor.chain().focus().toggleHeaderRow().run();
 }
 
+const cellBgColor = ref('#ffffff');
+const showCellColorPicker = ref(false);
+
+const cellColors = [
+  '#ffffff', '#fef3c7', '#fde68a', '#d1fae5', '#a7f3d0',
+  '#bfdbfe', '#ddd6fe', '#fecaca', '#fbcfe8', '#e5e7eb',
+  '#fef9c3', '#fed7aa', '#fde047', '#bbf7d0', '#99f6e4',
+  '#bae6fd', '#c7d2fe', '#fca5a5', '#f9a8d4', '#d4d4d4',
+];
+
+function setCellBgColor(color: string) {
+  cellBgColor.value = color;
+  showCellColorPicker.value = false;
+  // Apply background to the currently selected cells
+  const { state } = props.editor;
+  const { selection } = state;
+  const cellSelection = selection;
+  // Use setCellAttribute to set background-color
+  props.editor.chain().focus().setCellAttribute('style', `background-color: ${color}`).run();
+}
+
+function setTableAlign(align: 'left' | 'center' | 'right') {
+  const { state } = props.editor;
+  const { selection } = state;
+  // Find the table node
+  let tableNode = null;
+  let tablePos = -1;
+  state.doc.nodesBetween(selection.from, selection.to, (node, pos) => {
+    if (node.type.name === 'table' && !tableNode) {
+      tableNode = node;
+      tablePos = pos;
+    }
+  });
+  if (tableNode && tablePos >= 0) {
+    const tr = state.tr.setNodeMarkup(tablePos, undefined, {
+      ...tableNode.attrs,
+      style: `margin-${align === 'center' ? 'left' : align}: ${align === 'center' ? 'auto' : align === 'right' ? '0' : '0'};${align === 'center' ? 'margin-right:auto;' : ''}`,
+    });
+    props.editor.view.dispatch(tr);
+  }
+}
+
+function setCellTextAlign(align: 'left' | 'center' | 'right') {
+  props.editor.chain().focus().setCellAttribute('style', `text-align: ${align}`).run();
+}
+
 onMounted(() => {
   props.editor.on('selectionUpdate', checkTableSelection);
   props.editor.on('transaction', checkTableSelection);
@@ -168,6 +218,48 @@ function btnClass() {
         <!-- Delete table -->
         <button type="button" :class="btnClass()" :title="t('table.deleteTable')" @click="deleteTable">
           <Trash2 class="h-3.5 w-3.5 text-danger" />
+        </button>
+
+        <div class="mx-0.5 h-4 w-px bg-border" />
+
+        <!-- Cell background color -->
+        <div class="relative">
+          <button
+            type="button"
+            :class="btnClass()"
+            :title="t('table.cellBgColor')"
+            @click="showCellColorPicker = !showCellColorPicker"
+          >
+            <PaintBucket class="h-3.5 w-3.5" />
+          </button>
+          <div
+            v-if="showCellColorPicker"
+            class="absolute top-full left-1/2 z-50 mt-1 -translate-x-1/2 rounded-lg border border-border bg-elevated p-2 shadow-lg"
+          >
+            <div class="grid grid-cols-5 gap-1">
+              <button
+                v-for="color in cellColors"
+                :key="color"
+                type="button"
+                class="h-5 w-5 rounded border border-border transition-transform hover:scale-110"
+                :style="{ backgroundColor: color }"
+                @click="setCellBgColor(color)"
+              />
+            </div>
+          </div>
+        </div>
+
+        <div class="mx-0.5 h-4 w-px bg-border" />
+
+        <!-- Cell text alignment -->
+        <button type="button" :class="btnClass()" :title="t('table.alignLeft')" @click="setCellTextAlign('left')">
+          <AlignLeft class="h-3.5 w-3.5" />
+        </button>
+        <button type="button" :class="btnClass()" :title="t('table.alignCenter')" @click="setCellTextAlign('center')">
+          <AlignCenter class="h-3.5 w-3.5" />
+        </button>
+        <button type="button" :class="btnClass()" :title="t('table.alignRight')" @click="setCellTextAlign('right')">
+          <AlignRight class="h-3.5 w-3.5" />
         </button>
       </div>
     </Transition>

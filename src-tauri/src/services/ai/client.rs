@@ -91,7 +91,9 @@ pub async fn chat_completion(
     max_tokens: u32,
     tools: Option<&[serde_json::Value]>,
 ) -> Result<CompletionResult, AeroError> {
-    let api_key = String::from_utf8(provider.api_key_encrypted.clone())
+    let api_key_bytes = crate::services::crypto::decrypt_password(&provider.api_key_encrypted)
+        .map_err(|e| AeroError::AiApiError(format!("failed to decrypt api key: {e}")))?;
+    let api_key = String::from_utf8(api_key_bytes)
         .map_err(|e| AeroError::AiApiError(format!("invalid api key: {e}")))?;
     let base_url = provider
         .base_url

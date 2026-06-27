@@ -420,7 +420,7 @@ pub async fn find_drafts_folder(session: &mut ImapSession) -> Result<String, Aer
         "Draft",
         "[Gmail]/Drafts",
         "草稿箱",
-        "\\u8349\\u7a3f",
+        "草稿",
     ];
     for candidate in &candidates {
         if let Some(folder) = mailboxes

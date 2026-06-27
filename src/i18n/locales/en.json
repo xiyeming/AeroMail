@@ -436,7 +436,6 @@
     "OAUTH2_CONFIG_INCOMPLETE": "OAuth2 configuration is incomplete",
     "MAIL_NOT_FOUND": "Message not found: {0}",
     "IMAP_AUTH_FAILED": "Sign-in failed for {0}. Check your email address and password or app password.",
-    "IMAP_CONNECTION_TIMEOUT": "Could not reach the incoming mail server. Check your network or server address.",
     "INVALID_ACCOUNT_CONFIG": "Account settings are incomplete or incorrect.",
     "DATABASE_ERROR": "Database error",
     "INTERNAL_ERROR": "Internal error: {0}",
@@ -450,7 +449,12 @@
     "AI_TOOL_ERROR": "Smart assistant tool failed: {0}",
     "TRANSLATION_PROVIDER_NOT_FOUND": "Translation provider not found",
     "TRANSLATION_API_ERROR": "Translation failed: {0}",
-    "TRANSLATION_NO_TEXT": "No text to translate"
+    "TRANSLATION_NO_TEXT": "No text to translate",
+    "FOLDER_NOT_FOUND": "Folder not found: {0}",
+    "IMAP_CONNECTION_FAILED": "Could not reach the incoming mail server. Check your network or server address.",
+    "SEARCH_INDEX_ERROR": "Search index error: {0}",
+    "SEARCH_QUERY_ERROR": "Search query error: {0}",
+    "SYNC_ERROR": "Sync error: {0}"
   },
   "folders": {
     "inbox": "Inbox",

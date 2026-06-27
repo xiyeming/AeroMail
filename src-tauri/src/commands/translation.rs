@@ -48,9 +48,18 @@ pub async fn list_translation_providers(
 #[tauri::command]
 #[instrument(skip(state, provider), fields(provider_id = %match &provider { TranslationProvider::Traditional { id, .. } | TranslationProvider::Ai { id, .. } => id.as_str() }), err(Debug))]
 pub async fn upsert_translation_provider(
-    provider: TranslationProvider,
+    mut provider: TranslationProvider,
     state: State<'_, AppState>,
 ) -> Result<String, ErrorPayload> {
+    // Encrypt the API key before persisting (skip if already encrypted).
+    if let TranslationProvider::Traditional {
+        ref mut api_key_encrypted,
+        ..
+    } = provider
+    {
+        *api_key_encrypted = crate::services::crypto::encrypt_password(api_key_encrypted)
+            .map_err(|e| e.to_payload())?;
+    }
     let id = match &provider {
         TranslationProvider::Traditional { id, .. } | TranslationProvider::Ai { id, .. } => {
             id.clone()

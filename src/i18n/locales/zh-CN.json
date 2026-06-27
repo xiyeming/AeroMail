@@ -436,7 +436,6 @@
     "OAUTH2_CONFIG_INCOMPLETE": "OAuth2 配置不完整",
     "MAIL_NOT_FOUND": "邮件不存在：{0}",
     "IMAP_AUTH_FAILED": "{0} 登录失败。请检查邮箱地址和密码或应用专用密码。",
-    "IMAP_CONNECTION_TIMEOUT": "无法连接到收件服务器。请检查网络或服务器地址。",
     "INVALID_ACCOUNT_CONFIG": "账户设置不完整或无效。",
     "DATABASE_ERROR": "数据库错误",
     "INTERNAL_ERROR": "内部错误：{0}",
@@ -450,7 +449,12 @@
     "AI_TOOL_ERROR": "智能助手工具调用失败：{0}",
     "TRANSLATION_PROVIDER_NOT_FOUND": "翻译提供商不存在",
     "TRANSLATION_API_ERROR": "翻译失败：{0}",
-    "TRANSLATION_NO_TEXT": "没有可翻译的文本"
+    "TRANSLATION_NO_TEXT": "没有可翻译的文本",
+    "FOLDER_NOT_FOUND": "文件夹不存在：{0}",
+    "IMAP_CONNECTION_FAILED": "无法连接到收件服务器。请检查网络或服务器地址。",
+    "SEARCH_INDEX_ERROR": "搜索索引错误：{0}",
+    "SEARCH_QUERY_ERROR": "搜索查询错误：{0}",
+    "SYNC_ERROR": "同步错误：{0}"
   },
   "folders": {
     "inbox": "收件箱",

@@ -117,15 +117,37 @@ fn auth_mechanisms(config: &AccountConfig) -> Vec<Mechanism> {
     }
 }
 
+/// Unfolds RFC 2822 folded headers by joining continuation lines (lines
+/// starting with whitespace) with the preceding line.
+fn unfold_headers(raw: &str) -> String {
+    let mut result = String::with_capacity(raw.len());
+    for line in raw.split("\r\n") {
+        if line.starts_with(' ') || line.starts_with('\t') {
+            // Continuation line - append trimmed content to previous header.
+            result.push(' ');
+            result.push_str(line.trim_start());
+        } else {
+            if !result.is_empty() {
+                result.push_str("\r\n");
+            }
+            result.push_str(line);
+        }
+    }
+    result
+}
+
 /// Extracts sender and recipients from MIME headers to build an SMTP envelope.
 fn parse_envelope_from_mime(message_bytes: &[u8]) -> Result<Envelope, AeroError> {
     let text = std::str::from_utf8(message_bytes)
         .map_err(|e| AeroError::MailBuilderFailed(format!("invalid utf8: {e}")))?;
 
+    // Unfold folded headers before parsing (RFC 2822 §2.2.3).
+    let unfolded = unfold_headers(text);
+
     let mut from_addr: Option<Address> = None;
     let mut to_addrs: Vec<Address> = Vec::new();
 
-    for line in text.lines() {
+    for line in unfolded.lines() {
         // Headers and body are separated by a blank line
         if line.is_empty() {
             break;

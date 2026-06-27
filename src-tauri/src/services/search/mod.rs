@@ -136,26 +136,65 @@ impl SearchService {
         Ok(())
     }
 
-    /// Indexes pending mails (not yet indexed).
+    /// Indexes pending mails (not yet indexed) using a single shared writer
+    /// and one commit at the end, avoiding the overhead of creating a 50 MB
+    /// writer per mail.
     ///
     /// # Errors
     ///
     /// Returns an error if indexing fails.
     pub fn index_pending_mails(&self) -> Result<u64, AeroError> {
         let mails = self.db.get_unindexed_mails()?;
+        if mails.is_empty() {
+            return Ok(0);
+        }
+
         let count = mails.len() as u64;
 
-        for mail in mails {
-            self.index_mail(
+        let mut writer: tantivy::IndexWriter = self
+            .index
+            .writer(50_000_000) // 50MB heap size
+            .map_err(|e| AeroError::SearchIndexError(e.to_string()))?;
+
+        let mut indexed_ids: Vec<String> = Vec::with_capacity(mails.len());
+
+        for mail in &mails {
+            // 删除旧文档
+            writer.delete_term(tantivy::Term::from_field_text(
+                self.mail_id_field,
                 &mail.id,
-                mail.subject.as_deref(),
-                mail.body_text.as_deref(),
-                mail.from_address.as_deref(),
-                mail.to_addresses.as_deref(),
-                mail.date,
-                &mail.account_id,
-                &mail.folder_id,
-            )?;
+            ));
+
+            let date = mail.date.map_or_else(
+                || tantivy::DateTime::from_timestamp_secs(0),
+                tantivy::DateTime::from_timestamp_secs,
+            );
+
+            let mut doc = tantivy::TantivyDocument::default();
+            doc.add_text(self.mail_id_field, &mail.id);
+            doc.add_text(self.subject_field, mail.subject.as_deref().unwrap_or(""));
+            doc.add_text(self.body_field, mail.body_text.as_deref().unwrap_or(""));
+            doc.add_text(self.from_field, mail.from_address.as_deref().unwrap_or(""));
+            doc.add_text(self.to_field, mail.to_addresses.as_deref().unwrap_or(""));
+            doc.add_date(self.date_field, date);
+            doc.add_text(self.account_id_field, &mail.account_id);
+            doc.add_text(self.folder_id_field, &mail.folder_id);
+
+            writer
+                .add_document(doc)
+                .map_err(|e| AeroError::SearchIndexError(e.to_string()))?;
+
+            indexed_ids.push(mail.id.clone());
+        }
+
+        // 一次提交所有文档
+        writer
+            .commit()
+            .map_err(|e| AeroError::SearchIndexError(e.to_string()))?;
+
+        // 批量更新数据库中的 indexed_at
+        for mail_id in &indexed_ids {
+            self.db.update_mail_indexed_at(mail_id)?;
         }
 
         Ok(count)

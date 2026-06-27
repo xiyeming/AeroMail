@@ -7,9 +7,10 @@
 )]
 
 use std::path::PathBuf;
-use std::sync::Mutex;
 
 use chrono::Utc;
+use std::sync::Mutex;
+
 use rusqlite::{Connection, params};
 use tauri::Manager;
 
@@ -19,8 +20,6 @@ use crate::error::AeroError;
 #[derive(Debug)]
 pub struct Database {
     path: PathBuf,
-    // Mutex<Connection> is acceptable for a desktop single-user app in phase 1.
-    // Replace with r2d2/deadpool pool in later phases if concurrent access grows.
     connection: Mutex<Connection>,
 }
 

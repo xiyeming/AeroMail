@@ -139,6 +139,13 @@ pub fn encrypt_password(plaintext: &[u8]) -> Result<Vec<u8>, AeroError> {
         return Ok(Vec::new());
     }
 
+    // Already encrypted (version byte matches) — return as-is to prevent
+    // double-encryption when the caller cannot distinguish plaintext from
+    // ciphertext.
+    if !plaintext.is_empty() && plaintext[0] == VERSION {
+        return Ok(plaintext.to_vec());
+    }
+
     let key = get_or_create_master_key()?;
     let cipher = Aes256Gcm::new_from_slice(&key)
         .map_err(|e| AeroError::Internal(format!("invalid cipher key: {e}")))?;

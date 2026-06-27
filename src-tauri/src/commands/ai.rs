@@ -36,6 +36,10 @@ pub async fn upsert_ai_provider(
     state: State<'_, AppState>,
 ) -> Result<String, ErrorPayload> {
     crate::services::ai::providers::apply_preset_defaults(&mut provider);
+    // Encrypt the API key before persisting (skip if already encrypted).
+    provider.api_key_encrypted =
+        crate::services::crypto::encrypt_password(&provider.api_key_encrypted)
+            .map_err(|e| e.to_payload())?;
     let db = &state.db;
     db.upsert_ai_provider(&provider)
         .map_err(|e| e.to_payload())?;

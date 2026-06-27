@@ -11,7 +11,7 @@ import Subscript from '@tiptap/extension-subscript';
 import Superscript from '@tiptap/extension-superscript';
 import Link from '@tiptap/extension-link';
 import Image from '@tiptap/extension-image';
-import { Table } from '@tiptap/extension-table';
+import { AlignedTable } from './useTableExtension';
 import TableRow from '@tiptap/extension-table-row';
 import TableHeader from '@tiptap/extension-table-header';
 import TableCell from '@tiptap/extension-table-cell';
@@ -44,11 +44,8 @@ export function useTiptap(options: UseTiptapOptions) {
       Superscript,
       Link.configure({ openOnClick: false }),
       Image.configure({ allowBase64: true }),
-      Table.configure({
+      AlignedTable.configure({
         resizable: true,
-        HTMLAttributes: {
-          class: 'table-wrapper',
-        },
       }),
       TableRow,
       TableHeader,

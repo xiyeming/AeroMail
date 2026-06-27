@@ -126,79 +126,19 @@ function setCellBgColor(color: string) {
 const currentTableAlign = ref<'left' | 'center' | 'right'>('left');
 
 function detectTableAlign() {
-  const wrapper = findTableWrapper();
-  if (!wrapper) return;
-  const style = wrapper.getAttribute('style') || '';
-  if (style.includes('margin-left:auto') && style.includes('margin-right:auto')) {
-    currentTableAlign.value = 'center';
-  } else if (style.includes('margin-left:auto')) {
-    currentTableAlign.value = 'right';
-  } else {
-    currentTableAlign.value = 'left';
-  }
-}
-
-/// 查找当前光标所在的 tableWrapper DOM 元素
-function findTableWrapper(): HTMLElement | null {
-  const editorDom = props.editor.view.dom;
-  // 方法1：通过 ProseMirror 节点视图查找
   const { state } = props.editor;
-  const { from } = state.selection;
-  let tableNode: HTMLElement | null = null;
-
-  // 从 domAtPos 向上遍历找 table 元素
-  try {
-    const resolved = props.editor.view.domAtPos(from);
-    let el = resolved.node as HTMLElement;
-    if (el.nodeType === 3) el = el.parentElement!;
-    // 向上遍历找到 table 或 .tableWrapper
-    let current: HTMLElement | null = el;
-    while (current && current !== editorDom) {
-      if (current.tagName === 'TABLE') {
-        tableNode = current;
-        break;
-      }
-      if (current.classList?.contains('tableWrapper')) {
-        return current;
-      }
-      current = current.parentElement;
+  const { selection } = state;
+  state.doc.nodesBetween(selection.from, selection.to, (node) => {
+    if (node.type.name === 'table') {
+      currentTableAlign.value = (node.attrs.align as string) || 'left';
     }
-  } catch {
-    // ignore
-  }
-
-  // 方法2：如果找到了 table，取其父元素作为 wrapper
-  if (tableNode?.parentElement) {
-    return tableNode.parentElement;
-  }
-
-  // 方法3：在编辑器 DOM 中搜索选中态的 table
-  const selectedTable = editorDom.querySelector('table');
-  if (selectedTable?.parentElement) {
-    return selectedTable.parentElement;
-  }
-
-  return null;
+  });
 }
 
 function setTableAlign(align: 'left' | 'center' | 'right') {
   currentTableAlign.value = align;
-  const wrapper = findTableWrapper();
-  if (!wrapper) return;
-
-  let marginStyle = '';
-  switch (align) {
-    case 'left':
-      marginStyle = 'margin:0.5em 0;margin-right:auto;display:block;';
-      break;
-    case 'center':
-      marginStyle = 'margin:0.5em auto;display:block;';
-      break;
-    case 'right':
-      marginStyle = 'margin:0.5em 0;margin-left:auto;display:block;';
-      break;
-  }
-  wrapper.setAttribute('style', marginStyle);
+  // 使用 AlignedTable 扩展的 setTableAlign 命令，将对齐存入文档模型
+  (props.editor.chain().focus() as any).setTableAlign(align).run();
 }
 
 function setCellTextAlign(align: 'left' | 'center' | 'right') {

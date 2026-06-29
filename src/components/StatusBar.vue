@@ -2,23 +2,34 @@
 import { computed } from 'vue';
 import { useI18n } from 'vue-i18n';
 import { RefreshCw } from 'lucide-vue-next';
-import { invoke } from '@tauri-apps/api/core';
 import { useStatusStore } from '@/stores/status';
 import { useAccountStore } from '@/stores/account';
 import { useToastStore } from '@/stores/toast';
+import { useTauriInvoke } from '@/composables/useTauriInvoke';
 
 const { t, locale } = useI18n();
 const statusStore = useStatusStore();
 const accountStore = useAccountStore();
 const toastStore = useToastStore();
+const { call: invokeCommand } = useTauriInvoke();
 
 const isSyncing = computed(() => statusStore.syncingAccounts > 0);
 
 async function handleRefresh() {
+  console.warn('[StatusBar] refresh clicked, isSyncing:', isSyncing.value);
   if (isSyncing.value) return;
 
   if (accountStore.accounts.length === 0) {
-    await accountStore.loadAccounts();
+    try {
+      await accountStore.loadAccounts();
+    } catch (e) {
+      console.error('[StatusBar] failed to load accounts:', e);
+      toastStore.add({
+        type: 'error',
+        message: e instanceof Error ? e.message : String(e),
+      });
+      return;
+    }
   }
 
   const accountId = accountStore.accounts[0]?.id;
@@ -28,9 +39,9 @@ async function handleRefresh() {
   }
 
   try {
-    await invoke('start_sync', { accountId });
+    await invokeCommand('start_sync', { accountId });
   } catch (e) {
-    console.error('Failed to start sync:', e);
+    console.error('[StatusBar] start_sync failed:', e);
     toastStore.add({
       type: 'error',
       message: e instanceof Error ? e.message : String(e),

@@ -92,6 +92,16 @@ AeroMail 支持 IMAP 收信/同步、SMTP 发信、本地 SQLite 缓存、Tantiv
 
 ## 快速开始
 
+### 下载安装包
+
+每次推送 `v*` 标签时，GitHub Actions 会自动构建并发布各平台安装包：
+
+- **Linux**：`.deb`、`.AppImage`、`.tar.gz`
+- **macOS**：`.dmg`（通用二进制）
+- **Windows**：`.msi`、`.exe`（NSIS 安装包）
+
+前往 [Releases](https://github.com/xiyeming/AeroMail/releases) 页面下载对应平台的安装包。
+
 ### 安装依赖
 
 ```bash

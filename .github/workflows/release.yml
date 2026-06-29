@@ -1,0 +1,100 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+# Allow creating releases and uploading assets.
+permissions:
+  contents: write
+
+jobs:
+  build:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - platform: ubuntu-22.04
+            target: x86_64-unknown-linux-gnu
+            args: '--target x86_64-unknown-linux-gnu'
+          - platform: macos-latest
+            target: universal-apple-darwin
+            args: '--target universal-apple-darwin'
+          - platform: windows-latest
+            target: x86_64-pc-windows-msvc
+            args: '--target x86_64-pc-windows-msvc'
+
+    runs-on: ${{ matrix.platform }}
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Install pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 9
+          run_install: false
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: pnpm
+
+      - name: Install frontend dependencies
+        run: pnpm install
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.target }}
+
+      - name: Install Linux dependencies
+        if: matrix.platform == 'ubuntu-22.04'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libgtk-3-dev libwebkit2gtk-4.1-dev librsvg2-dev
+
+      - name: Build and upload Tauri bundles
+        uses: tauri-apps/tauri-action@v0.5
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          tagName: ${{ github.ref_name }}
+          releaseName: 'AeroMail ${{ github.ref_name }}'
+          releaseBody: |
+            🎉 AeroMail ${{ github.ref_name }} is available!
+
+            | Platform | Bundles |
+            |----------|---------|
+            | Linux | `.deb`, `.AppImage`, `.tar.gz` |
+            | macOS | `.dmg` (universal) |
+            | Windows | `.msi`, `.exe` (NSIS installer) |
+
+            Download the asset for your platform below.
+          releaseDraft: false
+          prerelease: false
+          args: ${{ matrix.args }}
+
+      - name: Create Linux .tar.gz archive from AppImage
+        if: matrix.platform == 'ubuntu-22.04'
+        shell: bash
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAG_NAME: ${{ github.ref_name }}
+          TARGET: ${{ matrix.target }}
+        run: |
+          set -e
+          VERSION="${TAG_NAME#v}"
+          ARCH="amd64"
+          APPIMAGE_DIR="src-tauri/target/${TARGET}/release/bundle/appimage"
+          APPIMAGE_NAME="aeromail_${VERSION}_${ARCH}.AppImage"
+          ARCHIVE_NAME="aeromail-${TAG_NAME}-linux-x86_64.tar.gz"
+
+          if [ -f "${APPIMAGE_DIR}/${APPIMAGE_NAME}" ]; then
+            tar czf "${ARCHIVE_NAME}" -C "${APPIMAGE_DIR}" "${APPIMAGE_NAME}"
+            gh release upload "${TAG_NAME}" "${ARCHIVE_NAME}" --clobber
+          else
+            echo "AppImage not found at ${APPIMAGE_DIR}/${APPIMAGE_NAME}; skipping tar.gz"
+          fi

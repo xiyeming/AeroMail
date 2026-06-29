@@ -92,6 +92,16 @@ translation, system tray, minimize-to-tray, multi-language support, and more. It
 
 ## Quick Start
 
+### Download Installers
+
+On every `v*` tag push, GitHub Actions automatically builds and releases packages for all platforms:
+
+- **Linux**: `.deb`, `.AppImage`, `.tar.gz`
+- **macOS**: `.dmg` (universal binary)
+- **Windows**: `.msi`, `.exe` (NSIS installer)
+
+Go to the [Releases](https://github.com/xiyeming/AeroMail/releases) page to download the installer for your platform.
+
 ### Install Dependencies
 
 ```bash

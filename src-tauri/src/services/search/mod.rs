@@ -160,10 +160,7 @@ impl SearchService {
 
         for mail in &mails {
             // 删除旧文档
-            writer.delete_term(tantivy::Term::from_field_text(
-                self.mail_id_field,
-                &mail.id,
-            ));
+            writer.delete_term(tantivy::Term::from_field_text(self.mail_id_field, &mail.id));
 
             let date = mail.date.map_or_else(
                 || tantivy::DateTime::from_timestamp_secs(0),

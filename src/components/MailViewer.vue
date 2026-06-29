@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, computed, watch, watchEffect, nextTick, onMounted, onUnmounted } from 'vue';
+import { ref, computed, watch, nextTick, onMounted, onUnmounted } from 'vue';
 import { useRouter } from 'vue-router';
 import { useI18n } from 'vue-i18n';
 import {
@@ -469,18 +469,26 @@ const untrustedDomains = computed(() =>
 
 const showSecurityBanner = computed(() => untrustedDomains.value.length > 0);
 
+function resetSecurityDomainTracking() {
+  cspBlockedDomains.value = [];
+  domRemoteDomains.value = [];
+}
+
 function allowRemoteOnce() {
   temporarilyAllowedDomains.value = [...untrustedDomains.value];
+  resetSecurityDomainTracking();
 }
 
 function allowAllRemoteOnce() {
   temporarilyAllowedDomains.value = ['*'];
+  resetSecurityDomainTracking();
 }
 
 async function trustDomain(domain: string) {
   if (!trustedDomains.value.includes(domain)) {
     trustedDomains.value.push(domain);
     await settingsStore.set('trustedDomains', JSON.stringify(trustedDomains.value));
+    resetSecurityDomainTracking();
   }
 }
 
@@ -496,16 +504,16 @@ async function loadTrustedDomains() {
 }
 
 function handleSecurityViolation(violation: { domain: string; blockedUri: string }) {
-  console.log('[MailViewer] CSP violation:', violation);
   if (!cspBlockedDomains.value.includes(violation.domain)) {
     cspBlockedDomains.value.push(violation.domain);
   }
 }
 
 function handleRemoteDomains(domains: string[]) {
-  console.log('[MailViewer] remote domains from iframe DOM:', domains);
-  const merged = new Set([...domRemoteDomains.value, ...domains]);
-  domRemoteDomains.value = Array.from(merged);
+  const currentSet = new Set(domRemoteDomains.value);
+  const hasNew = domains.some((d) => !currentSet.has(d));
+  if (!hasNew) return;
+  domRemoteDomains.value = Array.from(new Set([...domRemoteDomains.value, ...domains]));
 }
 
 onMounted(() => {
@@ -559,11 +567,6 @@ watch(showDeleteConfirm, async (show) => {
   }
 });
 
-watch(allowedDomains, () => {
-  cspBlockedDomains.value = [];
-  domRemoteDomains.value = [];
-});
-
 watch(currentMailId, (newMailId) => {
   translatedText.value = null;
   translatedLang.value = null;
@@ -580,18 +583,30 @@ watch(currentMailId, (newMailId) => {
     void loadAttachments(newMailId);
   }
 });
-
-if (import.meta.env.DEV) {
-  watchEffect(() => {
-    console.log('[MailViewer] remoteDomains:', remoteDomains.value);
-    console.log('[MailViewer] untrustedDomains:', untrustedDomains.value);
-    console.log('[MailViewer] showSecurityBanner:', showSecurityBanner.value);
-  });
-}
 </script>
 
 <template>
   <div class="flex h-full flex-col bg-base">
+    <!-- Loading error banner -->
+    <div
+      v-if="mailStore.error"
+      class="shrink-0 border-b border-border bg-danger/10 px-4 py-2 text-sm text-danger"
+      role="alert"
+    >
+      <div class="flex items-center gap-2">
+        <AlertTriangle class="h-4 w-4 shrink-0" aria-hidden="true" />
+        <span class="flex-1">{{ mailStore.error }}</span>
+        <button
+          type="button"
+          class="rounded p-1 text-danger hover:bg-danger/10"
+          :title="t('mail.dismissError')"
+          @click="mailStore.error = null"
+        >
+          <X class="h-3.5 w-3.5" />
+        </button>
+      </div>
+    </div>
+
     <!-- Empty state -->
     <div
       v-if="!currentMailId"
@@ -878,7 +893,7 @@ if (import.meta.env.DEV) {
         <SandboxedHtml
           v-if="processedBodyHtml"
           ref="sandboxedHtmlRef"
-          :key="`${currentMailId}-${allowedDomains.join(',')}`"
+          :key="currentMailId"
           :html="processedBodyHtml"
           :allowed-domains="allowedDomains"
           class="prose prose-sm max-w-none text-primary"

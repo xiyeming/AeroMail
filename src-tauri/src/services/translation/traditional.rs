@@ -25,7 +25,9 @@ pub async fn translate(
             ..
         } => {
             let api_key_bytes = crate::services::crypto::decrypt_password(api_key_encrypted)
-                .map_err(|e| AeroError::TranslationApiError(format!("failed to decrypt key: {e}")))?;
+                .map_err(|e| {
+                    AeroError::TranslationApiError(format!("failed to decrypt key: {e}"))
+                })?;
             let api_key = String::from_utf8(api_key_bytes)
                 .map_err(|e| AeroError::TranslationApiError(format!("invalid key: {e}")))?;
             match kind {

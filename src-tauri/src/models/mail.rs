@@ -120,3 +120,10 @@ pub struct AttachmentInfo {
     pub content_id: Option<String>,
     pub is_inline: bool,
 }
+
+/// 未读邮件摘要，用于新邮件通知。
+#[derive(Clone, Debug, Default)]
+pub struct UnreadMailSummary {
+    pub from_name: Option<String>,
+    pub subject: Option<String>,
+}

@@ -304,9 +304,9 @@ function handleRowClick(e: MouseEvent, mail: MailHeader) {
     mailStore.toggleSelection(mail.id, e.ctrlKey || e.metaKey, e.shiftKey);
     return;
   }
+  // 普通点击：若当前处于批量选择模式，先退出该模式，再打开邮件详情
   if (mailStore.selectedMailIds.length > 0) {
-    mailStore.toggleSelection(mail.id, false, false);
-    return;
+    mailStore.clearBulkSelection();
   }
   void mailStore.selectMail(mail.id);
   ensureReadingRoute();
@@ -427,7 +427,7 @@ async function bulkMarkRead(isRead: boolean) {
     <!-- Header -->
     <div class="flex h-12 shrink-0 items-center justify-between border-b border-border px-4">
       <span class="font-medium text-primary">{{ currentFolderName }}</span>
-      <search class="relative">
+      <form role="search" class="relative" @submit.prevent>
         <label for="mail-search" class="sr-only">{{ t('common.search') }}</label>
         <input
           id="mail-search"
@@ -436,7 +436,7 @@ async function bulkMarkRead(isRead: boolean) {
           :placeholder="t('commandPalette.placeholder')"
           class="h-8 w-44 rounded-md border border-border bg-base px-3 text-sm text-primary placeholder:text-tertiary outline-none focus:border-accent"
         />
-      </search>
+      </form>
     </div>
 
     <!-- Loading state -->

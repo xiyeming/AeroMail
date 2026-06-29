@@ -33,6 +33,7 @@
     "navigate": "Navigate",
     "open": "Open",
     "close": "Close",
+    "dismissError": "Dismiss error",
     "star": "Star",
     "unstar": "Unstar",
     "archive": "Archive",

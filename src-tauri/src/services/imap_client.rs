@@ -415,13 +415,7 @@ pub async fn find_drafts_folder(session: &mut ImapSession) -> Result<String, Aer
 
     debug!(candidates = ?mailboxes, "searching for drafts folder");
 
-    let candidates = [
-        "Drafts",
-        "Draft",
-        "[Gmail]/Drafts",
-        "草稿箱",
-        "草稿",
-    ];
+    let candidates = ["Drafts", "Draft", "[Gmail]/Drafts", "草稿箱", "草稿"];
     for candidate in &candidates {
         if let Some(folder) = mailboxes
             .iter()

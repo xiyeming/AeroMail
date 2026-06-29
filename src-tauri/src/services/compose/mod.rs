@@ -251,6 +251,12 @@ impl ComposeService {
             .get_draft(draft_id)?
             .ok_or_else(|| AeroError::DraftNotFound(draft_id.to_string()))?;
 
+        // 没有收件人时 lettre 无法构建 envelope；跳过同步，等待用户填写完整后再同步
+        if draft.to.is_empty() && draft.cc.is_empty() && draft.bcc.is_empty() {
+            debug!("draft has no recipients, skipping IMAP sync");
+            return Ok(());
+        }
+
         let account_config = self.load_account_config(&draft.account_id).await?;
 
         debug!("building MIME message for IMAP draft sync");

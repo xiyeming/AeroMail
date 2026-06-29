@@ -33,6 +33,7 @@
     "navigate": "导航",
     "open": "打开",
     "close": "关闭",
+    "dismissError": "关闭错误提示",
     "star": "加星标",
     "unstar": "取消星标",
     "archive": "归档",

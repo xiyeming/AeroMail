@@ -1,6 +1,14 @@
 import { Table } from '@tiptap/extension-table';
-import type { Node } from '@tiptap/core';
+import type { Node, Commands } from '@tiptap/core';
 import type { NodeView, ViewMutationRecord } from 'prosemirror-view';
+
+declare module '@tiptap/core' {
+  interface Commands<ReturnType> {
+    alignedTable: {
+      setTableAlign: (align: 'left' | 'center' | 'right') => ReturnType;
+    };
+  }
+}
 
 /**
  * 自定义 TableView，在 wrapper div 上应用 align 对齐样式。
@@ -60,7 +68,6 @@ class AlignedTableView implements NodeView {
 
   private updateColumns(node: Node) {
     const cellMinWidth = this.cellMinWidth;
-    let totalWidth = 0;
     let nextDOM = this.colgroup.firstChild as HTMLTableColElement | null;
     const row = node.firstChild;
 
@@ -70,7 +77,6 @@ class AlignedTableView implements NodeView {
         for (let j = 0; j < colspan; j += 1, col += 1) {
           const hasWidth = colwidth && colwidth[j];
           const cssWidth = hasWidth ? `${hasWidth}px` : '';
-          totalWidth += hasWidth || cellMinWidth;
 
           if (!nextDOM) {
             const colEl = document.createElement('col');
@@ -122,7 +128,7 @@ export const AlignedTable = Table.extend({
           if (style.includes('margin-left:auto')) return 'right';
           return 'left';
         },
-        renderHTML: (attrs: Record<string, unknown>) => {
+        renderHTML: (_attrs: Record<string, unknown>) => {
           return {};
         },
       },
@@ -137,7 +143,7 @@ export const AlignedTable = Table.extend({
   },
 
   renderHTML({ node, HTMLAttributes }: { node: Node; HTMLAttributes: Record<string, unknown> }) {
-    const parentResult = (Table.prototype as any).renderHTML.call(this, { node, HTMLAttributes });
+    const parentResult = this.parent?.({ node, HTMLAttributes });
     const align = (node.attrs.align as string) || 'left';
     return ['div', { class: 'tableWrapper', style: getAlignStyle(align) }, parentResult];
   },
@@ -147,7 +153,7 @@ export const AlignedTable = Table.extend({
       ...this.parent?.(),
       setTableAlign:
         (align: 'left' | 'center' | 'right') =>
-        ({ commands }: { commands: any }) => {
+        ({ commands }: { commands: Commands }) => {
           return commands.updateAttributes('table', { align });
         },
     };

@@ -91,7 +91,7 @@ fn wrap_html_for_email(html: &str) -> String {
 
 /// 为 Tiptap 生成的语义 HTML 注入内联样式，确保邮件客户端正确显示。
 /// 邮件客户端（Gmail、Outlook 等）会剥离 `<style>` 块，所有样式必须内联。
-/// Tiptap 的 TextStyle 扩展已为字体、字号、颜色生成 inline style，
+/// Tiptap 的 `TextStyle` 扩展已为字体、字号、颜色生成 inline style，
 /// 此函数补充结构元素（段落、列表、标题、引用、链接等）的默认样式。
 fn inject_inline_styles(html: &str) -> String {
     let mut result = html.to_string();
@@ -101,11 +101,7 @@ fn inject_inline_styles(html: &str) -> String {
     // 不会丢失 margin、line-height 等基础排版属性。
 
     // 段落：Tiptap 可能已有 text-align style，需合并而非覆盖
-    result = merge_style_defaults(
-        &result,
-        "<p",
-        "margin:0.5em 0;line-height:1.6;",
-    );
+    result = merge_style_defaults(&result, "<p", "margin:0.5em 0;line-height:1.6;");
 
     // 标题
     result = merge_style_defaults(
@@ -125,21 +121,9 @@ fn inject_inline_styles(html: &str) -> String {
     );
 
     // 列表
-    result = inject_style_if_missing(
-        &result,
-        "<ul",
-        "margin:0.5em 0;padding-left:1.5em;",
-    );
-    result = inject_style_if_missing(
-        &result,
-        "<ol",
-        "margin:0.5em 0;padding-left:1.5em;",
-    );
-    result = inject_style_if_missing(
-        &result,
-        "<li",
-        "margin:0.25em 0;",
-    );
+    result = inject_style_if_missing(&result, "<ul", "margin:0.5em 0;padding-left:1.5em;");
+    result = inject_style_if_missing(&result, "<ol", "margin:0.5em 0;padding-left:1.5em;");
+    result = inject_style_if_missing(&result, "<li", "margin:0.25em 0;");
 
     // 引用块
     result = inject_style_if_missing(
@@ -149,11 +133,7 @@ fn inject_inline_styles(html: &str) -> String {
     );
 
     // 链接
-    result = inject_style_if_missing(
-        &result,
-        "<a",
-        "color:#2563eb;text-decoration:underline;",
-    );
+    result = inject_style_if_missing(&result, "<a", "color:#2563eb;text-decoration:underline;");
 
     // 水平线
     result = inject_style_if_missing(
@@ -248,7 +228,9 @@ fn merge_style_defaults(html: &str, tag: &str, defaults: &str) -> String {
         .split(';')
         .filter_map(|decl| {
             let decl = decl.trim();
-            if decl.is_empty() { return None; }
+            if decl.is_empty() {
+                return None;
+            }
             let (prop, val) = decl.split_once(':')?;
             Some((prop.trim(), val.trim()))
         })
@@ -265,7 +247,10 @@ fn merge_style_defaults(html: &str, tag: &str, defaults: &str) -> String {
 
             if tag_content.to_lowercase().contains("style=") {
                 // 已有 style：提取现有值，追加缺失的默认属性
-                let style_start = tag_content.to_lowercase().find("style=").unwrap();
+                let tag_content_lower = tag_content.to_lowercase();
+                let Some(style_start) = tag_content_lower.find("style=") else {
+                    continue;
+                };
                 let after_style = &tag_content[style_start + 6..];
                 let quote = after_style.chars().next().unwrap_or('"');
                 let after_quote = &after_style[1..];
@@ -278,9 +263,9 @@ fn merge_style_defaults(html: &str, tag: &str, defaults: &str) -> String {
                     let mut missing: Vec<String> = Vec::new();
                     for (prop, val) in &default_props {
                         let prop_lower = prop.to_lowercase();
-                        let already_has = existing_style.split(';').any(|d| {
-                            d.trim().starts_with(&*prop_lower)
-                        });
+                        let already_has = existing_style
+                            .split(';')
+                            .any(|d| d.trim().starts_with(&*prop_lower));
                         if !already_has {
                             missing.push(format!("{prop}:{val}"));
                         }

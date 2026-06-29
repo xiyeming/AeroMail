@@ -237,6 +237,14 @@ impl SyncWorker {
                 continue;
             }
 
+            // 使用 STATUS 命令快速检查文件夹是否有变化，避免不必要的 SELECT
+            if let Ok(should_skip) = self.should_skip_folder(&mut session, folder_name).await {
+                if should_skip {
+                    debug!(folder = %folder_name, "folder unchanged, skipping sync");
+                    continue;
+                }
+            }
+
             match self
                 .sync_folder(&mut session, folder_name, &self.attachments_dir)
                 .await
@@ -282,6 +290,57 @@ impl SyncWorker {
 
         debug!(folder_count = folders.len(), "listed IMAP folders");
         Ok(folders)
+    }
+
+    /// 使用 IMAP STATUS 命令快速检查文件夹是否需要同步。
+    ///
+    /// 同时校验 `MESSAGES`（邮件总数）和 `UIDVALIDITY`。只有当两者都与本地记录一致，
+    /// 且 `UIDVALIDITY` 有效时，才认为文件夹未发生变化并跳过完整同步。
+    ///
+    /// 注意：此优化无法检测“删除与新增数量相同”、flags 变化等场景；若需要完全精确地
+    /// 判断文件夹是否变化，应额外记录并比较 `UIDNEXT` 或 `HIGHESTMODSEQ`。
+    #[instrument(skip_all, fields(folder_name = %folder_name))]
+    async fn should_skip_folder(
+        &self,
+        session: &mut imap_client::ImapSession,
+        folder_name: &str,
+    ) -> Result<bool, AeroError> {
+        // STATUS 命令获取远程文件夹状态（MESSAGES 即 exists，UIDVALIDITY 用于检测邮箱重建）
+        let status = session
+            .status(folder_name, "(MESSAGES UIDVALIDITY)")
+            .await
+            .map_err(|e| AeroError::ImapConnectionFailed(e.to_string()))?;
+
+        let remote_exists = status.exists;
+        let remote_uid_validity = status.uid_validity.unwrap_or(0);
+
+        // 查询本地记录
+        let local_folder = self.db.get_folder_by_path(&self.account_id, folder_name)?;
+        let Some(local) = local_folder else {
+            // 本地无记录，需要完整同步
+            return Ok(false);
+        };
+
+        let local_total = u32::try_from(local.total_count).unwrap_or(0);
+        let local_uid_validity = u32::try_from(local.uid_validity.unwrap_or(0)).unwrap_or(0);
+
+        // 只有 MESSAGES 和 UIDVALIDITY 都一致，且 UIDVALIDITY 有效时才跳过同步
+        let unchanged = remote_exists == local_total
+            && remote_uid_validity != 0
+            && remote_uid_validity == local_uid_validity;
+
+        if unchanged {
+            debug!(
+                folder = %folder_name,
+                remote_exists,
+                local_total,
+                remote_uid_validity,
+                local_uid_validity,
+                "folder unchanged, skipping sync"
+            );
+        }
+
+        Ok(unchanged)
     }
 
     /// Fetches a UID range from the current folder, parses each message and
@@ -548,7 +607,7 @@ impl SyncWorker {
                         let diff = i64::from(inbox_count_after) - inbox_count_before;
                         let new_mails = u32::try_from(diff.max(0)).unwrap_or(u32::MAX);
                         if new_mails > 0 {
-                            self.send_new_mail_notification(new_mails);
+                            self.send_new_mail_notification(new_mails, &folder_id);
                         }
                     }
                 }
@@ -568,31 +627,72 @@ impl SyncWorker {
         Ok(synced_count)
     }
 
-    /// Sends a system notification for newly arrived messages in INBOX.
-    fn send_new_mail_notification(&self, count: u32) {
+    /// 发送新邮件系统通知，包含发件人和主题信息。
+    fn send_new_mail_notification(&self, count: u32, folder_id: &str) {
         let locale = self
             .db
             .get_setting("app.locale")
             .ok()
             .flatten()
-            .unwrap_or_else(|| {
-                // Fallback: detect from system locale
-                sys_locale().unwrap_or_else(|| "en".to_string())
-            });
+            .unwrap_or_else(|| sys_locale().unwrap_or_else(|| "en".to_string()));
 
         let is_zh = locale.starts_with("zh");
 
         let title = "AeroMail".to_string();
-        let body = if is_zh {
-            if count == 1 {
-                "1 封新邮件".to_string()
-            } else {
+
+        // 尝试获取最新未读邮件的发件人和主题，丰富通知内容
+        let summaries = match self.db.get_latest_unread_summaries(folder_id, 3) {
+            Ok(s) => s,
+            Err(e) => {
+                warn!(folder_id = %folder_id, error = %e, "failed to load unread summaries for notification");
+                Vec::new()
+            }
+        };
+
+        let body = if summaries.is_empty() {
+            // 降级：无详细信息时显示简单计数
+            if is_zh {
                 format!("{count} 封新邮件")
+            } else {
+                format!("{count} new messages")
             }
         } else if count == 1 {
-            "1 new message".to_string()
+            // 单封邮件：显示发件人和主题
+            let summary = &summaries[0];
+            let from_str = summary.from_name.as_deref().unwrap_or(if is_zh {
+                "未知发件人"
+            } else {
+                "Unknown"
+            });
+            let subj_str = summary.subject.as_deref().unwrap_or(if is_zh {
+                "无主题"
+            } else {
+                "No subject"
+            });
+            if is_zh {
+                format!("来自 {from_str}: {subj_str}")
+            } else {
+                format!("From {from_str}: {subj_str}")
+            }
         } else {
-            format!("{count} new messages")
+            // 多封邮件：显示第一封详情 + 其余计数
+            let summary = &summaries[0];
+            let from_str = summary.from_name.as_deref().unwrap_or(if is_zh {
+                "未知发件人"
+            } else {
+                "Unknown"
+            });
+            let subj_str = summary.subject.as_deref().unwrap_or(if is_zh {
+                "无主题"
+            } else {
+                "No subject"
+            });
+            let remaining = count - 1;
+            if is_zh {
+                format!("来自 {from_str}: {subj_str} 等 {remaining} 封新邮件")
+            } else {
+                format!("From {from_str}: {subj_str} and {remaining} more")
+            }
         };
 
         if let Err(e) = self

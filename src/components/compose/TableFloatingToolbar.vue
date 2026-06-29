@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, onMounted, onUnmounted } from 'vue';
+import { ref, onMounted, onUnmounted, nextTick } from 'vue';
 import { useI18n } from 'vue-i18n';
 import type { Editor } from '@tiptap/core';
 import {
@@ -28,82 +28,9 @@ const isVisible = ref(false);
 const toolbarRef = ref<HTMLDivElement | null>(null);
 const position = ref({ top: 0, left: 0 });
 
-function checkTableSelection() {
-  if (!props.editor) return;
-  const { state } = props.editor;
-  const { selection } = state;
-
-  // Check if the selection is inside a table node
-  const isTableNode = (node: { type: { name: string } }) => node.type.name === 'table';
-
-  let isInTable = false;
-  state.doc.nodesBetween(selection.from, selection.to, (node) => {
-    if (isTableNode(node)) {
-      isInTable = true;
-    }
-  });
-
-  if (isInTable) {
-    // Get cursor position — coordsAtPos returns viewport-relative coords
-    const { from } = selection;
-    const view = props.editor.view;
-    const coords = view.coordsAtPos(from);
-
-    // Position toolbar above the cursor, clamped to viewport
-    const toolbarHeight = 40;
-    const toolbarWidth = 280;
-    const top = Math.max(8, coords.top - toolbarHeight - 8);
-    const left = Math.max(8, Math.min(coords.left - toolbarWidth / 2, window.innerWidth - toolbarWidth - 8));
-
-    position.value = { top, left };
-    isVisible.value = true;
-  } else {
-    isVisible.value = false;
-  }
-}
-
-function addRowAbove() {
-  props.editor.chain().focus().addRowBefore().run();
-}
-
-function addRowBelow() {
-  props.editor.chain().focus().addRowAfter().run();
-}
-
-function deleteRow() {
-  props.editor.chain().focus().deleteRow().run();
-}
-
-function addColumnLeft() {
-  props.editor.chain().focus().addColumnBefore().run();
-}
-
-function addColumnRight() {
-  props.editor.chain().focus().addColumnAfter().run();
-}
-
-function deleteColumn() {
-  props.editor.chain().focus().deleteColumn().run();
-}
-
-function mergeCells() {
-  props.editor.chain().focus().mergeCells().run();
-}
-
-function splitCell() {
-  props.editor.chain().focus().splitCell().run();
-}
-
-function deleteTable() {
-  props.editor.chain().focus().deleteTable().run();
-}
-
-function toggleHeaderRow() {
-  props.editor.chain().focus().toggleHeaderRow().run();
-}
-
 const cellBgColor = ref('#ffffff');
 const showCellColorPicker = ref(false);
+const currentTableAlign = ref<'left' | 'center' | 'right'>('left');
 
 const cellColors = [
   '#ffffff', '#fef3c7', '#fde68a', '#d1fae5', '#a7f3d0',
@@ -112,48 +39,183 @@ const cellColors = [
   '#bae6fd', '#c7d2fe', '#fca5a5', '#f9a8d4', '#d4d4d4',
 ];
 
-function setCellBgColor(color: string) {
-  cellBgColor.value = color;
-  showCellColorPicker.value = false;
-  // Apply background to the currently selected cells
-  const { state } = props.editor;
-  const { selection } = state;
-  const cellSelection = selection;
-  // Use setCellAttribute to set background-color
-  props.editor.chain().focus().setCellAttribute('style', `background-color: ${color}`).run();
-}
-
-const currentTableAlign = ref<'left' | 'center' | 'right'>('left');
-
 function detectTableAlign() {
   const { state } = props.editor;
   const { selection } = state;
   state.doc.nodesBetween(selection.from, selection.to, (node) => {
     if (node.type.name === 'table') {
       currentTableAlign.value = (node.attrs.align as string) || 'left';
+      return false;
     }
   });
 }
 
+function isClickInsideToolbar(target: EventTarget | null): boolean {
+  return !!(toolbarRef.value && target instanceof Node && toolbarRef.value.contains(target));
+}
+
+async function showAt(x: number, y: number) {
+  detectTableAlign();
+  // Render off-screen first so we can measure the real toolbar size, then clamp
+  // to the viewport to avoid overflow.
+  position.value = { top: -9999, left: -9999 };
+  isVisible.value = true;
+  await nextTick();
+  const rect = toolbarRef.value?.getBoundingClientRect();
+  const toolbarWidth = rect?.width ?? 360;
+  const toolbarHeight = rect?.height ?? 44;
+  const padding = 8;
+  const top = Math.min(window.innerHeight - toolbarHeight - padding, y + padding);
+  const left = Math.min(window.innerWidth - toolbarWidth - padding, Math.max(padding, x - toolbarWidth / 2));
+  position.value = { top, left };
+}
+
+function hide() {
+  isVisible.value = false;
+  showCellColorPicker.value = false;
+}
+
+function handleContextMenu(e: MouseEvent) {
+  const target = e.target as HTMLElement | null;
+  const isTableTarget = target?.closest('.ProseMirror table') !== null;
+  if (!isTableTarget) return;
+
+  e.preventDefault();
+
+  // 将光标/选择设置到右键位置，确保后续表格命令作用于正确位置
+  const view = props.editor.view;
+  const coords = { left: e.clientX, top: e.clientY };
+  const posInfo = view.posAtCoords(coords);
+  if (posInfo) {
+    props.editor.commands.focus();
+    props.editor.commands.setTextSelection(posInfo.pos);
+  }
+
+  showAt(e.clientX, e.clientY);
+}
+
+function handleDocumentClick(e: MouseEvent) {
+  if (isClickInsideToolbar(e.target)) return;
+  hide();
+}
+
+function handleKeydown(e: KeyboardEvent) {
+  if (e.key === 'Escape') hide();
+}
+
+function addRowAbove() {
+  props.editor.chain().focus().addRowBefore().run();
+  hide();
+}
+
+function addRowBelow() {
+  props.editor.chain().focus().addRowAfter().run();
+  hide();
+}
+
+function deleteRow() {
+  props.editor.chain().focus().deleteRow().run();
+  hide();
+}
+
+function addColumnLeft() {
+  props.editor.chain().focus().addColumnBefore().run();
+  hide();
+}
+
+function addColumnRight() {
+  props.editor.chain().focus().addColumnAfter().run();
+  hide();
+}
+
+function deleteColumn() {
+  props.editor.chain().focus().deleteColumn().run();
+  hide();
+}
+
+function mergeCells() {
+  props.editor.chain().focus().mergeCells().run();
+  hide();
+}
+
+function splitCell() {
+  props.editor.chain().focus().splitCell().run();
+  hide();
+}
+
+function deleteTable() {
+  props.editor.chain().focus().deleteTable().run();
+  hide();
+}
+
+function toggleHeaderRow() {
+  props.editor.chain().focus().toggleHeaderRow().run();
+  hide();
+}
+
+function mergeCellStyle(existingStyle: string | undefined, newDecl: string): string {
+  const styleMap = new Map<string, string>();
+  if (existingStyle) {
+    existingStyle.split(';').forEach((decl) => {
+      const separatorIndex = decl.indexOf(':');
+      if (separatorIndex > 0) {
+        const prop = decl.slice(0, separatorIndex).trim();
+        const value = decl.slice(separatorIndex + 1).trim();
+        if (prop) styleMap.set(prop, value);
+      }
+    });
+  }
+  const separatorIndex = newDecl.indexOf(':');
+  if (separatorIndex > 0) {
+    const prop = newDecl.slice(0, separatorIndex).trim();
+    const value = newDecl.slice(separatorIndex + 1).trim();
+    if (prop) styleMap.set(prop, value);
+  }
+  return Array.from(styleMap.entries())
+    .map(([k, v]) => `${k}: ${v}`)
+    .join('; ');
+}
+
+function setCellBgColor(color: string) {
+  cellBgColor.value = color;
+  showCellColorPicker.value = false;
+  const existingStyle = props.editor.getAttributes('tableCell').style as string | undefined;
+  const merged = mergeCellStyle(existingStyle, `background-color: ${color}`);
+  props.editor.chain().focus().setCellAttribute('style', merged).run();
+  hide();
+}
+
 function setTableAlign(align: 'left' | 'center' | 'right') {
   currentTableAlign.value = align;
-  // 使用 AlignedTable 扩展的 setTableAlign 命令，将对齐存入文档模型
-  (props.editor.chain().focus() as any).setTableAlign(align).run();
+  props.editor.chain().focus().setTableAlign(align).run();
+  hide();
 }
 
 function setCellTextAlign(align: 'left' | 'center' | 'right') {
-  props.editor.chain().focus().setCellAttribute('style', `text-align: ${align}`).run();
+  const existingStyle = props.editor.getAttributes('tableCell').style as string | undefined;
+  const merged = mergeCellStyle(existingStyle, `text-align: ${align}`);
+  props.editor.chain().focus().setCellAttribute('style', merged).run();
+  hide();
 }
 
+let editorDom: HTMLElement | null = null;
+
 onMounted(() => {
-  props.editor.on('selectionUpdate', () => { checkTableSelection(); detectTableAlign(); });
-  props.editor.on('transaction', checkTableSelection);
-  detectTableAlign();
+  if (props.editor.isMounted) {
+    editorDom = props.editor.view.dom;
+    editorDom.addEventListener('contextmenu', handleContextMenu);
+  }
+  document.addEventListener('click', handleDocumentClick);
+  document.addEventListener('keydown', handleKeydown);
 });
 
 onUnmounted(() => {
-  props.editor.off('selectionUpdate', checkTableSelection);
-  props.editor.off('transaction', checkTableSelection);
+  if (editorDom) {
+    editorDom.removeEventListener('contextmenu', handleContextMenu);
+    editorDom = null;
+  }
+  document.removeEventListener('click', handleDocumentClick);
+  document.removeEventListener('keydown', handleKeydown);
 });
 
 function btnClass(active = false) {
@@ -169,6 +231,7 @@ function btnClass(active = false) {
         ref="toolbarRef"
         class="fixed z-50 flex items-center gap-0.5 rounded-lg border border-border bg-elevated px-1.5 py-1 shadow-lg"
         :style="{ top: `${position.top}px`, left: `${position.left}px` }"
+        @contextmenu.prevent
       >
         <!-- Row operations -->
         <button type="button" :class="btnClass()" :title="t('table.addRowAbove')" @click="addRowAbove">
@@ -247,9 +310,6 @@ function btnClass(active = false) {
           </div>
         </div>
 
-        <div class="mx-0.5 h-4 w-px bg-border" />
-
-        <!-- Cell text alignment -->
         <div class="mx-0.5 h-4 w-px bg-border" />
 
         <!-- 表格位置 -->

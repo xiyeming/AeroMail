@@ -77,8 +77,11 @@ interface FontOption {
   label: string;
 }
 
+const DEFAULT_FONT_FAMILY = 'default';
+const DEFAULT_FONT_SIZE = 'default';
+
 const fontFamilyOptions: FontOption[] = [
-  { value: '', label: t('compose.fontDefault') },
+  { value: DEFAULT_FONT_FAMILY, label: t('compose.fontDefault') },
   { value: 'Arial, sans-serif', label: 'Arial' },
   { value: '"Helvetica Neue", Helvetica, Arial, sans-serif', label: 'Helvetica' },
   { value: '"Times New Roman", Times, serif', label: 'Times New Roman' },
@@ -88,7 +91,7 @@ const fontFamilyOptions: FontOption[] = [
 ];
 
 const fontSizeOptions: FontOption[] = [
-  { value: '', label: t('compose.fontSizeDefault') },
+  { value: DEFAULT_FONT_SIZE, label: t('compose.fontSizeDefault') },
   { value: '12px', label: '12' },
   { value: '14px', label: '14' },
   { value: '16px', label: '16' },
@@ -167,17 +170,20 @@ const currentFontSize = computed(() => {
 
 const currentFontFamilyLabel = computed(() => {
   return (
-    fontFamilyOptions.find((o) => o.value === currentFontFamily.value)?.label ??
+    fontFamilyOptions.find((o) => o.value === selectFontFamily.value)?.label ??
     t('compose.fontDefault')
   );
 });
 
 const currentFontSizeLabel = computed(() => {
   return (
-    fontSizeOptions.find((o) => o.value === currentFontSize.value)?.label ??
+    fontSizeOptions.find((o) => o.value === selectFontSize.value)?.label ??
     t('compose.fontSizeDefault')
   );
 });
+
+const selectFontFamily = computed(() => currentFontFamily.value || DEFAULT_FONT_FAMILY);
+const selectFontSize = computed(() => currentFontSize.value || DEFAULT_FONT_SIZE);
 
 const currentColor = computed(() => {
   const attrs = props.editor.getAttributes('textStyle');
@@ -190,7 +196,7 @@ const currentHighlight = computed(() => {
 });
 
 function setFontFamily(value: string) {
-  if (value) {
+  if (value && value !== DEFAULT_FONT_FAMILY) {
     props.editor.chain().focus().setFontFamily(value).run();
   } else {
     props.editor.chain().focus().unsetFontFamily().run();
@@ -198,7 +204,7 @@ function setFontFamily(value: string) {
 }
 
 function setFontSize(value: string) {
-  if (value) {
+  if (value && value !== DEFAULT_FONT_SIZE) {
     props.editor.chain().focus().setFontSize(value).run();
   } else {
     props.editor.chain().focus().unsetFontSize().run();
@@ -344,7 +350,7 @@ function dividerClass() {
     <div :class="dividerClass()" />
 
     <!-- Font family -->
-    <SelectRoot :model-value="currentFontFamily" @update:model-value="setFontFamily">
+    <SelectRoot :model-value="selectFontFamily" @update:model-value="setFontFamily">
       <SelectTrigger :class="selectTriggerClass()" class="min-w-[6.5rem]">
         <SelectValue :placeholder="t('compose.fontDefault')">
           <span
@@ -384,7 +390,7 @@ function dividerClass() {
     </SelectRoot>
 
     <!-- Font size -->
-    <SelectRoot :model-value="currentFontSize" @update:model-value="setFontSize">
+    <SelectRoot :model-value="selectFontSize" @update:model-value="setFontSize">
       <SelectTrigger :class="selectTriggerClass()" class="min-w-[4.5rem]">
         <SelectValue :placeholder="t('compose.fontSizeDefault')">
           <span class="truncate">{{

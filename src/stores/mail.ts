@@ -23,6 +23,9 @@ export const useMailStore = defineStore('mail', () => {
   const isReadingMode = ref(false);
   const deletingMailIds = ref<Set<string>>(new Set());
 
+  // 用于防止快速切换邮件时旧响应覆盖新响应
+  let currentLoadId = 0;
+
   const totalUnread = computed(() => folders.value.reduce((sum, f) => sum + f.unreadCount, 0));
 
   async function loadFolders(accountId: string) {
@@ -209,16 +212,34 @@ export const useMailStore = defineStore('mail', () => {
   }
 
   async function loadMailDetail(mailId: string) {
-    try {
-      selectedMail.value = await invoke<MailDetail>('get_mail_detail', { mailId });
-      selectedMailId.value = mailId;
+    // 递增加载序号，用于丢弃过期的异步响应
+    const loadId = ++currentLoadId;
 
-      // Mark as read — markRead handles local state + folder unread count
-      if (selectedMail.value && !selectedMail.value.isRead) {
-        await markRead(mailId, true);
-      }
+    // 先设置 selectedMailId 并清空详情，使 UI 立即显示加载状态
+    selectedMailId.value = mailId;
+    selectedMail.value = null;
+    try {
+      const detail = await invoke<MailDetail>('get_mail_detail', { mailId });
+      // 如果已有更新的加载请求，丢弃本次结果
+      if (loadId !== currentLoadId) return;
+      selectedMail.value = detail;
+      error.value = null;
     } catch (e) {
+      if (loadId !== currentLoadId) return;
       error.value = e instanceof Error ? e.message : String(e);
+      // 加载失败时保留 selectedMailId，便于用户看到错误横幅；仅清空详情
+      selectedMail.value = null;
+      return;
+    }
+
+    // 标记已读：失败不应影响详情显示，仅记录错误
+    if (selectedMail.value && !selectedMail.value.isRead) {
+      try {
+        await markRead(mailId, true);
+      } catch (e) {
+        console.error('Failed to mark mail as read:', e);
+        error.value = e instanceof Error ? e.message : String(e);
+      }
     }
   }
 

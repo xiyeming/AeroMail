@@ -150,6 +150,7 @@ fn greet(name: &str) -> String {
 /// 在系统默认浏览器中打开指定 URL
 #[tauri::command]
 fn open_url(url: &str) -> Result<(), String> {
+    tracing::info!("opening url: {url}");
     open::that(url).map_err(|e| format!("无法打开链接: {e}"))
 }
 

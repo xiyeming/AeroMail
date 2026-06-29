@@ -17,8 +17,12 @@ const emit = defineEmits<{
 
 const iframeRef = ref<HTMLIFrameElement | null>(null);
 
-function buildCsp(): string {
+function buildCsp(scriptNonce: string): string {
   const allowed = (props.allowedDomains || []).map((d) => d.trim()).filter(Boolean);
+
+  const scriptSrc = scriptNonce
+    ? `'nonce-${scriptNonce}'`
+    : "'none'";
 
   if (allowed.includes('*')) {
     return [
@@ -27,7 +31,7 @@ function buildCsp(): string {
       "style-src 'unsafe-inline' 'self' http: https:",
       "font-src 'self' http: https:",
       "media-src 'self' http: https:",
-      "script-src 'none'",
+      `script-src ${scriptSrc}`,
     ].join('; ');
   }
 
@@ -52,12 +56,169 @@ function buildCsp(): string {
     `style-src ${styleSrc}`,
     `font-src ${fontSrc}`,
     `media-src ${mediaSrc}`,
-    "script-src 'none'",
+    `script-src ${scriptSrc}`,
   ].join('; ');
 }
 
+function sanitizeHtml(html: string): string {
+  // 第一遍：用正则快速剥离明显的脚本标签和内联事件处理器，处理一些 DOMParser
+  // 可能保留的边界情况（如条件注释里的 script）。
+  let cleaned = html
+    .replace(/<script\b[^>]*>[\s\S]*?<\/script>/gi, '')
+    .replace(/<script\b[^>]*\/?>/gi, '')
+    .replace(/<noscript\b[^>]*>[\s\S]*?<\/noscript>/gi, '')
+    .replace(/\s(on\w+)\s*=\s*(["'][^"']*["']|[^\s>]*)/gi, '');
+
+  const parser = new DOMParser();
+  const doc = parser.parseFromString(cleaned, 'text/html');
+
+  // 移除可能嵌套脚本或加载外部资源的标签
+  doc.querySelectorAll('script, noscript, iframe, object, embed').forEach((el) => el.remove());
+
+  // 移除危险 link rel
+  doc.querySelectorAll('link').forEach((el) => {
+    const rel = el.getAttribute('rel')?.toLowerCase() ?? '';
+    if (rel.includes('import') || rel.includes('modulepreload') || rel.includes('prefetch')) {
+      el.remove();
+      return;
+    }
+    const href = el.getAttribute('href')?.trim().toLowerCase() ?? '';
+    if (
+      href.startsWith('javascript:') ||
+      href.startsWith('data:text/html') ||
+      href.startsWith('vbscript:')
+    ) {
+      el.remove();
+    }
+  });
+
+  // 移除 meta refresh 等可能导致跳转的 meta
+  doc.querySelectorAll('meta[http-equiv]').forEach((el) => {
+    const equiv = el.getAttribute('http-equiv')?.toLowerCase();
+    if (equiv === 'refresh' || equiv === 'content-security-policy') {
+      el.remove();
+    }
+  });
+
+  // 移除内联事件处理器与危险伪协议
+  const dangerousAttrs = new Set([
+    'onabort', 'onblur', 'oncancel', 'oncanplay', 'oncanplaythrough', 'onchange', 'onclick',
+    'onclose', 'oncontextmenu', 'oncuechange', 'ondblclick', 'ondrag', 'ondragend', 'ondragenter',
+    'ondragleave', 'ondragover', 'ondragstart', 'ondrop', 'ondurationchange', 'onemptied',
+    'onended', 'onerror', 'onfocus', 'onformdata', 'oninput', 'oninvalid', 'onkeydown',
+    'onkeypress', 'onkeyup', 'onload', 'onloadeddata', 'onloadedmetadata', 'onloadstart',
+    'onmousedown', 'onmouseenter', 'onmouseleave', 'onmousemove', 'onmouseout', 'onmouseover',
+    'onmouseup', 'onmousewheel', 'onpause', 'onplay', 'onplaying', 'onprogress', 'onratechange',
+    'onreset', 'onresize', 'onscroll', 'onsecuritypolicyviolation', 'onseeked', 'onseeking',
+    'onselect', 'onslotchange', 'onstalled', 'onsubmit', 'onsuspend', 'ontimeupdate', 'ontoggle',
+    'onvolumechange', 'onwaiting', 'onwheel',
+  ]);
+
+  function walk(node: Element) {
+    // 同时处理 svg:script 等跨命名空间的 script 标签
+    if (node.tagName.toLowerCase() === 'script') {
+      node.remove();
+      return;
+    }
+
+    for (const attr of Array.from(node.attributes)) {
+      const name = attr.name.toLowerCase();
+      if (dangerousAttrs.has(name) || name.startsWith('on')) {
+        node.removeAttribute(attr.name);
+      }
+      if (
+        name === 'href' ||
+        name === 'src' ||
+        name === 'action' ||
+        name === 'formaction' ||
+        name === 'background' ||
+        name === 'dynsrc' ||
+        name === 'lowsrc'
+      ) {
+        const value = attr.value.trim().toLowerCase();
+        if (
+          value.startsWith('javascript:') ||
+          value.startsWith('data:text/html') ||
+          value.startsWith('vbscript:') ||
+          value.startsWith('mocha:') ||
+          value.startsWith('livescript:')
+        ) {
+          node.removeAttribute(attr.name);
+        }
+      }
+    }
+    Array.from(node.children).forEach(walk);
+  }
+
+  [doc.documentElement, doc.head, doc.body].forEach((root) => {
+    if (root) walk(root);
+  });
+
+  // 把文本节点中的裸 URL（如 https://pis.baiwang.com/...）转换成可点击的 <a> 链接。
+  // 邮件客户端经常把链接以纯文本形式展示，导致用户无法点击。
+  linkifyTextNodes(doc.body, doc);
+
+  return doc.body.innerHTML;
+}
+
+function linkifyTextNodes(root: Node, doc: Document) {
+  const urlRegex = /(https?:\/\/[^\s<>"{}|\\^`[\]]+)/gi;
+  const skipTags = new Set(['a', 'area', 'script', 'style', 'pre', 'code']);
+
+  function walk(node: Node) {
+    if (node.nodeType === Node.TEXT_NODE) {
+      const text = node.textContent ?? '';
+      if (!urlRegex.test(text)) return;
+      urlRegex.lastIndex = 0;
+
+      const fragment = doc.createDocumentFragment();
+      let lastIndex = 0;
+      let match: RegExpExecArray | null;
+      while ((match = urlRegex.exec(text)) !== null) {
+        const [fullMatch] = match;
+        const offset = match.index;
+        if (offset > lastIndex) {
+          fragment.appendChild(doc.createTextNode(text.slice(lastIndex, offset)));
+        }
+        const anchor = doc.createElement('a');
+        anchor.href = fullMatch;
+        anchor.textContent = fullMatch;
+        anchor.style.color = 'var(--accent)';
+        anchor.style.textDecoration = 'underline';
+        fragment.appendChild(anchor);
+        lastIndex = offset + fullMatch.length;
+      }
+      if (lastIndex < text.length) {
+        fragment.appendChild(doc.createTextNode(text.slice(lastIndex)));
+      }
+      node.parentNode?.replaceChild(fragment, node);
+      return;
+    }
+
+    if (node.nodeType !== Node.ELEMENT_NODE) return;
+    const el = node as Element;
+    if (skipTags.has(el.tagName.toLowerCase())) return;
+    Array.from(node.childNodes).forEach(walk);
+  }
+
+  Array.from(root.childNodes).forEach(walk);
+}
+
 const srcdoc = computed(() => {
-  const csp = buildCsp();
+  // WebKit/Safari 在 sandbox="allow-same-origin"（不含 allow-scripts）的 iframe 中
+  // 会阻止父页面脚本向 iframe 内元素附加事件监听器（Bug 218086）。
+  // 我们通过允许脚本执行但配合 CSP nonce 仅允许我们自己的可信脚本运行，
+  // 由 iframe 内部脚本把链接点击通过 postMessage 转发给父页面。
+  const nonce =
+    typeof crypto !== 'undefined' && 'randomUUID' in crypto
+      ? crypto.randomUUID()
+      : `${Math.random().toString(36).slice(2)}${Date.now().toString(36)}`;
+  const csp = buildCsp(nonce);
+  const safeHtml = sanitizeHtml(props.html);
+  // 注意：闭合标签使用字符串拼接，避免 Vue SFC 解析器将 </body></html> 误认为模板结束标签
+  const closeBody = '<' + '/body>';
+  const closeHtml = '<' + '/html>';
+  const trustedScript = `<script nonce="${nonce}">\n(function(){\n  document.addEventListener('click', function(e) {\n    var a = e.target.closest('a') || e.target.closest('area');\n    if (a && a.href) {\n      e.preventDefault();\n      e.stopPropagation();\n      if (window.parent && window.parent !== window) {\n        window.parent.postMessage({ type: 'aeromail:link-click', url: a.href }, '*');\n      }\n    }\n  }, true);\n})();\n<` + '/script>';
   return `<!DOCTYPE html>
 <html>
 <head>
@@ -67,26 +228,13 @@ const srcdoc = computed(() => {
     :root { color-scheme: light; }
     body { margin: 0; padding: 0; }
     img { max-width: 100%; height: auto; }
-    /* 居中邮件内容 */
     .email-wrapper { margin: 0 auto; max-width: 100%; box-sizing: border-box; }
   </style>
 </head>
-<body><div class="email-wrapper">${props.html}</div>
-<script>
-  document.addEventListener('click', function(e) {
-    var a = e.target.closest && e.target.closest('a');
-    if (!a) return;
-    var href = a.getAttribute('href');
-    if (!href) return;
-    if (/^https?:\/\//i.test(href) || /^mailto:/i.test(href)) {
-      e.preventDefault();
-      e.stopPropagation();
-      window.parent.postMessage({ type: 'aeromail:link-click', url: href }, '*');
-    }
-  });
-<\/script>
-</body>
-</html>`;
+<body><div class="email-wrapper">${safeHtml}</div>
+${trustedScript}
+${closeBody}
+${closeHtml}`;
 });
 
 let observer: MutationObserver | null = null;
@@ -109,7 +257,6 @@ function disconnectObserver() {
 function detachViolationListener() {
   clearAttachInterval();
   detachSelectionListener();
-  detachLinkClickListener();
   if (!iframeRef.value?.contentDocument) return;
   const doc = iframeRef.value.contentDocument;
   doc.removeEventListener('securitypolicyviolation', handleViolation);
@@ -189,8 +336,9 @@ function handleViolation(event: SecurityPolicyViolationEvent) {
       : /^https?:\/\//i.test(uri)
         ? uri
         : `https://${uri}`;
-    const domain = new URL(normalized).hostname.toLowerCase();
-    emit('security-violation', { domain, blockedUri: uri });
+    const url = new URL(normalized);
+    if (url.protocol !== 'http:' && url.protocol !== 'https:') return;
+    emit('security-violation', { domain: url.hostname.toLowerCase(), blockedUri: uri });
   } catch {
     // ignore malformed URIs
   }
@@ -230,7 +378,11 @@ function extractRemoteDomainsFromDom(): string[] {
     if (!raw) return;
     try {
       const normalized = raw.startsWith('//') ? `https:${raw}` : raw;
-      domains.add(new URL(normalized).hostname.toLowerCase());
+      const url = new URL(normalized);
+      // 只统计真正的远程 http/https 资源；data: / blob: / cid: 等不应显示在安全横幅中
+      if (url.protocol === 'http:' || url.protocol === 'https:') {
+        domains.add(url.hostname.toLowerCase());
+      }
     } catch {
       // ignore invalid URLs
     }
@@ -291,60 +443,43 @@ function extractRemoteDomainsFromDom(): string[] {
   return Array.from(domains).sort();
 }
 
-let linkClickHandler: ((this: Document, ev: MouseEvent) => void) | null = null;
+/**
+ * 检测因 CSP 被阻止而未能加载的图片，并 emit security-violation。
+ * 部分浏览器的 securitypolicyviolation 事件在 srcdoc iframe 中触发不可靠，
+ * 通过检查 img.complete && naturalWidth === 0 可以补获被阻止的资源。
+ */
+function detectBlockedImages() {
+  if (!iframeRef.value?.contentDocument) return;
+  const doc = iframeRef.value.contentDocument;
+  const images = doc.querySelectorAll('img');
 
-function detachLinkClickListener() {
-  try {
-    const doc = iframeRef.value?.contentDocument;
-    if (doc && linkClickHandler) {
-      doc.removeEventListener('click', linkClickHandler);
-    }
-  } catch {
-    // iframe 可能已经导航离开；忽略清理错误
-  }
-  linkClickHandler = null;
-}
+  images.forEach((img) => {
+    const src =
+      img.getAttribute('src') ||
+      img.getAttribute('data-src') ||
+      img.getAttribute('data-original');
+    if (!src) return;
 
-function attachLinkClickListener(): boolean {
-  const doc = iframeRef.value?.contentDocument;
-  if (!doc) return false;
-  detachLinkClickListener();
-  linkClickHandler = (e: MouseEvent) => {
-    const target = e.target as HTMLElement;
-    // 向上查找最近的 <a> 标签（即使 a 有 pointer-events:none，子元素仍可点击）
-    const anchor = target.closest('a');
-    if (!anchor) return;
-    const href = anchor.getAttribute('href');
-    if (!href) return;
-    // 处理 http/https 链接和 mailto 链接
-    if (/^https?:\/\//i.test(href) || /^mailto:/i.test(href)) {
-      e.preventDefault();
-      e.stopPropagation();
-      emit('link-click', href);
-    }
-  };
-  try {
-    doc.addEventListener('click', linkClickHandler);
-    return true;
-  } catch {
-    linkClickHandler = null;
-    return false;
-  }
-}
+    const isBlocked = img.complete && img.naturalWidth === 0 && img.naturalHeight === 0;
+    if (!isBlocked) return;
 
-function ensureLinkClickListener() {
-  if (attachLinkClickListener()) return;
-  const interval = setInterval(() => {
-    if (attachLinkClickListener() || !iframeRef.value) {
-      clearInterval(interval);
+    try {
+      const normalized = src.startsWith('//') ? `https:${src}` : src;
+      const url = new URL(normalized);
+      if (url.protocol === 'http:' || url.protocol === 'https:') {
+        emit('security-violation', {
+          domain: url.hostname.toLowerCase(),
+          blockedUri: src,
+        });
+      }
+    } catch {
+      // ignore invalid URLs
     }
-  }, 100);
-  setTimeout(() => clearInterval(interval), 3000);
+  });
 }
 
 function emitRemoteDomains() {
   const domains = extractRemoteDomainsFromDom();
-  console.log('[SandboxedHtml] remote domains from DOM:', domains);
   if (domains.length > 0) {
     emit('remote-domains', domains);
   }
@@ -355,8 +490,9 @@ function adjustHeight() {
   disconnectObserver();
   ensureViolationListener();
   ensureSelectionListener();
-  ensureLinkClickListener();
   emitRemoteDomains();
+  // 延迟检测被 CSP 阻止的图片，给浏览器留出加载/失败判定时间
+  setTimeout(detectBlockedImages, 150);
   if (!iframeRef.value?.contentDocument?.body) return;
 
   const body = iframeRef.value.contentDocument.body;
@@ -405,7 +541,6 @@ onMounted(() => {
 onUnmounted(() => {
   disconnectObserver();
   detachViolationListener();
-  detachLinkClickListener();
   window.removeEventListener('message', handleWindowMessage);
 });
 

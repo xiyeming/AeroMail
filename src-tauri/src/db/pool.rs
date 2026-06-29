@@ -1894,6 +1894,38 @@ impl Database {
         Ok(count as u32)
     }
 
+    /// 获取指定文件夹中最新的未读邮件信息，用于通知显示。
+    /// 返回未读邮件摘要列表，按日期降序排列。
+    ///
+    /// # Errors
+    ///
+    /// 数据库查询失败或 limit 超出范围时返回错误。
+    pub fn get_latest_unread_summaries(
+        &self,
+        folder_id: &str,
+        limit: usize,
+    ) -> Result<Vec<crate::models::mail::UnreadMailSummary>, AeroError> {
+        let conn = self.connection()?;
+        let mut stmt = conn.prepare(
+            "SELECT from_name, subject FROM mails
+             WHERE folder_id = ?1 AND is_read = 0
+             ORDER BY date DESC LIMIT ?2",
+        )?;
+        let limit_i64 = i64::try_from(limit)
+            .map_err(|_| AeroError::Internal(format!("limit {limit} is too large")))?;
+        let rows = stmt.query_map(rusqlite::params![folder_id, limit_i64], |row| {
+            Ok(crate::models::mail::UnreadMailSummary {
+                from_name: row.get(0)?,
+                subject: row.get(1)?,
+            })
+        })?;
+        let mut result = Vec::new();
+        for row in rows {
+            result.push(row?);
+        }
+        Ok(result)
+    }
+
     /// Gets the account email address for the given account ID.
     ///
     /// # Errors

@@ -191,7 +191,7 @@ pub fn run() {
                 quit_item,
             });
 
-            let icon = Image::from_bytes(include_bytes!("../icons/icon.png"))?;
+            let icon = Image::from_bytes(include_bytes!("../icons/tray-icon.png"))?;
 
             TrayIconBuilder::new()
                 .icon(icon)

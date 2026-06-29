@@ -101,16 +101,17 @@ pnpm install
 ### 启动开发
 
 ```bash
-cargo tauri dev
+./scripts/run-dev.sh
 ```
 
-该命令会自动拉起 Vite 前端开发服务器（端口 `1420`）和 Rust 后端。
+该脚本会自动检测 Wayland 会话并设置 `WEBKIT_DISABLE_COMPOSITING_MODE=1`，
+然后拉起 Tauri 开发模式（自动启动 Vite 前端服务器，端口 `1420`）。
 
-#### Linux Wayland 运行
+如果你希望直接使用 `cargo tauri dev`，在 Wayland 下可手动设置：
 
 ```bash
 export GDK_BACKEND=wayland
-export WEBKIT_DISABLE_COMPOSITING_MODE=0
+export WEBKIT_DISABLE_COMPOSITING_MODE=1
 cargo tauri dev
 ```
 

@@ -101,16 +101,19 @@ pnpm install
 ### Start Development
 
 ```bash
-cargo tauri dev
+./scripts/run-dev.sh
 ```
 
-This command starts the Vite frontend dev server (port `1420`) and the Rust backend automatically.
+This script automatically detects a Wayland session and sets
+`WEBKIT_DISABLE_COMPOSITING_MODE=1` before launching Tauri dev mode
+(which starts the Vite frontend dev server on port `1420` automatically).
 
-#### Running on Linux Wayland
+If you prefer to run `cargo tauri dev` directly, on Wayland you can set the
+variable manually:
 
 ```bash
 export GDK_BACKEND=wayland
-export WEBKIT_DISABLE_COMPOSITING_MODE=0
+export WEBKIT_DISABLE_COMPOSITING_MODE=1
 cargo tauri dev
 ```
 

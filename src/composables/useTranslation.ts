@@ -2,14 +2,36 @@ import { ref } from 'vue';
 import { invoke } from '@tauri-apps/api/core';
 import type { TranslationProviderSummary } from '@/types/translation';
 import { useLocale } from '@/composables/useLocale';
+import { useSettingsStore } from '@/stores/settings';
+
+const DEFAULT_TARGET_LANG_KEY = 'translation.defaultTargetLang';
 
 export function useTranslation() {
   const { locale: appLocale } = useLocale();
+  const settingsStore = useSettingsStore();
   const isTranslating = ref(false);
   const error = ref<string | null>(null);
 
   function getDefaultTargetLang(): string {
     return appLocale.value === 'zh-CN' ? 'en' : 'zh-CN';
+  }
+
+  async function loadDefaultTargetLang(): Promise<string> {
+    try {
+      const saved = await settingsStore.get(DEFAULT_TARGET_LANG_KEY);
+      if (saved) return saved;
+    } catch (e) {
+      console.error('Failed to load default target language:', e);
+    }
+    return getDefaultTargetLang();
+  }
+
+  async function saveDefaultTargetLang(lang: string): Promise<void> {
+    try {
+      await settingsStore.set(DEFAULT_TARGET_LANG_KEY, lang);
+    } catch (e) {
+      console.error('Failed to save default target language:', e);
+    }
   }
 
   async function translateMail(
@@ -65,5 +87,7 @@ export function useTranslation() {
     translateText,
     listProviders,
     getDefaultTargetLang,
+    loadDefaultTargetLang,
+    saveDefaultTargetLang,
   };
 }

@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref } from 'vue';
+import { ref, onMounted, watch } from 'vue';
 import { useI18n } from 'vue-i18n';
 import { Loader2 } from 'lucide-vue-next';
 import { useTranslation } from '@/composables/useTranslation';
@@ -17,7 +17,14 @@ const emit = defineEmits<{
 
 const { t } = useI18n();
 const toast = useToastStore();
-const { translateMail, listProviders, getDefaultTargetLang, isTranslating } = useTranslation();
+const {
+  translateMail,
+  listProviders,
+  getDefaultTargetLang,
+  loadDefaultTargetLang,
+  saveDefaultTargetLang,
+  isTranslating,
+} = useTranslation();
 
 const providers = ref<TranslationProviderSummary[]>([]);
 const selectedProviderId = ref('');
@@ -77,7 +84,14 @@ async function handleTranslate() {
   }
 }
 
-loadProviders();
+onMounted(async () => {
+  await loadProviders();
+  targetLang.value = await loadDefaultTargetLang();
+});
+
+watch(targetLang, (newLang) => {
+  saveDefaultTargetLang(newLang);
+});
 </script>
 
 <template>

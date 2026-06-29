@@ -27,6 +27,7 @@ import { save } from '@tauri-apps/plugin-dialog';
 import AiQuickActions from '@/components/AiQuickActions.vue';
 import SandboxedHtml from '@/components/SandboxedHtml.vue';
 import TranslatePanel from '@/components/TranslatePanel.vue';
+import BaseSelect from '@/components/BaseSelect.vue';
 import { useAiChat } from '@/composables/useAiChat';
 import { useAiStore } from '@/stores/ai';
 import { useMailStore } from '@/stores/mail';
@@ -44,6 +45,9 @@ const {
   translateText,
   listProviders: listTranslationProviders,
   getDefaultTargetLang,
+  loadDefaultTargetLang,
+  saveDefaultTargetLang,
+  isTranslating,
 } = useTranslation();
 const aiStore = useAiStore();
 const mailStore = useMailStore();
@@ -72,6 +76,14 @@ const selectionMenuRef = ref<HTMLDivElement | null>(null);
 const translationProviders = ref<TranslationProviderSummary[]>([]);
 const selectedTranslationProviderId = ref('');
 const translationTargetLang = ref(getDefaultTargetLang());
+
+const translationLanguages = [
+  { value: 'en', label: 'translation.language.english' },
+  { value: 'zh-CN', label: 'translation.language.chinese' },
+  { value: 'ja', label: 'translation.language.japanese' },
+  { value: 'ko', label: 'translation.language.korean' },
+];
+
 const summaryText = ref('');
 const isSummarizing = ref(false);
 const isExtractingTodos = ref(false);
@@ -81,7 +93,12 @@ async function loadTranslationProviders() {
   if (translationProviders.value.length > 0 && !selectedTranslationProviderId.value) {
     selectedTranslationProviderId.value = translationProviders.value[0].id;
   }
+  translationTargetLang.value = await loadDefaultTargetLang();
 }
+
+watch(translationTargetLang, (newLang) => {
+  saveDefaultTargetLang(newLang);
+});
 
 function getSelectedText(): string {
   return window.getSelection()?.toString()?.trim() ?? '';
@@ -103,6 +120,15 @@ function clampMenuPosition(
 }
 
 function updateSelectionMenu(e?: MouseEvent) {
+  if (e) {
+    const target = e.target as Node;
+    const iframe = sandboxedHtmlRef.value?.iframeRef;
+    // iframe 内的选区由 SandboxedHtml 的 selection 事件单独处理，
+    // 父页面 mouseup 冒泡上来时不要把它覆盖/隐藏掉。
+    if (iframe && (target === iframe || iframe.contains(target as Node))) return;
+    // 点击翻译菜单内部时也不要因父页面选区为空而隐藏菜单。
+    if (selectionMenuRef.value?.contains(target)) return;
+  }
   const text = getSelectedText();
   if (!text) {
     showSelectionMenu.value = false;
@@ -731,7 +757,7 @@ watch(currentMailId, (newMailId) => {
       </div>
 
       <!-- Translation result card -->
-      <div v-if="translatedText" class="border-b border-border bg-accent-subtle/30 px-6 py-3">
+      <div v-if="translatedText || isTranslating" class="border-b border-border bg-accent-subtle/30 px-6 py-3">
         <div class="flex items-center justify-between gap-3">
           <div class="flex items-center gap-2">
             <Languages class="h-4 w-4 text-accent" aria-hidden="true" />
@@ -763,7 +789,11 @@ watch(currentMailId, (newMailId) => {
           v-show="!translationCollapsed"
           class="mt-2 max-h-96 overflow-y-auto text-sm text-secondary"
         >
-          {{ translatedText }}
+          <div v-if="isTranslating" class="flex items-center gap-2 text-xs text-tertiary">
+            <Loader2 class="h-3.5 w-3.5 animate-spin" />
+            {{ t('translation.translating') }}
+          </div>
+          <p v-else>{{ translatedText }}</p>
         </div>
       </div>
 
@@ -874,16 +904,25 @@ watch(currentMailId, (newMailId) => {
         <div
           v-if="showSelectionMenu"
           ref="selectionMenuRef"
-          class="fixed z-50 rounded-md border border-border bg-elevated px-2 py-1 shadow-lg"
+          class="fixed z-50 flex items-center gap-1 rounded-lg border border-border bg-elevated p-1 shadow-md"
           :style="{ left: `${selectionMenuX}px`, top: `${selectionMenuY}px` }"
         >
+          <div class="w-24">
+            <BaseSelect
+              v-model="translationTargetLang"
+              size="sm"
+              :options="translationLanguages.map((lang) => ({ value: lang.value, label: $t(lang.label) }))"
+            />
+          </div>
           <button
             type="button"
-            class="flex items-center gap-1 text-xs text-secondary transition-colors hover:text-primary"
+            class="flex h-7 w-7 items-center justify-center rounded-md bg-accent text-white transition-colors hover:bg-accent-hover disabled:opacity-50 disabled:cursor-not-allowed"
+            :title="t('translation.translate')"
+            :disabled="!selectedTranslationProviderId || isTranslating"
             @click="translateSelectedText"
           >
-            <Languages class="h-3.5 w-3.5" />
-            {{ t('translation.translate') }}
+            <Loader2 v-if="isTranslating" class="h-3.5 w-3.5 animate-spin" />
+            <Languages v-else class="h-3.5 w-3.5" />
           </button>
         </div>
       </Teleport>

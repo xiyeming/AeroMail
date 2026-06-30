@@ -95,7 +95,7 @@ jobs:
           args: ${{ matrix.args }}
 
       - name: Create Linux .tar.gz archive from AppImage
-        if: matrix.platform == 'ubuntu-22.04'
+        if: runner.os == 'Linux'
         shell: bash
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -104,10 +104,21 @@ jobs:
         run: |
           set -e
           VERSION="${TAG_NAME#v}"
-          ARCH="amd64"
+
+          if [ "$TARGET" = "x86_64-unknown-linux-gnu" ]; then
+            APPIMAGE_ARCH="amd64"
+            ARCHIVE_ARCH="x86_64"
+          elif [ "$TARGET" = "aarch64-unknown-linux-gnu" ]; then
+            APPIMAGE_ARCH="aarch64"
+            ARCHIVE_ARCH="aarch64"
+          else
+            echo "No AppImage tar.gz wrapper defined for target $TARGET"
+            exit 0
+          fi
+
           APPIMAGE_DIR="src-tauri/target/${TARGET}/release/bundle/appimage"
-          APPIMAGE_NAME="aeromail_${VERSION}_${ARCH}.AppImage"
-          ARCHIVE_NAME="aeromail-${TAG_NAME}-linux-x86_64.tar.gz"
+          APPIMAGE_NAME="aeromail_${VERSION}_${APPIMAGE_ARCH}.AppImage"
+          ARCHIVE_NAME="aeromail-${TAG_NAME}-linux-${ARCHIVE_ARCH}.tar.gz"
 
           if [ -f "${APPIMAGE_DIR}/${APPIMAGE_NAME}" ]; then
             tar czf "${ARCHIVE_NAME}" -C "${APPIMAGE_DIR}" "${APPIMAGE_NAME}"

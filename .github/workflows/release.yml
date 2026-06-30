@@ -92,11 +92,15 @@ jobs:
           releaseBody: |
             🎉 AeroMail ${{ github.ref_name }} is available!
 
-            | Platform | Bundles |
-            |----------|---------|
-            | Linux | `.deb`, `.AppImage`, `.tar.gz` |
-            | macOS | `.dmg` (universal) |
-            | Windows | `.msi`, `.exe` (NSIS installer) |
+            | Platform | Architecture | Bundles |
+            |----------|--------------|---------|
+            | Linux | x86_64 | `.deb`, `.AppImage`, `.tar.gz` |
+            | Linux | aarch64 | `.deb`, `.AppImage`, `.tar.gz` |
+            | Linux | armv7 (optional) | `.deb` |
+            | macOS | universal | `.dmg` |
+            | Windows | x86_64 | `.msi`, `.exe` (NSIS) |
+            | Windows | i686 | `.msi`, `.exe` (NSIS) |
+            | Arch Linux | x86_64 | `.pkg.tar.zst` |
 
             Download the asset for your platform below.
           releaseDraft: false

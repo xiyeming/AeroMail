@@ -171,11 +171,18 @@ jobs:
 
             apt-get update -y --allow-releaseinfo-change
             apt-get autoremove -y
-            apt-get install -y --no-install-recommends --no-install-suggests ca-certificates curl gnupg libwebkit2gtk-4.1-dev build-essential libssl-dev libgtk-3-dev libayatana-appindicator3-dev librsvg2-dev patchelf libfuse2 file
+            apt-get install -y --no-install-recommends --no-install-suggests ca-certificates curl xz-utils libwebkit2gtk-4.1-dev build-essential libssl-dev libgtk-3-dev libayatana-appindicator3-dev librsvg2-dev patchelf libfuse2 file
 
             # Debian Bookworm ships Node.js 18, but this project needs Node.js 22.
-            curl -fsSL https://deb.nodesource.com/setup_22.x | bash -
-            apt-get install -y nodejs
+            # Install the official Node.js armv7l binary tarball and verify its checksum.
+            NODE_VERSION="22.23.1"
+            NODE_TARBALL="node-v${NODE_VERSION}-linux-armv7l.tar.xz"
+            NODE_URL="https://nodejs.org/dist/v${NODE_VERSION}/${NODE_TARBALL}"
+            NODE_SHA256="c24dcdd3df032a34d1c858ddac9e514d3cac6fa655cc92cd4afe4e589c866a10"
+
+            curl -fsSL "${NODE_URL}" -o "/tmp/${NODE_TARBALL}"
+            echo "${NODE_SHA256}  /tmp/${NODE_TARBALL}" | sha256sum -c -
+            tar -xJf "/tmp/${NODE_TARBALL}" -C /usr/local --strip-components=1
 
             npm install -g pnpm@9
 

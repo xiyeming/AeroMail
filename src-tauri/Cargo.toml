@@ -1,6 +1,6 @@
 [package]
 name = "aeromail"
-version = "0.0.2"
+version = "0.0.3"
 description = "AeroMail - Modern cross-platform email client"
 authors = ["AeroMail Team"]
 edition = "2024"

@@ -21,12 +21,15 @@ jobs:
         include:
           - platform: ubuntu-22.04
             target: x86_64-unknown-linux-gnu
+            rust-targets: x86_64-unknown-linux-gnu
             args: '--target x86_64-unknown-linux-gnu'
           - platform: macos-latest
             target: universal-apple-darwin
+            rust-targets: 'aarch64-apple-darwin,x86_64-apple-darwin'
             args: '--target universal-apple-darwin'
           - platform: windows-latest
             target: x86_64-pc-windows-msvc
+            rust-targets: x86_64-pc-windows-msvc
             args: '--target x86_64-pc-windows-msvc'
 
     runs-on: ${{ matrix.platform }}
@@ -52,7 +55,7 @@ jobs:
       - name: Install Rust toolchain
         uses: dtolnay/rust-toolchain@stable
         with:
-          targets: ${{ matrix.target }}
+          targets: ${{ matrix.rust-targets }}
 
       - name: Install Linux dependencies
         if: matrix.platform == 'ubuntu-22.04'
@@ -64,6 +67,8 @@ jobs:
         uses: tauri-apps/tauri-action@v0.5
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          APPIMAGE_EXTRACT_AND_RUN: ${{ matrix.platform == 'ubuntu-22.04' && '1' || '' }}
+          NO_STRIP: ${{ matrix.platform == 'ubuntu-22.04' && 'true' || '' }}
         with:
           tagName: ${{ github.ref_name }}
           releaseName: 'AeroMail ${{ github.ref_name }}'

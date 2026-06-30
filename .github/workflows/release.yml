@@ -5,6 +5,15 @@ on:
     tags:
       - 'v*'
   workflow_dispatch:
+    inputs:
+      include-armv7:
+        description: 'Build optional Linux armv7 .deb via emulation (slow, ~1 hour)'
+        required: false
+        default: 'false'
+      include-arch:
+        description: 'Build Arch Linux pkg.tar.zst'
+        required: false
+        default: 'true'
 
 # Allow creating releases and uploading assets.
 permissions:
@@ -126,3 +135,87 @@ jobs:
           else
             echo "AppImage not found at ${APPIMAGE_DIR}/${APPIMAGE_NAME}; skipping tar.gz"
           fi
+
+  build-linux-armv7:
+    if: github.event_name == 'push' || inputs.include-armv7 == 'true'
+    runs-on: ubuntu-22.04
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Build armv7 .deb in emulated ARM environment
+        uses: pguyot/arm-runner-action@v2.6.5
+        with:
+          base_image: https://dietpi.com/downloads/images/DietPi_RPi-ARMv7-Bookworm.img.xz
+          cpu: cortex-a53
+          bind_mount_repository: true
+          image_additional_mb: 10240
+          optimize_image: no
+          commands: |
+            export HOME=/root
+            export CARGO_REGISTRIES_CRATES_IO_PROTOCOL=sparse
+
+            apt-get update -y --allow-releaseinfo-change
+            apt-get autoremove -y
+            apt-get install -y --no-install-recommends --no-install-suggests curl libwebkit2gtk-4.1-dev build-essential libssl-dev libgtk-3-dev libayatana-appindicator3-dev librsvg2-dev patchelf libfuse2 file nodejs npm
+
+            npm install -g pnpm
+
+            curl https://sh.rustup.rs -sSf | sh -s -- -y --default-toolchain stable
+            . "$HOME/.cargo/env"
+
+            pnpm install
+            pnpm tauri build -- --bundles deb
+
+      - name: Upload armv7 .deb to release
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAG_NAME: ${{ github.ref_name }}
+        shell: bash
+        run: |
+          set -e
+          VERSION="${TAG_NAME#v}"
+          DEB="src-tauri/target/release/bundle/deb/aeromail_${VERSION}_armhf.deb"
+          if [ -f "$DEB" ]; then
+            gh release upload "${TAG_NAME}" "$DEB" --clobber
+          else
+            echo "armv7 .deb not found at $DEB; skipping upload"
+          fi
+
+  build-arch-pkg:
+    if: github.event_name == 'push' || inputs.include-arch == 'true'
+    runs-on: ubuntu-latest
+    container:
+      image: archlinux:base-devel
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Install Arch build dependencies
+        run: |
+          pacman -Syu --noconfirm
+          pacman -S --noconfirm --needed base-devel webkit2gtk-4.1 libayatana-appindicator3 librsvg nodejs npm rustup
+          npm install -g pnpm
+          rustup default stable
+
+      - name: Build frontend and Rust binary
+        run: |
+          pnpm install
+          pnpm build
+          pnpm tauri build --no-bundle
+
+      - name: Build pacman package
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAG_NAME: ${{ github.ref_name }}
+        run: |
+          set -e
+          VERSION="${TAG_NAME#v}"
+          PKGDIR="packaging/arch"
+          install -Dm755 "src-tauri/target/release/aeromail" "$PKGDIR/aeromail"
+          install -Dm644 "src-tauri/icons/icon.png" "$PKGDIR/icon.png"
+          sed -i "s/^pkgver=.*/pkgver=${VERSION}/" "$PKGDIR/PKGBUILD"
+          cd "$PKGDIR"
+          makepkg -s --noconfirm
+          PKG=$(ls aeromail-${VERSION}-1-x86_64.pkg.tar.zst)
+          gh release upload "${TAG_NAME}" "$PKG" --clobber

@@ -1,0 +1,17 @@
+# Maintainer: AeroMail Team <team@aeromail.example>
+pkgname=aeromail
+pkgver=0.0.4
+pkgrel=1
+pkgdesc="Modern cross-platform email client"
+arch=('x86_64')
+url="https://github.com/xiyeming/AeroMail"
+license=('MIT')
+depends=('gtk3' 'webkit2gtk-4.1' 'libayatana-appindicator3' 'librsvg' 'desktop-file-utils' 'hicolor-icon-theme')
+source=('aeromail' 'aeromail.desktop' 'icon.png')
+sha256sums=('SKIP' 'SKIP' 'SKIP')
+
+package() {
+  install -Dm755 aeromail "$pkgdir/usr/bin/aeromail"
+  install -Dm644 aeromail.desktop "$pkgdir/usr/share/applications/aeromail.desktop"
+  install -Dm644 icon.png "$pkgdir/usr/share/pixmaps/aeromail.png"
+}

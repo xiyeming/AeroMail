@@ -1,0 +1,8 @@
+[Desktop Entry]
+Name=AeroMail
+Comment=Modern cross-platform email client
+Exec=aeromail %U
+Icon=aeromail
+Type=Application
+Categories=Office;Network;Email;
+Terminal=false

@@ -235,14 +235,24 @@ jobs:
             exit 1
           fi
           PKGDIR="packaging/arch"
+
+          # makepkg refuses to run as root; create a dedicated builder user.
+          useradd -m builder
+          echo "builder ALL=(ALL) NOPASSWD: ALL" >> /etc/sudoers
+
           install -Dm755 "src-tauri/target/release/aeromail" "$PKGDIR/aeromail"
           install -Dm644 "src-tauri/icons/icon.png" "$PKGDIR/icon.png"
           sed -i "s/^pkgver=.*/pkgver=${VERSION}/" "$PKGDIR/PKGBUILD"
-          cd "$PKGDIR"
-          makepkg -s --noconfirm
+
+          # Grant the builder user ownership of the packaging directory.
+          chown -R builder:builder "$PKGDIR"
+
+          # Build the package as the non-root user.
+          su builder -c "cd '$PKGDIR' && makepkg -s --noconfirm"
+
           PKG="aeromail-${VERSION}-1-x86_64.pkg.tar.zst"
-          if [ -f "$PKG" ]; then
-            gh release upload "${TAG_NAME}" "$PKG" --clobber
+          if [ -f "$PKGDIR/$PKG" ]; then
+            gh release upload "${TAG_NAME}" "$PKGDIR/$PKG" --clobber
           else
             echo "Package not found: $PKG"
             exit 1

@@ -142,6 +142,7 @@ jobs:
 
   build-linux-armv7:
     if: startsWith(github.ref, 'refs/tags/v') && (github.event_name == 'push' || inputs.include-armv7 == 'true')
+    needs: build
     runs-on: ubuntu-22.04
     steps:
       - name: Checkout repository
@@ -214,6 +215,7 @@ jobs:
 
   build-arch-pkg:
     if: startsWith(github.ref, 'refs/tags/v') && (github.event_name == 'push' || inputs.include-arch == 'true')
+    needs: build
     runs-on: ubuntu-latest
     container:
       image: archlinux:base-devel

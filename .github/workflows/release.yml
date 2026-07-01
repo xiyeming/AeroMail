@@ -170,6 +170,14 @@ jobs:
             export HOME=/root
             export CARGO_REGISTRIES_CRATES_IO_PROTOCOL=sparse
 
+            # Disable fat LTO for ARM QEMU builds — LLVM OOMs on the limited-memory
+            # emulated environment. Override at env level so Cargo.toml stays optimised
+            # for native x86_64 / aarch64 / macOS / Windows releases.
+            export CARGO_PROFILE_RELEASE_LTO=false
+            export CARGO_PROFILE_RELEASE_OPT_LEVEL=s
+            export CARGO_PROFILE_RELEASE_STRIP=true
+            export CARGO_PROFILE_RELEASE_CODEGEN_UNITS=256
+
             apt-get update -y --allow-releaseinfo-change
             apt-get autoremove -y
             apt-get install -y --no-install-recommends --no-install-suggests ca-certificates curl xz-utils libwebkit2gtk-4.1-dev build-essential libssl-dev libgtk-3-dev libayatana-appindicator3-dev librsvg2-dev patchelf libfuse2 file

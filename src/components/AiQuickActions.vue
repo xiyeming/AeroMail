@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { useI18n } from 'vue-i18n';
-import { Sparkles, ListTodo, Loader2 } from 'lucide-vue-next';
+import { Sparkles, ListTodo, Loader2 } from '@lucide/vue';
 
 withDefaults(
   defineProps<{

@@ -3,7 +3,7 @@ import { computed, onMounted, onUnmounted, ref } from 'vue';
 import { getCurrentWindow } from '@tauri-apps/api/window';
 import { listen, type UnlistenFn } from '@tauri-apps/api/event';
 import { invoke } from '@tauri-apps/api/core';
-import { Minus, Square, X } from 'lucide-vue-next';
+import { Minus, Square, X } from '@lucide/vue';
 import { useResponsive } from '@/composables/useResponsive';
 import { useWindowFrame } from '@/composables/useWindowFrame';
 import { useAiStore } from '@/stores/ai';

@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { ref, nextTick, computed } from 'vue';
-import { ListTodo, Plus, Trash2, X, Check, Bell, Clock } from 'lucide-vue-next';
+import { ListTodo, Plus, Trash2, X, Check, Bell, Clock } from '@lucide/vue';
 import { useTodoStore } from '@/stores/todo';
 import DateTimePicker from '@/components/DateTimePicker.vue';
 import BaseCheckbox from '@/components/BaseCheckbox.vue';

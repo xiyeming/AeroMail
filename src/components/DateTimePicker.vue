@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed, ref, watch } from 'vue';
-import { Bell, X } from 'lucide-vue-next';
+import { Bell, X } from '@lucide/vue';
 import { PopoverContent, PopoverRoot, PopoverTrigger } from 'radix-vue';
 import BaseSelect from '@/components/BaseSelect.vue';
 

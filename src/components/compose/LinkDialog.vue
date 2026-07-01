@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { ref, watch } from 'vue';
 import { useI18n } from 'vue-i18n';
-import { X, Link as LinkIcon } from 'lucide-vue-next';
+import { X, Link as LinkIcon } from '@lucide/vue';
 
 const props = defineProps<{
   open: boolean;

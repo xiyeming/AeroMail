@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { ref, onMounted, watch } from 'vue';
 import { useI18n } from 'vue-i18n';
-import { Loader2 } from 'lucide-vue-next';
+import { Loader2 } from '@lucide/vue';
 import { useTranslation } from '@/composables/useTranslation';
 import { useToastStore } from '@/stores/toast';
 import BaseSelect from '@/components/BaseSelect.vue';

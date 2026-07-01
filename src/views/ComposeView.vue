@@ -44,7 +44,7 @@
 <script setup lang="ts">
 import { onMounted, computed, ref } from 'vue';
 import { useRoute } from 'vue-router';
-import { Loader2 } from 'lucide-vue-next';
+import { Loader2 } from '@lucide/vue';
 import { useTauriInvoke } from '@/composables/useTauriInvoke';
 import { useComposeStore } from '@/stores/compose';
 import { useAccountStore } from '@/stores/account';

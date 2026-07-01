@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed, nextTick, ref, watch } from 'vue';
 import { useI18n } from 'vue-i18n';
-import { FolderInput } from 'lucide-vue-next';
+import { FolderInput } from '@lucide/vue';
 import { useMailStore } from '@/stores/mail';
 
 const { t } = useI18n();

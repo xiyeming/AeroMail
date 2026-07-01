@@ -38,7 +38,7 @@ import {
   Pilcrow,
   RemoveFormatting,
   Check,
-} from 'lucide-vue-next';
+} from '@lucide/vue';
 import {
   PopoverContent,
   PopoverRoot,

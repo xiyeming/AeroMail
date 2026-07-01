@@ -70,7 +70,7 @@
 
 <script setup lang="ts">
 import { ref, computed, watch } from 'vue';
-import { Loader2 } from 'lucide-vue-next';
+import { Loader2 } from '@lucide/vue';
 import type { ComposeDraft } from '@/types/compose';
 import type { AccountSummary } from '@/types/account';
 import BaseSelect from '@/components/BaseSelect.vue';

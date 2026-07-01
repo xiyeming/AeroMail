@@ -13,7 +13,7 @@ import {
   Plus,
   ListTodo,
   ChevronDown,
-} from 'lucide-vue-next';
+} from '@lucide/vue';
 import { useAccountStore } from '@/stores/account';
 import { useMailStore } from '@/stores/mail';
 import { useTodoStore } from '@/stores/todo';

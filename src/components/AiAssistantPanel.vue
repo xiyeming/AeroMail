@@ -2,7 +2,7 @@
 import { ref, onMounted, nextTick, watch, computed } from 'vue';
 import { useI18n } from 'vue-i18n';
 import { invoke } from '@tauri-apps/api/core';
-import { ChevronDown, Eraser, Pencil, Trash2, X } from 'lucide-vue-next';
+import { ChevronDown, Eraser, Pencil, Trash2, X } from '@lucide/vue';
 import { useAiChat } from '@/composables/useAiChat';
 import AiMessageList from '@/components/AiMessageList.vue';
 import { useAiStore } from '@/stores/ai';

@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { ref, computed, watch, onMounted, onUnmounted } from 'vue';
 import { useI18n } from 'vue-i18n';
-import { Search } from 'lucide-vue-next';
+import { Search } from '@lucide/vue';
 import { useLocale } from '@/composables/useLocale';
 import { useAiStore } from '@/stores/ai';
 import { useMailStore } from '@/stores/mail';

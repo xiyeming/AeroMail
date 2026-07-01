@@ -2,7 +2,7 @@
 import { ref } from 'vue';
 import { useI18n } from 'vue-i18n';
 import type { AiChatMessage } from '@/types/ai';
-import { Bot, ChevronDown, ChevronUp, Mail, User } from 'lucide-vue-next';
+import { Bot, ChevronDown, ChevronUp, Mail, User } from '@lucide/vue';
 import MarkdownText from './MarkdownText.vue';
 
 const { t } = useI18n();

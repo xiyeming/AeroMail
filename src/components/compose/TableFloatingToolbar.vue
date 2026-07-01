@@ -16,7 +16,7 @@ import {
   AlignCenter,
   AlignRight,
   PaintBucket,
-} from 'lucide-vue-next';
+} from '@lucide/vue';
 
 const props = defineProps<{
   editor: Editor;

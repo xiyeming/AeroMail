@@ -21,7 +21,7 @@ import {
   Sparkles,
   X,
   Loader2,
-} from 'lucide-vue-next';
+} from '@lucide/vue';
 import { invoke } from '@tauri-apps/api/core';
 import { save } from '@tauri-apps/plugin-dialog';
 import AiQuickActions from '@/components/AiQuickActions.vue';

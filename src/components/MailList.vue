@@ -13,7 +13,7 @@ import {
   X,
   CheckSquare,
   Loader2,
-} from 'lucide-vue-next';
+} from '@lucide/vue';
 import { useMailStore } from '@/stores/mail';
 import { useAccountStore } from '@/stores/account';
 import { useToastStore } from '@/stores/toast';

@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed, ref, onMounted, watch } from 'vue';
 import { invoke } from '@tauri-apps/api/core';
-import { Star, Trash2, Pencil } from 'lucide-vue-next';
+import { Star, Trash2, Pencil } from '@lucide/vue';
 import { useLocale, type Locale } from '@/composables/useLocale';
 import { useLogConfig } from '@/composables/useLogConfig';
 import { useTheme, type Theme } from '@/composables/useTheme';

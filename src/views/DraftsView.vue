@@ -2,7 +2,7 @@
 import { onMounted } from 'vue';
 import { useRouter } from 'vue-router';
 import { useComposeStore } from '@/stores/compose';
-import { FileText, Trash2 } from 'lucide-vue-next';
+import { FileText, Trash2 } from '@lucide/vue';
 
 const router = useRouter();
 const composeStore = useComposeStore();

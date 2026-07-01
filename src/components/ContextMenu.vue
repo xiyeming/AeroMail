@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { ref, onMounted, onUnmounted, computed, nextTick, type ComponentPublicInstance } from 'vue';
 import { useI18n } from 'vue-i18n';
-import { Star, Trash2, FolderInput, Eye, EyeOff, Archive, AlertTriangle } from 'lucide-vue-next';
+import { Star, Trash2, FolderInput, Eye, EyeOff, Archive, AlertTriangle } from '@lucide/vue';
 
 const { t } = useI18n();
 

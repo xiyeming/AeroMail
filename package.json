@@ -1,7 +1,7 @@
 {
   "name": "aeromail",
   "private": true,
-  "version": "0.0.10",
+  "version": "0.0.11",
   "type": "module",
   "scripts": {
     "dev": "vite",
@@ -54,6 +54,7 @@
     "@types/node": "^26.0.0",
     "@vitejs/plugin-vue": "^6.0.7",
     "@vue/tsconfig": "^0.9.1",
+    "@vue/typescript-plugin": "^3.3.5",
     "eslint": "^10.5.0",
     "eslint-config-prettier": "^10.0.0",
     "eslint-plugin-vue": "^10.9.2",

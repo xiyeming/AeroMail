@@ -190,7 +190,7 @@ jobs:
             . "$HOME/.cargo/env"
 
             pnpm install
-            pnpm tauri build -- --bundles deb
+            pnpm tauri build --bundles deb
 
       - name: Upload armv7 .deb to release
         env:
@@ -223,7 +223,7 @@ jobs:
       - name: Install Arch build dependencies
         run: |
           pacman -Syu --noconfirm
-          pacman -S --noconfirm --needed base-devel webkit2gtk-4.1 libayatana-appindicator librsvg nodejs npm rustup jq github-cli
+          pacman -S --noconfirm --needed base-devel webkit2gtk-4.1 libayatana-appindicator librsvg nodejs npm rustup jq github-cli git
           npm install -g pnpm@9
           rustup default stable
           echo "$HOME/.cargo/bin" >> "$GITHUB_PATH"

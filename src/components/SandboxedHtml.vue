@@ -238,6 +238,7 @@ ${closeHtml}`;
 });
 
 let observer: MutationObserver | null = null;
+let detectBlockedTimer: ReturnType<typeof setTimeout> | null = null;
 let attachInterval: ReturnType<typeof setInterval> | null = null;
 
 function clearAttachInterval() {
@@ -252,6 +253,16 @@ function disconnectObserver() {
     observer.disconnect();
     observer = null;
   }
+  if (detectBlockedTimer) {
+    clearTimeout(detectBlockedTimer);
+    detectBlockedTimer = null;
+  }
+}
+
+/** Debounced detectBlockedImages — called from MutationObserver & image load/error handlers. */
+function scheduleDetectBlocked() {
+  if (detectBlockedTimer) clearTimeout(detectBlockedTimer);
+  detectBlockedTimer = setTimeout(detectBlockedImages, 300);
 }
 
 function detachViolationListener() {
@@ -485,6 +496,41 @@ function emitRemoteDomains() {
   }
 }
 
+function applyHeight() {
+  if (!iframeRef.value?.contentDocument?.body) return;
+  const height = iframeRef.value.contentDocument.body.scrollHeight;
+  iframeRef.value.style.height = `${Math.min(height + 20, 2000)}px`;
+  scheduleDetectBlocked();
+}
+
+/**
+ * 给 iframe 内尚未加载完成的图片绑定 load/error 事件，
+ * 在图片加载完成后重新计算高度并触发被阻止图片检测。
+ * MutationObserver 无法捕获图片加载引起的布局变化（DOM 结构未变），
+ * 必须通过图片自身的事件来弥补。
+ */
+function watchImages() {
+  if (!iframeRef.value?.contentDocument) return;
+  const images = iframeRef.value.contentDocument.querySelectorAll('img');
+  images.forEach((img) => {
+    if (img.complete) return;
+    img.addEventListener(
+      'load',
+      () => {
+        applyHeight();
+      },
+      { once: true },
+    );
+    img.addEventListener(
+      'error',
+      () => {
+        applyHeight();
+      },
+      { once: true },
+    );
+  });
+}
+
 function adjustHeight() {
   emit('load');
   disconnectObserver();
@@ -492,16 +538,10 @@ function adjustHeight() {
   ensureSelectionListener();
   emitRemoteDomains();
   // 延迟检测被 CSP 阻止的图片，给浏览器留出加载/失败判定时间
-  setTimeout(detectBlockedImages, 150);
+  setTimeout(detectBlockedImages, 500);
   if (!iframeRef.value?.contentDocument?.body) return;
 
   const body = iframeRef.value.contentDocument.body;
-
-  const applyHeight = () => {
-    if (!iframeRef.value?.contentDocument?.body) return;
-    const height = iframeRef.value.contentDocument.body.scrollHeight;
-    iframeRef.value.style.height = `${Math.min(height + 20, 2000)}px`;
-  };
 
   observer = new MutationObserver(applyHeight);
   observer.observe(body, {
@@ -511,6 +551,7 @@ function adjustHeight() {
   });
 
   applyHeight();
+  watchImages();
 }
 
 watch(srcdoc, () => {

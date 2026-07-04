@@ -80,6 +80,96 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y libgtk-3-dev libwebkit2gtk-4.1-dev librsvg2-dev libayatana-appindicator3-dev
 
+      - name: Generate changelog
+        id: changelog
+        shell: bash
+        run: |
+          set -e
+          CURRENT_TAG="${{ github.ref_name }}"
+          PREV_TAG=$(git tag --sort=-v:refname | grep -E '^v[0-9]+\.[0-9]+\.[0-9]+$' | sed -n '2p')
+
+          if [ -z "$PREV_TAG" ]; then
+            RANGE="HEAD"
+          else
+            RANGE="${PREV_TAG}..HEAD"
+          fi
+
+          # Collect conventional-commit messages, grouped by category.
+          {
+            echo "## What's Changed"
+            echo ""
+
+            # ── New Features ──
+            FEATS=$(git log "$RANGE" --pretty=format:'- %s (%h)' --grep='^feat' --extended-regexp 2>/dev/null || true)
+            if [ -n "$FEATS" ]; then
+              echo "### 🚀 New Features"
+              echo "$FEATS"
+              echo ""
+            fi
+
+            # ── Bug Fixes ──
+            FIXES=$(git log "$RANGE" --pretty=format:'- %s (%h)' --grep='^fix' --extended-regexp 2>/dev/null || true)
+            if [ -n "$FIXES" ]; then
+              echo "### 🐛 Bug Fixes"
+              echo "$FIXES"
+              echo ""
+            fi
+
+            # ── Performance ──
+            PERFS=$(git log "$RANGE" --pretty=format:'- %s (%h)' --grep='^perf' --extended-regexp 2>/dev/null || true)
+            if [ -n "$PERFS" ]; then
+              echo "### ⚡ Performance"
+              echo "$PERFS"
+              echo ""
+            fi
+
+            # ── CI / Build ──
+            CIS=$(git log "$RANGE" --pretty=format:'- %s (%h)' --grep='^ci' --extended-regexp 2>/dev/null || true)
+            if [ -n "$CIS" ]; then
+              echo "### 🔧 CI / Build"
+              echo "$CIS"
+              echo ""
+            fi
+
+            # ── Refactor ──
+            REFACTORS=$(git log "$RANGE" --pretty=format:'- %s (%h)' --grep='^refactor' --extended-regexp 2>/dev/null || true)
+            if [ -n "$REFACTORS" ]; then
+              echo "### ♻️ Refactor"
+              echo "$REFACTORS"
+              echo ""
+            fi
+
+            # ── Documentation ──
+            DOCS=$(git log "$RANGE" --pretty=format:'- %s (%h)' --grep='^docs' --extended-regexp 2>/dev/null || true)
+            if [ -n "$DOCS" ]; then
+              echo "### 📝 Documentation"
+              echo "$DOCS"
+              echo ""
+            fi
+
+            # ── Other (uncategorized) ──
+            CATEGORIZED="^feat|^fix|^perf|^ci|^refactor|^docs|^chore"
+            OTHERS=$(git log "$RANGE" --pretty=format:'- %s (%h)' --invert-grep --grep="$CATEGORIZED" --extended-regexp 2>/dev/null | grep -v "^- Merge " || true)
+            if [ -n "$OTHERS" ]; then
+              echo "### 📦 Other Changes"
+              echo "$OTHERS"
+              echo ""
+            fi
+
+            if [ -n "$PREV_TAG" ]; then
+              echo "**Full Changelog**: https://github.com/${{ github.repository }}/compare/${PREV_TAG}...${CURRENT_TAG}"
+            fi
+          } > /tmp/changelog.md
+
+          # Expose as output for later steps (multiline-safe delimiter).
+          {
+            echo "body<<CHANGELOG_EOF"
+            cat /tmp/changelog.md
+            echo "CHANGELOG_EOF"
+          } >> "$GITHUB_OUTPUT"
+
+          cat /tmp/changelog.md
+
       - name: Build and upload Tauri bundles
         uses: tauri-apps/tauri-action@v0.5
         env:
@@ -106,6 +196,44 @@ jobs:
           releaseDraft: false
           prerelease: false
           args: ${{ matrix.args }}
+
+      - name: Append changelog to release body
+        if: runner.os == 'Linux' && matrix.target == 'x86_64-unknown-linux-gnu'
+        shell: bash
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAG_NAME: ${{ github.ref_name }}
+          CHANGELOG: ${{ steps.changelog.outputs.body }}
+        run: |
+          set -e
+          RELEASE_ID=$(gh api "repos/${{ github.repository }}/releases/tags/${TAG_NAME}" --jq '.id')
+
+          cat > /tmp/release_body.md <<'BODY_EOF'
+          🎉 AeroMail ${{ github.ref_name }} is available!
+
+          BODY_EOF
+
+          echo "$CHANGELOG" >> /tmp/release_body.md
+
+          cat >> /tmp/release_body.md <<'BODY_EOF'
+
+          ---
+
+          | Platform | Architecture | Bundles |
+          |----------|--------------|---------|
+          | Linux | x86_64 | `.deb`, `.AppImage`, `.tar.gz` |
+          | Linux | aarch64 | `.deb`, `.AppImage`, `.tar.gz` |
+          | Linux | armv7 (optional) | `.deb` |
+          | macOS | universal | `.dmg` |
+          | Windows | x86_64 | `.msi`, `.exe` (NSIS) |
+          | Windows | i686 | `.msi`, `.exe` (NSIS) |
+          | Arch Linux | x86_64 | `.pkg.tar.zst` |
+
+          Download the asset for your platform below.
+          BODY_EOF
+
+          gh api -X PATCH "repos/${{ github.repository }}/releases/${RELEASE_ID}" \
+            -f body="$(cat /tmp/release_body.md)"
 
       - name: Create Linux .tar.gz archive from AppImage
         if: runner.os == 'Linux'

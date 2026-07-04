@@ -541,6 +541,10 @@ async function loadTrustedDomains() {
     if (raw) {
       trustedDomains.value = JSON.parse(raw);
       console.debug('[MailViewer] loaded trustedDomains:', trustedDomains.value);
+      // 信任域名加载完成后强制重建 iframe，确保新 CSP 生效。
+      // loadTrustedDomains 是异步的，首次渲染时 allowedDomains 可能为空，
+      // 导致 iframe 使用不含信任域名的 CSP 创建。
+      cspRevision.value++;
     }
   } catch (e) {
     console.error('Failed to load trusted domains:', e);

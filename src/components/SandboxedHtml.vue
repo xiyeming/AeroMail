@@ -214,6 +214,8 @@ const srcdoc = computed(() => {
       ? crypto.randomUUID()
       : `${Math.random().toString(36).slice(2)}${Date.now().toString(36)}`;
   const csp = buildCsp(nonce);
+  console.debug('[SandboxedHtml] allowedDomains:', props.allowedDomains);
+  console.debug('[SandboxedHtml] CSP:', csp);
   const safeHtml = sanitizeHtml(props.html);
   // 注意：闭合标签使用字符串拼接，避免 Vue SFC 解析器将 </body></html> 误认为模板结束标签
   const closeBody = '<' + '/body>';

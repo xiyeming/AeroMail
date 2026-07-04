@@ -510,23 +510,28 @@ function resetSecurityDomainTracking() {
 }
 
 function allowRemoteOnce() {
+  console.debug('[MailViewer] allowRemoteOnce, untrustedDomains:', untrustedDomains.value);
   temporarilyAllowedDomains.value = [...untrustedDomains.value];
   resetSecurityDomainTracking();
   cspRevision.value++;
+  console.debug('[MailViewer] allowedDomains after allow:', allowedDomains.value);
 }
 
 function allowAllRemoteOnce() {
+  console.debug('[MailViewer] allowAllRemoteOnce');
   temporarilyAllowedDomains.value = ['*'];
   resetSecurityDomainTracking();
   cspRevision.value++;
 }
 
 async function trustDomain(domain: string) {
+  console.debug('[MailViewer] trustDomain:', domain);
   if (!trustedDomains.value.includes(domain)) {
     trustedDomains.value.push(domain);
     await settingsStore.set('trustedDomains', JSON.stringify(trustedDomains.value));
     resetSecurityDomainTracking();
     cspRevision.value++;
+    console.debug('[MailViewer] allowedDomains after trust:', allowedDomains.value);
   }
 }
 
@@ -535,6 +540,7 @@ async function loadTrustedDomains() {
     const raw = await settingsStore.get('trustedDomains');
     if (raw) {
       trustedDomains.value = JSON.parse(raw);
+      console.debug('[MailViewer] loaded trustedDomains:', trustedDomains.value);
     }
   } catch (e) {
     console.error('Failed to load trusted domains:', e);

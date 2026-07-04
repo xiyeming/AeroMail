@@ -362,9 +362,7 @@ jobs:
       - name: Install Arch build dependencies
         run: |
           pacman -Syu --noconfirm
-          pacman -S --noconfirm --needed base-devel webkit2gtk-4.1 libayatana-appindicator librsvg nodejs rustup jq github-cli git
-          corepack enable
-          corepack prepare pnpm@9 --activate
+          pacman -S --noconfirm --needed base-devel webkit2gtk-4.1 libayatana-appindicator librsvg nodejs pnpm rustup jq github-cli git
           rustup default stable
           echo "$HOME/.cargo/bin" >> "$GITHUB_PATH"
 

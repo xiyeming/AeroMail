@@ -68,6 +68,7 @@ const inlineImageMap = ref<Record<string, string>>({});
 const attachmentsLoaded = ref(false);
 const cspBlockedDomains = ref<string[]>([]);
 const domRemoteDomains = ref<string[]>([]);
+const cspRevision = ref(0);
 const sandboxedHtmlRef = ref<InstanceType<typeof SandboxedHtml> | null>(null);
 const selectedText = ref('');
 const showSelectionMenu = ref(false);
@@ -511,11 +512,13 @@ function resetSecurityDomainTracking() {
 function allowRemoteOnce() {
   temporarilyAllowedDomains.value = [...untrustedDomains.value];
   resetSecurityDomainTracking();
+  cspRevision.value++;
 }
 
 function allowAllRemoteOnce() {
   temporarilyAllowedDomains.value = ['*'];
   resetSecurityDomainTracking();
+  cspRevision.value++;
 }
 
 async function trustDomain(domain: string) {
@@ -523,6 +526,7 @@ async function trustDomain(domain: string) {
     trustedDomains.value.push(domain);
     await settingsStore.set('trustedDomains', JSON.stringify(trustedDomains.value));
     resetSecurityDomainTracking();
+    cspRevision.value++;
   }
 }
 
@@ -941,7 +945,7 @@ watch(currentMailId, (newMailId) => {
         <SandboxedHtml
           v-if="processedBodyHtml"
           ref="sandboxedHtmlRef"
-          :key="currentMailId"
+          :key="`${currentMailId}-${cspRevision}`"
           :html="processedBodyHtml"
           :allowed-domains="allowedDomains"
           class="prose prose-sm max-w-none text-primary"

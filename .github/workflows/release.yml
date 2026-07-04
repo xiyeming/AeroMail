@@ -329,25 +329,31 @@ jobs:
             pnpm install
             pnpm tauri build --bundles deb
 
-      - name: Upload armv7 .deb to release
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          TAG_NAME: ${{ github.ref_name }}
-          GH_REPO: ${{ github.repository }}
-        shell: bash
-        run: |
-          set -e
-          VERSION="$(jq -r .version src-tauri/tauri.conf.json)"
-          if [[ ! "$VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
-            echo "Invalid version: $VERSION"
-            exit 1
-          fi
-          DEB="src-tauri/target/release/bundle/deb/aeromail_${VERSION}_armhf.deb"
-          if [ -f "$DEB" ]; then
-            gh release upload "${TAG_NAME}" "$DEB" --clobber
-          else
-            echo "armv7 .deb not found at $DEB; skipping upload"
-          fi
+            # Upload .deb directly from inside the emulated environment.
+            # The host runner cannot see files written by QEMU, so we must
+            # upload here using the GitHub API via curl.
+            VERSION="$(jq -r .version src-tauri/tauri.conf.json)"
+            DEB="src-tauri/target/release/bundle/deb/aeromail_${VERSION}_armhf.deb"
+            if [ -f "$DEB" ]; then
+              TAG_NAME="${{ github.ref_name }}"
+              GH_REPO="${{ github.repository }}"
+              GITHUB_TOKEN="${{ secrets.GITHUB_TOKEN }}"
+
+              RELEASE_ID=$(curl -fsSL \
+                -H "Authorization: token ${GITHUB_TOKEN}" \
+                -H "Accept: application/vnd.github+json" \
+                "https://api.github.com/repos/${GH_REPO}/releases/tags/${TAG_NAME}" \
+                | jq -r '.id')
+
+              curl -fsSL \
+                -X POST \
+                -H "Authorization: token ${GITHUB_TOKEN}" \
+                -H "Content-Type: application/vnd.debian.binary-package" \
+                "https://uploads.github.com/repos/${GH_REPO}/releases/${RELEASE_ID}/assets?name=aeromail_${VERSION}_armhf.deb" \
+                --data-binary "@${DEB}"
+            else
+              echo "armv7 .deb not found at ${DEB}; skipping upload"
+            fi
 
   build-arch-pkg:
     if: startsWith(github.ref, 'refs/tags/v') && (github.event_name == 'push' || inputs.include-arch == 'true')

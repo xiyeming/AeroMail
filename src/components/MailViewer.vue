@@ -65,6 +65,7 @@ const deleteDialogRef = ref<HTMLDivElement | null>(null);
 const trustedDomains = ref<string[]>([]);
 const temporarilyAllowedDomains = ref<string[]>([]);
 const inlineImageMap = ref<Record<string, string>>({});
+const attachmentsLoaded = ref(false);
 const cspBlockedDomains = ref<string[]>([]);
 const domRemoteDomains = ref<string[]>([]);
 const sandboxedHtmlRef = ref<InstanceType<typeof SandboxedHtml> | null>(null);
@@ -246,6 +247,8 @@ async function loadAttachments(mailId: string) {
     inlineImageMap.value = map;
   } catch (e) {
     console.error('Failed to load attachments:', e);
+  } finally {
+    attachmentsLoaded.value = true;
   }
 }
 
@@ -472,6 +475,11 @@ const remoteDomains = computed(() => {
 const processedBodyHtml = computed(() => {
   const html = mail.value?.bodyHtml;
   if (!html) return html ?? null;
+  // Wait for inline image attachments to finish loading before rendering the
+  // iframe.  Without this guard the iframe first receives raw cid: references
+  // that browsers cannot resolve — images fail silently and no CSP violation
+  // is emitted (cid: is allow-listed), so the security banner never appears.
+  if (!attachmentsLoaded.value) return null;
   const map = inlineImageMap.value;
   if (Object.keys(map).length === 0) return html;
   return html.replace(/cid:\s*<?([^>"'\s)]+)>?/gi, (match, cid: string) => {
@@ -602,6 +610,7 @@ watch(currentMailId, (newMailId) => {
   temporarilyAllowedDomains.value = [];
   attachments.value = [];
   inlineImageMap.value = {};
+  attachmentsLoaded.value = false;
   cspBlockedDomains.value = [];
   domRemoteDomains.value = [];
   summaryText.value = '';

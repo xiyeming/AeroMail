@@ -428,13 +428,18 @@ function formatAddresses(addresses: string | null): string {
   }
 }
 
+let extractedDomainsCache: { html: string; domains: string[] } | undefined;
+
 function extractRemoteDomains(html: string): string[] {
   const MAX_HTML_LENGTH = 1_048_576;
   if (html.length > MAX_HTML_LENGTH) {
     return [];
   }
 
-  if (extractedDomainsCache && extractedDomainsCache.html === html) {
+  if (!extractedDomainsCache) {
+    extractedDomainsCache = { html: '', domains: [] as string[] };
+  }
+  if (extractedDomainsCache.html === html) {
     return extractedDomainsCache.domains;
   }
 
@@ -552,16 +557,6 @@ function allowAllRemoteOnce() {
 async function trustDomain(domain: string) {
   console.debug('[MailViewer] trustDomain:', domain);
   if (trustedDomains.value.includes(domain)) return;
-
-  const MAX_TRUSTED_DOMAINS = 50;
-  if (trustedDomains.value.length >= MAX_TRUSTED_DOMAINS) {
-    toast.add({
-      type: 'warning',
-      message: t('mail.tooManyTrustedDomains', { max: MAX_TRUSTED_DOMAINS }),
-      duration: 4000,
-    });
-    return;
-  }
 
   trustedDomains.value.push(domain);
   await settingsStore.set('trustedDomains', JSON.stringify(trustedDomains.value));

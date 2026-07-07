@@ -59,8 +59,8 @@ export const useStatusStore = defineStore('status', () => {
   }
 
   // Listen for sync progress events from the backend
-  function initEventListeners() {
-    listen<SyncProgress>('sync:progress', (event) => {
+  async function initEventListeners() {
+    await listen<SyncProgress>('sync:progress', (event) => {
       const progress = event.payload;
       updateSyncStatus(
         progress.accountId,

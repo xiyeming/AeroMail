@@ -164,7 +164,6 @@ const displayedMails = computed(() => {
   );
 });
 
-const isSearching = computed(() => searchQuery.value.trim().length > 0 && searchQuery.value !== debouncedSearchQuery.value);
 const hasSearchResults = computed(() => {
   const query = debouncedSearchQuery.value.trim();
   if (!query) return true;
@@ -479,10 +478,11 @@ async function bulkMarkRead(isRead: boolean) {
         <div
           v-for="mail in displayedMails"
           :key="mail.id"
+          v-memo="[mail.id, mail.isRead, mail.isStarred, mail.isArchived, mail.isSpam, mail.hasAttachments, mailStore.selectedMailId, mailStore.deletingMailIds.has(mail.id)]"
           role="button"
           tabindex="0"
           :aria-selected="mailStore.selectedMailId === mail.id"
-          class="group relative cursor-pointer border-b border-border px-3 py-2.5 transition-colors hover:bg-raised focus:outline-none focus:ring-2 focus:ring-inset focus:ring-accent"
+          class="group relative cursor-pointer border-b border-border px-3 py-2.5 transition-colors hover:bg-raised focus:outline-none focus:ring-2 focus:ring-inset focus:ring-accent content-visibility-auto"
           :class="[
             !mail.isRead ? 'bg-accent/15' : '',
             isSelected(mail.id) ? 'bg-accent-subtle' : '',
@@ -693,3 +693,10 @@ async function bulkMarkRead(isRead: boolean) {
     />
   </div>
 </template>
+
+<style scoped>
+.content-visibility-auto {
+  content-visibility: auto;
+  contain-intrinsic-size: 0 80px;
+}
+</style>

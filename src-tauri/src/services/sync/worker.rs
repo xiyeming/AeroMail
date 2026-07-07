@@ -5,7 +5,7 @@ use std::time::Duration;
 use futures::StreamExt;
 use tauri_plugin_notification::NotificationExt;
 use tokio::sync::{Notify, RwLock, mpsc};
-use tokio::time::sleep;
+use tokio::time::{sleep, timeout};
 use tracing::{debug, error, info, instrument, warn};
 
 use crate::db::pool::Database;
@@ -18,6 +18,23 @@ use super::mail_parser;
 
 const LAST_SYNC_TIME_KEY: &str = "app.last_sync_time";
 const SYNC_MAIL_DAYS_KEY: &str = "app.sync.mailDays";
+
+#[allow(dead_code)]
+fn read_timeout(config: &AccountConfig) -> Duration {
+    Duration::from_secs(config.advanced.read_timeout_secs.max(1))
+}
+
+async fn with_read_timeout<F, T>(config: &AccountConfig, fut: F) -> Result<T, AeroError>
+where
+    F: std::future::Future<Output = Result<T, AeroError>>,
+{
+    timeout(read_timeout(config), fut).await.map_err(|_| {
+        AeroError::ImapConnectionFailed(format!(
+            "IMAP read timeout after {:?}",
+            read_timeout(config)
+        ))
+    })?
+}
 
 /// Maps the persisted `app.sync.mailDays` setting to a number of days.
 /// `None` means "all" (no date cutoff). Defaults to 7 days.
@@ -125,14 +142,15 @@ impl SyncWorker {
         // the initial connection is being established.
         let _ = self
             .progress_tx
-            .try_send(SyncProgress {
+            .send(SyncProgress {
                 account_id: self.account_id.clone(),
                 status: SyncStatus::Syncing,
                 synced_count: 0,
                 total_count: 0,
                 last_sync_time: None,
                 message: None,
-            });
+            })
+            .await;
 
         loop {
             debug!("starting sync cycle");
@@ -152,28 +170,30 @@ impl SyncWorker {
                     }
                     let _ = self
                         .progress_tx
-                        .try_send(SyncProgress {
+                        .send(SyncProgress {
                             account_id: self.account_id.clone(),
                             status: SyncStatus::Completed,
                             synced_count: 0,
                             total_count: 0,
                             last_sync_time,
                             message: None,
-                        });
+                        })
+                        .await;
                 }
                 Err(e) => {
                     error!("Sync failed for account {}: {}", self.account_id, e);
                     last_sync_ok = false;
                     let _ = self
                         .progress_tx
-                        .try_send(SyncProgress {
+                        .send(SyncProgress {
                             account_id: self.account_id.clone(),
                             status: SyncStatus::Error,
                             synced_count: 0,
                             total_count: 0,
                             last_sync_time: None,
                             message: Some(e.to_string()),
-                        });
+                        })
+                        .await;
                 }
             }
 
@@ -216,7 +236,7 @@ impl SyncWorker {
         debug!(host = %config.imap.host, port = config.imap.port, "connecting to IMAP server");
         let mut session = imap_client::connect_imap(&config).await?;
 
-        let folder_names = Self::list_folders(&mut session).await?;
+        let folder_names = Self::list_folders(&mut session, &config).await?;
         info!(
             "Account {}: Found {} folders",
             self.account_id,
@@ -238,7 +258,10 @@ impl SyncWorker {
             }
 
             // 使用 STATUS 命令快速检查文件夹是否有变化，避免不必要的 SELECT
-            if let Ok(should_skip) = self.should_skip_folder(&mut session, folder_name).await {
+            if let Ok(should_skip) = self
+                .should_skip_folder(&mut session, folder_name, &config)
+                .await
+            {
                 if should_skip {
                     debug!(folder = %folder_name, "folder unchanged, skipping sync");
                     continue;
@@ -246,7 +269,7 @@ impl SyncWorker {
             }
 
             match self
-                .sync_folder(&mut session, folder_name, &self.attachments_dir)
+                .sync_folder(&mut session, folder_name, &self.attachments_dir, &config)
                 .await
             {
                 Ok(count) => {
@@ -303,11 +326,15 @@ impl SyncWorker {
     #[instrument(skip_all)]
     async fn list_folders(
         session: &mut imap_client::ImapSession,
+        config: &AccountConfig,
     ) -> Result<Vec<String>, AeroError> {
-        let mut stream = session
-            .list(None, Some("*"))
-            .await
-            .map_err(|e| AeroError::ImapConnectionFailed(e.to_string()))?;
+        let mut stream = with_read_timeout(config, async {
+            session
+                .list(None, Some("*"))
+                .await
+                .map_err(|e| AeroError::ImapConnectionFailed(e.to_string()))
+        })
+        .await?;
 
         let mut folders = Vec::new();
         while let Some(name_res) = stream.next().await {
@@ -331,11 +358,15 @@ impl SyncWorker {
         &self,
         session: &mut imap_client::ImapSession,
         folder_name: &str,
+        config: &AccountConfig,
     ) -> Result<bool, AeroError> {
-        let status = session
-            .status(folder_name, "(MESSAGES UIDVALIDITY UIDNEXT)")
-            .await
-            .map_err(|e| AeroError::ImapConnectionFailed(e.to_string()))?;
+        let status = with_read_timeout(config, async {
+            session
+                .status(folder_name, "(MESSAGES UIDVALIDITY UIDNEXT)")
+                .await
+                .map_err(|e| AeroError::ImapConnectionFailed(e.to_string()))
+        })
+        .await?;
 
         let remote_exists = status.exists;
         let remote_uid_validity = status.uid_validity.unwrap_or(0);
@@ -394,6 +425,8 @@ impl SyncWorker {
             .map_err(|e| AeroError::ImapConnectionFailed(e.to_string()))?;
 
         let mut synced_count = starting_count;
+        const BATCH_SIZE: usize = 50;
+        let mut mail_batch: Vec<crate::models::mail::MailDetail> = Vec::with_capacity(BATCH_SIZE);
 
         while let Some(fetch_res) = fetch_stream.next().await {
             let fetch = fetch_res.map_err(|e| AeroError::ImapConnectionFailed(e.to_string()))?;
@@ -451,22 +484,29 @@ impl SyncWorker {
                 message_id: parsed.message_id,
             };
 
-            self.db.upsert_mail(&mail)?;
+            mail_batch.push(mail);
             Self::save_attachments(&mail_id, attachments_dir, &self.db, &parsed.attachments)?;
             synced_count += 1;
 
-            if synced_count % 10 == 0 {
-                let _ = self
-                    .progress_tx
-                    .try_send(SyncProgress {
-                        account_id: self.account_id.clone(),
-                        status: SyncStatus::Syncing,
-                        synced_count,
-                        total_count,
-                        last_sync_time: None,
-                        message: None,
-                    });
+            if mail_batch.len() >= BATCH_SIZE {
+                self.db.upsert_mails_batch(&mail_batch)?;
+                mail_batch.clear();
             }
+
+            if synced_count % 10 == 0 {
+                let _ = self.progress_tx.try_send(SyncProgress {
+                    account_id: self.account_id.clone(),
+                    status: SyncStatus::Syncing,
+                    synced_count,
+                    total_count,
+                    last_sync_time: None,
+                    message: None,
+                });
+            }
+        }
+
+        if !mail_batch.is_empty() {
+            self.db.upsert_mails_batch(&mail_batch)?;
         }
 
         Ok(synced_count)
@@ -480,11 +520,15 @@ impl SyncWorker {
         session: &mut imap_client::ImapSession,
         folder_name: &str,
         attachments_dir: &Path,
+        config: &AccountConfig,
     ) -> Result<u32, AeroError> {
-        let mailbox = session
-            .select(folder_name)
-            .await
-            .map_err(|e| AeroError::ImapConnectionFailed(e.to_string()))?;
+        let mailbox = with_read_timeout(config, async {
+            session
+                .select(folder_name)
+                .await
+                .map_err(|e| AeroError::ImapConnectionFailed(e.to_string()))
+        })
+        .await?;
 
         let remote_uid_validity = mailbox.uid_validity.unwrap_or(0);
         let remote_exists = mailbox.exists;
@@ -762,6 +806,7 @@ impl SyncWorker {
         db.delete_attachments(mail_id)?;
 
         let mut used_names: std::collections::HashSet<String> = std::collections::HashSet::new();
+        let mut attachment_batch: Vec<(String, ParsedAttachment, std::path::PathBuf)> = Vec::new();
 
         for (idx, attachment) in attachments.iter().enumerate() {
             let base_name = attachment
@@ -778,7 +823,11 @@ impl SyncWorker {
                 AeroError::Internal(format!("failed to write attachment {unique_name}: {e}"))
             })?;
 
-            db.insert_attachment(mail_id, attachment, &local_path)?;
+            attachment_batch.push((mail_id.to_string(), attachment.clone(), local_path));
+        }
+
+        if !attachment_batch.is_empty() {
+            db.insert_attachments_batch(&attachment_batch)?;
         }
 
         Ok(())

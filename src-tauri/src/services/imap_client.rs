@@ -1,5 +1,7 @@
 use async_imap::types::Flag;
+use std::time::Duration;
 use tokio::net::TcpStream;
+use tokio::time::timeout;
 use tokio_native_tls::TlsStream;
 use tracing::{debug, instrument, warn};
 
@@ -34,11 +36,14 @@ impl async_imap::Authenticator for &Xoauth2Auth {
 pub async fn connect_imap(config: &AccountConfig) -> Result<ImapSession, AeroError> {
     let domain = config.imap.host.clone();
     let tls = build_tls_connector(config)?;
+    let connect_timeout = Duration::from_secs(config.advanced.connect_timeout_secs);
 
     debug!("building TLS connector");
     let mut client = match config.imap.tls_mode {
-        TlsMode::Required => connect_tls(&domain, config.imap.port, &tls).await?,
-        TlsMode::StartTls => connect_starttls(&domain, config.imap.port, &tls).await?,
+        TlsMode::Required => connect_tls(&domain, config.imap.port, &tls, connect_timeout).await?,
+        TlsMode::StartTls => {
+            connect_starttls(&domain, config.imap.port, &tls, connect_timeout).await?
+        }
         TlsMode::None => {
             return Err(AeroError::InvalidConfig(
                 "Plain IMAP without TLS is not supported".into(),
@@ -80,14 +85,24 @@ async fn connect_tls(
     domain: &str,
     port: u16,
     tls: &tokio_native_tls::TlsConnector,
+    connect_timeout: Duration,
 ) -> Result<async_imap::Client<TlsStream<TcpStream>>, AeroError> {
     debug!("opening TCP connection");
-    let tcp_stream = TcpStream::connect((domain, port))
+    let tcp_stream = timeout(connect_timeout, TcpStream::connect((domain, port)))
         .await
+        .map_err(|_| {
+            AeroError::ImapConnectionFailed(format!(
+                "TCP connect timeout after {connect_timeout:?}"
+            ))
+        })?
         .map_err(|e| AeroError::ImapConnectionFailed(e.to_string()))?;
-    let tls_stream = tls
-        .connect(domain, tcp_stream)
+    let tls_stream = timeout(connect_timeout, tls.connect(domain, tcp_stream))
         .await
+        .map_err(|_| {
+            AeroError::ImapConnectionFailed(format!(
+                "TLS handshake timeout after {connect_timeout:?}"
+            ))
+        })?
         .map_err(|e| AeroError::ImapConnectionFailed(e.to_string()))?;
     let mut client = async_imap::Client::new(tls_stream);
     read_greeting(&mut client).await?;
@@ -99,10 +114,16 @@ async fn connect_starttls(
     domain: &str,
     port: u16,
     tls: &tokio_native_tls::TlsConnector,
+    connect_timeout: Duration,
 ) -> Result<async_imap::Client<TlsStream<TcpStream>>, AeroError> {
     debug!("opening TCP connection for STARTTLS");
-    let tcp_stream = TcpStream::connect((domain, port))
+    let tcp_stream = timeout(connect_timeout, TcpStream::connect((domain, port)))
         .await
+        .map_err(|_| {
+            AeroError::ImapConnectionFailed(format!(
+                "TCP connect timeout after {connect_timeout:?}"
+            ))
+        })?
         .map_err(|e| AeroError::ImapConnectionFailed(e.to_string()))?;
     let mut client = async_imap::Client::new(tcp_stream);
     read_greeting(&mut client).await?;
@@ -111,9 +132,13 @@ async fn connect_starttls(
         .await
         .map_err(|e| AeroError::ImapConnectionFailed(e.to_string()))?;
     let stream = client.into_inner();
-    let tls_stream = tls
-        .connect(domain, stream)
+    let tls_stream = timeout(connect_timeout, tls.connect(domain, stream))
         .await
+        .map_err(|_| {
+            AeroError::ImapConnectionFailed(format!(
+                "STARTTLS handshake timeout after {connect_timeout:?}"
+            ))
+        })?
         .map_err(|e| AeroError::ImapConnectionFailed(e.to_string()))?;
     Ok(async_imap::Client::new(tls_stream))
 }

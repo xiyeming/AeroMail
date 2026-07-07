@@ -5,14 +5,23 @@ export type Theme = 'dark' | 'light';
 
 const SETTINGS_KEY = 'app.theme';
 
+const theme = ref<Theme>('dark');
+
+watch(
+  theme,
+  (value) => {
+    document.documentElement.setAttribute('data-theme', value);
+  },
+  { immediate: true }
+);
+
 export function useTheme() {
-  const settings = useSettingsStore();
-  const theme = ref<Theme>('dark');
+  const { get, set } = useSettingsStore();
 
   function setTheme(value: Theme, persist = true) {
     theme.value = value;
     if (persist) {
-      void settings.set(SETTINGS_KEY, value);
+      void set(SETTINGS_KEY, value);
     }
   }
 
@@ -21,19 +30,11 @@ export function useTheme() {
   }
 
   async function initTheme() {
-    const saved = await settings.get(SETTINGS_KEY);
+    const saved = await get(SETTINGS_KEY);
     if (saved === 'dark' || saved === 'light') {
       setTheme(saved, false);
     }
   }
-
-  watch(
-    theme,
-    (value) => {
-      document.documentElement.setAttribute('data-theme', value);
-    },
-    { immediate: true }
-  );
 
   return {
     theme,

@@ -63,6 +63,17 @@ impl SyncService {
                     account_id
                 );
                 notify.notify_one();
+                let _ = app_handle.emit(
+                    "sync:progress",
+                    &SyncProgress {
+                        account_id: account_id.to_string(),
+                        status: SyncStatus::Syncing,
+                        synced_count: 0,
+                        total_count: 0,
+                        last_sync_time: None,
+                        message: None,
+                    },
+                );
                 return Ok(());
             }
         }
@@ -114,10 +125,10 @@ impl SyncService {
             worker.run().await;
         });
 
-        self.workers
-            .write()
-            .await
-            .insert(account_id.to_string(), (worker_handle, forwarder_handle, wake_notify));
+        self.workers.write().await.insert(
+            account_id.to_string(),
+            (worker_handle, forwarder_handle, wake_notify),
+        );
 
         info!("Started sync for account {}", account_id);
         Ok(())
@@ -188,13 +199,13 @@ impl SyncService {
             return Ok(0);
         }
 
-        // Make sure UIDVALIDITY is up to date locally.
+        // Make sure UIDVALIDITY and UIDNEXT are up to date locally.
         self.db.upsert_folder(
             &folder.account_id,
             &folder.path,
             &folder.path,
             Some(i64::from(remote_uid_validity)),
-            None,
+            Some(i64::from(mailbox.uid_next.unwrap_or(0))),
         )?;
 
         let local_count = self.db.count_mails_in_folder(folder_id)?;

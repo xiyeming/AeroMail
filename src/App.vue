@@ -15,11 +15,11 @@ const statusStore = useStatusStore();
 
 useKeyboardShortcuts();
 
-onMounted(() => {
+onMounted(async () => {
   void initLocale();
   void initTheme();
   void initDecorations();
-  statusStore.initEventListeners();
+  await statusStore.initEventListeners();
   void statusStore.loadLastSyncTime();
 });
 </script>

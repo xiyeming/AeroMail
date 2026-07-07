@@ -61,6 +61,31 @@ impl Database {
             .map_err(|e| AeroError::Database(e.to_string()))
     }
 
+    /// Runs the provided closure inside a database transaction.
+    ///
+    /// The closure receives a `&Connection` and returns a `Result<T, AeroError>`.
+    /// If the closure returns `Ok`, the transaction is committed; otherwise it is rolled back.
+    pub fn with_transaction<T, F>(&self, f: F) -> Result<T, AeroError>
+    where
+        F: FnOnce(&Connection) -> Result<T, AeroError>,
+    {
+        let mut conn = self.connection()?;
+        let tx = conn
+            .transaction()
+            .map_err(|e| AeroError::Database(e.to_string()))?;
+        match f(&tx) {
+            Ok(result) => {
+                tx.commit()
+                    .map_err(|e| AeroError::Database(e.to_string()))?;
+                Ok(result)
+            }
+            Err(e) => {
+                let _ = tx.rollback();
+                Err(e)
+            }
+        }
+    }
+
     /// Returns the path to the database file.
     #[must_use]
     pub const fn path(&self) -> &PathBuf {
@@ -1271,6 +1296,55 @@ impl Database {
         Ok(())
     }
 
+    /// Upserts multiple mails in a single transaction for better performance.
+    pub fn upsert_mails_batch(
+        &self,
+        mails: &[crate::models::mail::MailDetail],
+    ) -> Result<(), AeroError> {
+        if mails.is_empty() {
+            return Ok(());
+        }
+        self.with_transaction(|conn| {
+            let now = chrono::Utc::now().timestamp();
+            let mut stmt = conn.prepare(
+                "INSERT INTO mails (id, account_id, folder_id, uid, subject, from_name, from_address,
+                 to_addresses, cc_addresses, date, body_html, body_text, is_read, is_starred, is_archived, is_spam, flags, message_id, created_at)
+                 VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16, ?17, ?18, ?19)
+                 ON CONFLICT(id) DO UPDATE SET
+                   account_id=excluded.account_id, folder_id=excluded.folder_id, uid=excluded.uid,
+                   subject=excluded.subject, from_name=excluded.from_name, from_address=excluded.from_address,
+                   to_addresses=excluded.to_addresses, cc_addresses=excluded.cc_addresses,
+                   date=excluded.date, body_html=excluded.body_html, body_text=excluded.body_text,
+                   is_read=excluded.is_read, is_starred=excluded.is_starred, is_archived=excluded.is_archived, is_spam=excluded.is_spam,
+                   flags=excluded.flags, message_id=excluded.message_id",
+            )?;
+            for mail in mails {
+                stmt.execute(params![
+                    &mail.id,
+                    &mail.account_id,
+                    &mail.folder_id,
+                    mail.uid,
+                    &mail.subject,
+                    &mail.from_name,
+                    &mail.from_address,
+                    &mail.to_addresses,
+                    &mail.cc_addresses,
+                    mail.date,
+                    &mail.body_html,
+                    &mail.body_text,
+                    mail.is_read,
+                    mail.is_starred,
+                    mail.is_archived,
+                    mail.is_spam,
+                    &mail.flags,
+                    &mail.message_id,
+                    now,
+                ])?;
+            }
+            Ok(())
+        })
+    }
+
     /// Lists mails in a folder with pagination.
     ///
     /// # Errors
@@ -2041,6 +2115,46 @@ impl Database {
         )?;
         drop(conn);
         Ok(())
+    }
+
+    /// Inserts multiple attachment records in a single transaction.
+    pub fn insert_attachments_batch(
+        &self,
+        attachments: &[(
+            String,
+            crate::models::mail::ParsedAttachment,
+            std::path::PathBuf,
+        )],
+    ) -> Result<(), AeroError> {
+        if attachments.is_empty() {
+            return Ok(());
+        }
+        self.with_transaction(|conn| {
+            let mut stmt = conn.prepare(
+                "INSERT INTO attachments (id, mail_id, filename, mime_type, size, content_id, local_path, is_inline)
+                 VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8)",
+            )?;
+            for (mail_id, attachment, local_path) in attachments {
+                let id = uuid::Uuid::new_v4().to_string();
+                let filename = attachment
+                    .filename
+                    .clone()
+                    .filter(|n| !n.trim().is_empty())
+                    .unwrap_or_else(|| "unnamed".to_string());
+                let size = i64::try_from(attachment.size).map_err(|e| AeroError::Internal(e.to_string()))?;
+                stmt.execute(params![
+                    &id,
+                    mail_id,
+                    filename,
+                    &attachment.mime_type,
+                    size,
+                    &attachment.content_id,
+                    local_path.to_str(),
+                    attachment.is_inline as i64,
+                ])?;
+            }
+            Ok(())
+        })
     }
 
     /// Gets all attachments for a mail.

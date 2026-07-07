@@ -67,7 +67,10 @@ fn ensure_directory(path: &PathBuf) -> Result<(), String> {
         if path.is_dir() {
             return Ok(());
         }
-        return Err(format!("path exists but is not a directory: {}", path.display()));
+        return Err(format!(
+            "path exists but is not a directory: {}",
+            path.display()
+        ));
     }
     std::fs::create_dir_all(path).map_err(|e| format!("failed to create directory: {e}"))
 }

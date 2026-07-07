@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, ref, watch, onMounted, onUnmounted, watchEffect } from 'vue';
+import { computed, ref, watch, onMounted, onUnmounted } from 'vue';
 
 const props = defineProps<{
   html: string;
@@ -61,16 +61,8 @@ function buildCsp(scriptNonce: string): string {
 }
 
 function sanitizeHtml(html: string): string {
-  // 第一遍：用正则快速剥离明显的脚本标签和内联事件处理器，处理一些 DOMParser
-  // 可能保留的边界情况（如条件注释里的 script）。
-  let cleaned = html
-    .replace(/<script\b[^>]*>[\s\S]*?<\/script>/gi, '')
-    .replace(/<script\b[^>]*\/?>/gi, '')
-    .replace(/<noscript\b[^>]*>[\s\S]*?<\/noscript>/gi, '')
-    .replace(/\s(on\w+)\s*=\s*(["'][^"']*["']|[^\s>]*)/gi, '');
-
   const parser = new DOMParser();
-  const doc = parser.parseFromString(cleaned, 'text/html');
+  const doc = parser.parseFromString(html, 'text/html');
 
   // 移除可能嵌套脚本或加载外部资源的标签
   doc.querySelectorAll('script, noscript, iframe, object, embed').forEach((el) => el.remove());

@@ -59,6 +59,19 @@ use tauri::menu::{MenuBuilder, MenuItem, MenuItemBuilder};
 use tauri::tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent};
 use tokio::sync::RwLock;
 
+/// Ensures that the given path is an existing directory. If the path does not
+/// exist, it is created. If it exists but is not a directory, an error is
+/// returned.
+fn ensure_directory(path: &PathBuf) -> Result<(), String> {
+    if path.exists() {
+        if path.is_dir() {
+            return Ok(());
+        }
+        return Err(format!("path exists but is not a directory: {}", path.display()));
+    }
+    std::fs::create_dir_all(path).map_err(|e| format!("failed to create directory: {e}"))
+}
+
 pub struct AppState {
     pub account_manager: Arc<RwLock<AccountManager>>,
     pub ai_service: Arc<RwLock<AiService>>,
@@ -94,8 +107,11 @@ impl AppState {
         let log_service = Arc::new(LogService::from_settings(&db, &log_dir)?);
 
         let attachments_dir = app_dir.join("attachments");
-        std::fs::create_dir_all(&attachments_dir)
-            .map_err(|e| crate::error::AeroError::Internal(e.to_string()))?;
+        if let Err(e) = ensure_directory(&attachments_dir) {
+            return Err(crate::error::AeroError::Internal(format!(
+                "failed to prepare attachments directory: {e}"
+            )));
+        }
         let sync_service = Arc::new(RwLock::new(SyncService::new(
             Arc::clone(&db),
             attachments_dir,

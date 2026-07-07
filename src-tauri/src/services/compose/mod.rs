@@ -205,7 +205,7 @@ impl ComposeService {
         let parsed = crate::services::sync::mail_parser::parse_mail(message_bytes)?;
         let folder_id = self
             .db
-            .upsert_folder(&config.id, folder_path, folder_path, None)?;
+            .upsert_folder(&config.id, folder_path, folder_path, None, None)?;
 
         let now = chrono::Utc::now().timestamp();
         let mail_id = parsed

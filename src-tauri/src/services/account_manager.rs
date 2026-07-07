@@ -279,14 +279,9 @@ impl AccountManager {
                                 password_encrypted: plaintext,
                             },
                             Err(e) => {
-                                tracing::warn!(
-                                    error = %e,
-                                    account_id = %account_id,
-                                    "failed to decrypt stored account password; treating as empty"
-                                );
-                                AuthConfig::Password {
-                                    password_encrypted: Vec::new(),
-                                }
+                                return Err(rusqlite::Error::InvalidParameterName(format!(
+                                    "failed to decrypt stored account password for {account_id}: {e}"
+                                )));
                             }
                         }
                     }

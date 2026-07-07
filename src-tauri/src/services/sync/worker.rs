@@ -125,15 +125,14 @@ impl SyncWorker {
         // the initial connection is being established.
         let _ = self
             .progress_tx
-            .send(SyncProgress {
+            .try_send(SyncProgress {
                 account_id: self.account_id.clone(),
                 status: SyncStatus::Syncing,
                 synced_count: 0,
                 total_count: 0,
                 last_sync_time: None,
                 message: None,
-            })
-            .await;
+            });
 
         loop {
             debug!("starting sync cycle");
@@ -153,30 +152,28 @@ impl SyncWorker {
                     }
                     let _ = self
                         .progress_tx
-                        .send(SyncProgress {
+                        .try_send(SyncProgress {
                             account_id: self.account_id.clone(),
                             status: SyncStatus::Completed,
                             synced_count: 0,
                             total_count: 0,
                             last_sync_time,
                             message: None,
-                        })
-                        .await;
+                        });
                 }
                 Err(e) => {
                     error!("Sync failed for account {}: {}", self.account_id, e);
                     last_sync_ok = false;
                     let _ = self
                         .progress_tx
-                        .send(SyncProgress {
+                        .try_send(SyncProgress {
                             account_id: self.account_id.clone(),
                             status: SyncStatus::Error,
                             synced_count: 0,
                             total_count: 0,
                             last_sync_time: None,
                             message: Some(e.to_string()),
-                        })
-                        .await;
+                        });
                 }
             }
 
@@ -228,6 +225,9 @@ impl SyncWorker {
 
         let excluded_folders = self.account_config.read().await.excluded_folders.clone();
 
+        let mut folder_errors: Vec<(String, AeroError)> = Vec::new();
+        let mut synced_count = 0u32;
+
         for folder_name in &folder_names {
             if excluded_folders
                 .iter()
@@ -254,12 +254,14 @@ impl SyncWorker {
                         "Account {}: Synced {} new mails in {}",
                         self.account_id, count, folder_name
                     );
+                    synced_count += count;
                 }
                 Err(e) => {
                     warn!(
                         "Account {}: Failed to sync folder {}: {}",
                         self.account_id, folder_name, e
                     );
+                    folder_errors.push((folder_name.clone(), e));
                 }
             }
         }
@@ -268,6 +270,31 @@ impl SyncWorker {
             .logout()
             .await
             .map_err(|e| AeroError::ImapConnectionFailed(e.to_string()))?;
+
+        if !folder_errors.is_empty() {
+            let message = folder_errors
+                .iter()
+                .map(|(name, err)| format!("{name}: {err}"))
+                .collect::<Vec<_>>()
+                .join("; ");
+            let _ = self
+                .progress_tx
+                .send(SyncProgress {
+                    account_id: self.account_id.clone(),
+                    status: SyncStatus::Error,
+                    synced_count,
+                    total_count: 0,
+                    last_sync_time: None,
+                    message: Some(message),
+                })
+                .await;
+            return Err(AeroError::SyncError(format!(
+                "failed to sync {}/{} folders: {}",
+                folder_errors.len(),
+                folder_names.len(),
+                folder_errors[0].1
+            )));
+        }
 
         Ok(())
     }
@@ -294,40 +321,39 @@ impl SyncWorker {
 
     /// 使用 IMAP STATUS 命令快速检查文件夹是否需要同步。
     ///
-    /// 同时校验 `MESSAGES`（邮件总数）和 `UIDVALIDITY`。只有当两者都与本地记录一致，
+    /// 同时校验 `MESSAGES`（邮件总数）、`UIDVALIDITY` 和 `UIDNEXT`。只有当三者都与本地记录一致，
     /// 且 `UIDVALIDITY` 有效时，才认为文件夹未发生变化并跳过完整同步。
     ///
-    /// 注意：此优化无法检测“删除与新增数量相同”、flags 变化等场景；若需要完全精确地
-    /// 判断文件夹是否变化，应额外记录并比较 `UIDNEXT` 或 `HIGHESTMODSEQ`。
+    /// `UIDNEXT` 用于检测"删除与新增数量相同"的场景：即使 `MESSAGES` 不变，只要 `UIDNEXT`
+    /// 增长，就说明有新邮件到来，必须同步。
     #[instrument(skip_all, fields(folder_name = %folder_name))]
     async fn should_skip_folder(
         &self,
         session: &mut imap_client::ImapSession,
         folder_name: &str,
     ) -> Result<bool, AeroError> {
-        // STATUS 命令获取远程文件夹状态（MESSAGES 即 exists，UIDVALIDITY 用于检测邮箱重建）
         let status = session
-            .status(folder_name, "(MESSAGES UIDVALIDITY)")
+            .status(folder_name, "(MESSAGES UIDVALIDITY UIDNEXT)")
             .await
             .map_err(|e| AeroError::ImapConnectionFailed(e.to_string()))?;
 
         let remote_exists = status.exists;
         let remote_uid_validity = status.uid_validity.unwrap_or(0);
+        let remote_uid_next = status.uid_next.unwrap_or(0);
 
-        // 查询本地记录
         let local_folder = self.db.get_folder_by_path(&self.account_id, folder_name)?;
         let Some(local) = local_folder else {
-            // 本地无记录，需要完整同步
             return Ok(false);
         };
 
         let local_total = u32::try_from(local.total_count).unwrap_or(0);
         let local_uid_validity = u32::try_from(local.uid_validity.unwrap_or(0)).unwrap_or(0);
+        let local_uid_next = u32::try_from(local.uid_next.unwrap_or(0)).unwrap_or(0);
 
-        // 只有 MESSAGES 和 UIDVALIDITY 都一致，且 UIDVALIDITY 有效时才跳过同步
         let unchanged = remote_exists == local_total
             && remote_uid_validity != 0
-            && remote_uid_validity == local_uid_validity;
+            && remote_uid_validity == local_uid_validity
+            && remote_uid_next == local_uid_next;
 
         if unchanged {
             debug!(
@@ -336,6 +362,8 @@ impl SyncWorker {
                 local_total,
                 remote_uid_validity,
                 local_uid_validity,
+                remote_uid_next,
+                local_uid_next,
                 "folder unchanged, skipping sync"
             );
         }
@@ -430,15 +458,14 @@ impl SyncWorker {
             if synced_count % 10 == 0 {
                 let _ = self
                     .progress_tx
-                    .send(SyncProgress {
+                    .try_send(SyncProgress {
                         account_id: self.account_id.clone(),
                         status: SyncStatus::Syncing,
                         synced_count,
                         total_count,
                         last_sync_time: None,
                         message: None,
-                    })
-                    .await;
+                    });
             }
         }
 
@@ -471,11 +498,20 @@ impl SyncWorker {
             return Ok(0);
         }
 
+        let local_folder = self.db.get_folder_by_path(&self.account_id, folder_name)?;
+        let display_name = local_folder
+            .as_ref()
+            .map_or(folder_name, |f| f.name.as_str());
+        if display_name == folder_name && local_folder.is_none() {
+            // 本地无记录，直接使用路径名
+        }
+
         let folder_id = self.db.upsert_folder(
             &self.account_id,
-            folder_name,
+            display_name,
             folder_name,
             Some(i64::from(remote_uid_validity)),
+            Some(i64::from(mailbox.uid_next.unwrap_or(0))),
         )?;
 
         let local_folder = self.db.get_folder_by_path(&self.account_id, folder_name)?;

@@ -33,9 +33,9 @@ CREATE TABLE IF NOT EXISTS folders (
     unread_count INTEGER DEFAULT 0,
     total_count INTEGER DEFAULT 0,
     uid_validity INTEGER,
+    uid_next INTEGER,
     last_sync_at INTEGER,
-    FOREIGN KEY (account_id) REFERENCES accounts(id) ON DELETE CASCADE
-)
+    FOREIGN KEY (account_id) REFERENCES accounts(id) ON DELETE CASCADE)
 ";
 
 pub const MAILS_TABLE: &str = r"

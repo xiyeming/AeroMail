@@ -20,7 +20,7 @@ use crate::services::oauth2;
 
 use self::worker::{SyncWorker, build_sync_uid_set, is_spam_folder, load_sync_mail_days};
 
-type WorkerHandle = (JoinHandle<()>, Arc<Notify>);
+type WorkerHandle = (JoinHandle<()>, JoinHandle<()>, Arc<Notify>);
 
 /// Manages background sync tasks for all email accounts.
 pub struct SyncService {
@@ -57,7 +57,7 @@ impl SyncService {
         // instead of silently doing nothing.
         {
             let workers = self.workers.read().await;
-            if let Some((_, notify)) = workers.get(account_id) {
+            if let Some((_, _, notify)) = workers.get(account_id) {
                 info!(
                     "Sync already running for account {}; waking worker",
                     account_id
@@ -88,13 +88,15 @@ impl SyncService {
         let (progress_tx, mut progress_rx) = mpsc::channel::<SyncProgress>(100);
 
         // Spawn progress forwarder task
-        let handle_clone = app_handle.clone();
-        let _account_id_clone = account_id.to_string();
-        tokio::spawn(async move {
-            while let Some(progress) = progress_rx.recv().await {
-                let _ = handle_clone.emit("sync:progress", &progress);
-            }
-        });
+        let forwarder_handle = {
+            let handle_clone = app_handle.clone();
+            let _account_id_clone = account_id.to_string();
+            tokio::spawn(async move {
+                while let Some(progress) = progress_rx.recv().await {
+                    let _ = handle_clone.emit("sync:progress", &progress);
+                }
+            })
+        };
 
         // Create and start worker
         let wake_notify = Arc::new(Notify::new());
@@ -108,14 +110,14 @@ impl SyncService {
             app_handle,
         };
 
-        let handle = tokio::spawn(async move {
+        let worker_handle = tokio::spawn(async move {
             worker.run().await;
         });
 
         self.workers
             .write()
             .await
-            .insert(account_id.to_string(), (handle, wake_notify));
+            .insert(account_id.to_string(), (worker_handle, forwarder_handle, wake_notify));
 
         info!("Started sync for account {}", account_id);
         Ok(())
@@ -129,8 +131,9 @@ impl SyncService {
     #[instrument(skip_all, fields(account_id = %account_id), err(Debug))]
     pub async fn stop_sync(&self, account_id: &str) -> Result<(), AeroError> {
         let mut workers = self.workers.write().await;
-        if let Some((handle, _)) = workers.remove(account_id) {
-            handle.abort();
+        if let Some((worker_handle, forwarder_handle, _)) = workers.remove(account_id) {
+            worker_handle.abort();
+            forwarder_handle.abort();
             info!("Stopped sync for account {}", account_id);
         }
         drop(workers);
@@ -191,6 +194,7 @@ impl SyncService {
             &folder.path,
             &folder.path,
             Some(i64::from(remote_uid_validity)),
+            None,
         )?;
 
         let local_count = self.db.count_mails_in_folder(folder_id)?;
@@ -345,8 +349,9 @@ impl SyncService {
     #[instrument(skip_all)]
     pub async fn stop_all(&self) {
         let mut workers = self.workers.write().await;
-        for (_, (handle, _)) in workers.drain() {
-            handle.abort();
+        for (_, (worker_handle, forwarder_handle, _)) in workers.drain() {
+            worker_handle.abort();
+            forwarder_handle.abort();
         }
         drop(workers);
         info!("Stopped all sync tasks");

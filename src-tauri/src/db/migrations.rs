@@ -16,6 +16,7 @@ pub fn run_migrations(conn: &mut Connection) -> Result<(), AeroError> {
     run_account_migrations(&tx)?;
     run_draft_migrations(&tx)?;
     run_mail_migrations(&tx)?;
+    run_folder_migrations(&tx)?;
     run_ai_chat_migrations(&tx)?;
     tx.commit()?;
     Ok(())
@@ -71,6 +72,13 @@ fn run_mail_migrations(tx: &rusqlite::Transaction) -> Result<(), AeroError> {
         if !column_exists(tx, "mails", column_name)? {
             tx.execute(&format!("ALTER TABLE mails ADD COLUMN {column_def}"), [])?;
         }
+    }
+    Ok(())
+}
+
+fn run_folder_migrations(tx: &rusqlite::Transaction) -> Result<(), AeroError> {
+    if !column_exists(tx, "folders", "uid_next")? {
+        tx.execute("ALTER TABLE folders ADD COLUMN uid_next INTEGER", [])?;
     }
     Ok(())
 }

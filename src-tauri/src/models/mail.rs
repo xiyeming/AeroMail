@@ -56,6 +56,7 @@ pub struct FolderInfo {
     pub unread_count: i64,
     pub total_count: i64,
     pub uid_validity: Option<i64>,
+    pub uid_next: Option<i64>,
     pub last_sync_at: Option<i64>,
 }
 

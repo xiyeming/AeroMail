@@ -1076,9 +1076,9 @@ impl Database {
         name: &str,
         path: &str,
         uid_validity: Option<i64>,
+        uid_next: Option<i64>,
     ) -> Result<String, AeroError> {
         let conn = self.connection()?;
-        // Check if folder already exists for this account
         let existing: Option<String> = conn
             .query_row(
                 "SELECT id FROM folders WHERE account_id = ?1 AND path = ?2",
@@ -1089,16 +1089,16 @@ impl Database {
 
         if let Some(id) = existing {
             conn.execute(
-                "UPDATE folders SET name = ?1, uid_validity = ?2 WHERE id = ?3",
-                (name, uid_validity, &id),
+                "UPDATE folders SET name = ?1, uid_validity = ?2, uid_next = ?3 WHERE id = ?4",
+                (name, uid_validity, uid_next, &id),
             )?;
             Ok(id)
         } else {
             let id = uuid::Uuid::new_v4().to_string();
             conn.execute(
-                "INSERT INTO folders (id, account_id, name, path, uid_validity)
-                 VALUES (?1, ?2, ?3, ?4, ?5)",
-                (&id, account_id, name, path, uid_validity),
+                "INSERT INTO folders (id, account_id, name, path, uid_validity, uid_next)
+                 VALUES (?1, ?2, ?3, ?4, ?5, ?6)",
+                (&id, account_id, name, path, uid_validity, uid_next),
             )?;
             Ok(id)
         }
@@ -1116,7 +1116,7 @@ impl Database {
     ) -> Result<Vec<crate::models::mail::FolderInfo>, AeroError> {
         let conn = self.connection()?;
         let mut stmt = conn.prepare(
-            "SELECT id, account_id, name, path, unread_count, total_count, uid_validity, last_sync_at
+            "SELECT id, account_id, name, path, unread_count, total_count, uid_validity, uid_next, last_sync_at
              FROM folders WHERE account_id = ?1 ORDER BY path ASC",
         )?;
         let rows = stmt.query_map([account_id], |row| {
@@ -1128,7 +1128,8 @@ impl Database {
                 unread_count: row.get(4)?,
                 total_count: row.get(5)?,
                 uid_validity: row.get(6)?,
-                last_sync_at: row.get(7)?,
+                uid_next: row.get(7)?,
+                last_sync_at: row.get(8)?,
             })
         })?;
         rows.collect::<Result<Vec<_>, _>>()
@@ -1147,7 +1148,7 @@ impl Database {
     ) -> Result<Option<crate::models::mail::FolderInfo>, AeroError> {
         let conn = self.connection()?;
         let mut stmt = conn.prepare(
-            "SELECT id, account_id, name, path, unread_count, total_count, uid_validity, last_sync_at
+            "SELECT id, account_id, name, path, unread_count, total_count, uid_validity, uid_next, last_sync_at
              FROM folders WHERE account_id = ?1 AND path = ?2",
         )?;
         let mut rows = stmt.query((account_id, path))?;
@@ -1160,7 +1161,8 @@ impl Database {
                 unread_count: row.get(4)?,
                 total_count: row.get(5)?,
                 uid_validity: row.get(6)?,
-                last_sync_at: row.get(7)?,
+                uid_next: row.get(7)?,
+                last_sync_at: row.get(8)?,
             }))
         } else {
             Ok(None)
@@ -1178,7 +1180,7 @@ impl Database {
     ) -> Result<Option<crate::models::mail::FolderInfo>, AeroError> {
         let conn = self.connection()?;
         let mut stmt = conn.prepare(
-            "SELECT id, account_id, name, path, unread_count, total_count, uid_validity, last_sync_at
+            "SELECT id, account_id, name, path, unread_count, total_count, uid_validity, uid_next, last_sync_at
              FROM folders WHERE id = ?1",
         )?;
         let mut rows = stmt.query([folder_id])?;
@@ -1191,7 +1193,8 @@ impl Database {
                 unread_count: row.get(4)?,
                 total_count: row.get(5)?,
                 uid_validity: row.get(6)?,
-                last_sync_at: row.get(7)?,
+                uid_next: row.get(7)?,
+                last_sync_at: row.get(8)?,
             }))
         } else {
             Ok(None)

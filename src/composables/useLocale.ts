@@ -1,4 +1,4 @@
-import { invoke } from '@tauri-apps/api/core';
+import { useTauriInvoke } from '@/composables/useTauriInvoke';
 import { ref } from 'vue';
 import { useI18n } from 'vue-i18n';
 import type { Locale } from '@/i18n';
@@ -8,6 +8,7 @@ import { useSettingsStore } from '@/stores/settings';
 const SETTINGS_KEY = 'app.locale';
 
 export function useLocale() {
+  const { call } = useTauriInvoke();
   const { locale } = useI18n();
   const settings = useSettingsStore();
   const isReady = ref(false);
@@ -21,7 +22,7 @@ export function useLocale() {
 
   async function updateTrayLocale(value: Locale) {
     try {
-      await invoke('set_tray_menu_locale', { locale: value });
+      await call('set_tray_menu_locale', { locale: value });
     } catch {
       // Tray update is best-effort; ignore failures on web/non-Tauri builds.
     }

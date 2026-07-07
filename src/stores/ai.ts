@@ -1,11 +1,12 @@
 import { defineStore } from 'pinia';
 import { ref } from 'vue';
-import { invoke } from '@tauri-apps/api/core';
+import { useTauriInvoke } from '@/composables/useTauriInvoke';
 import type { AiMcpServer, AiProviderSummary, AiSkill } from '@/types/ai';
 
 const DEFAULT_PROVIDER_KEY = 'app.ai.defaultProviderId';
 
 export const useAiStore = defineStore('ai', () => {
+  const { call } = useTauriInvoke();
   const providers = ref<AiProviderSummary[]>([]);
   const mcpServers = ref<AiMcpServer[]>([]);
   const skills = ref<AiSkill[]>([]);
@@ -13,20 +14,20 @@ export const useAiStore = defineStore('ai', () => {
   const isPanelOpen = ref(false);
 
   async function loadProviders() {
-    providers.value = await invoke<AiProviderSummary[]>('list_ai_providers');
+    providers.value = await call<AiProviderSummary[]>('list_ai_providers');
   }
 
   async function loadDefaultProvider() {
-    defaultProviderId.value = await invoke<string | null>('get_setting', {
+    defaultProviderId.value = await call<string | null>('get_setting', {
       key: DEFAULT_PROVIDER_KEY,
     });
   }
 
   async function setDefaultProvider(providerId: string | null) {
     if (providerId) {
-      await invoke('set_setting', { key: DEFAULT_PROVIDER_KEY, value: providerId });
+      await call('set_setting', { key: DEFAULT_PROVIDER_KEY, value: providerId });
     } else {
-      await invoke('set_setting', { key: DEFAULT_PROVIDER_KEY, value: '' });
+      await call('set_setting', { key: DEFAULT_PROVIDER_KEY, value: '' });
     }
     defaultProviderId.value = providerId;
   }
@@ -36,11 +37,11 @@ export const useAiStore = defineStore('ai', () => {
   }
 
   async function loadMcpServers() {
-    mcpServers.value = await invoke<AiMcpServer[]>('list_ai_mcp_servers');
+    mcpServers.value = await call<AiMcpServer[]>('list_ai_mcp_servers');
   }
 
   async function loadSkills() {
-    skills.value = await invoke<AiSkill[]>('list_ai_skills');
+    skills.value = await call<AiSkill[]>('list_ai_skills');
   }
 
   function togglePanel() {

@@ -560,13 +560,8 @@ watch(srcdoc, () => {
   // srcdoc changes trigger a re-load; height will be re-applied via @load.
   disconnectObserver();
   detachViolationListener();
+  ensureViolationListener();
   ensureSelectionListener();
-});
-
-watchEffect(() => {
-  if (iframeRef.value) {
-    ensureViolationListener();
-  }
 });
 
 function handleWindowMessage(event: MessageEvent) {

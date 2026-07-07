@@ -1,11 +1,12 @@
 import { ref } from 'vue';
-import { invoke } from '@tauri-apps/api/core';
+import { useTauriInvoke } from '@/composables/useTauriInvoke';
 import type { SearchQuery, SearchResult, SearchStats } from '@/types/search';
 
 const SEARCH_HISTORY_KEY = 'aeromail_search_history';
 const MAX_HISTORY_ITEMS = 10;
 
 export function useSearch() {
+  const { call } = useTauriInvoke();
   const results = ref<SearchResult[]>([]);
   const isSearching = ref(false);
   const error = ref<string | null>(null);
@@ -71,7 +72,7 @@ export function useSearch() {
     isSearching.value = true;
     error.value = null;
     try {
-      results.value = await invoke<SearchResult[]>('search_mails', { query });
+      results.value = await call<SearchResult[]>('search_mails', { query });
       // 添加到搜索历史
       addToHistory(query.query);
     } catch (e) {
@@ -83,7 +84,7 @@ export function useSearch() {
 
   async function indexPendingMails() {
     try {
-      const count = await invoke<number>('index_pending_mails');
+      const count = await call<number>('index_pending_mails');
       return count;
     } catch (e) {
       error.value = e instanceof Error ? e.message : String(e);
@@ -93,7 +94,7 @@ export function useSearch() {
 
   async function loadStats() {
     try {
-      stats.value = await invoke<SearchStats>('get_search_stats');
+      stats.value = await call<SearchStats>('get_search_stats');
     } catch (e) {
       error.value = e instanceof Error ? e.message : String(e);
     }

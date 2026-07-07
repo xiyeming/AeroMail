@@ -1,6 +1,6 @@
 import { ref, computed } from 'vue';
 import { defineStore } from 'pinia';
-import { invoke } from '@tauri-apps/api/core';
+import { useTauriInvoke } from '@/composables/useTauriInvoke';
 import type { MailHeader, MailDetail, FolderInfo } from '@/types/mail';
 
 const PAGE_SIZE = 50;
@@ -8,6 +8,7 @@ const PAGE_SIZE = 50;
 const VIRTUAL_FOLDERS = ['starred', 'sent', 'archived', 'spam', 'trash'];
 
 export const useMailStore = defineStore('mail', () => {
+  const { call } = useTauriInvoke();
   const mails = ref<MailHeader[]>([]);
   const selectedMailId = ref<string | null>(null);
   const selectedMail = ref<MailDetail | null>(null);
@@ -31,7 +32,7 @@ export const useMailStore = defineStore('mail', () => {
   async function loadFolders(accountId: string) {
     try {
       currentAccountId.value = accountId;
-      const newFolders = await invoke<FolderInfo[]>('list_folders', { accountId });
+      const newFolders = await call<FolderInfo[]>('list_folders', { accountId });
       const existing = new Map(folders.value.map((f) => [f.id, f]));
       for (const folder of newFolders) {
         existing.set(folder.id, folder);
@@ -57,7 +58,7 @@ export const useMailStore = defineStore('mail', () => {
       }
 
       const offset = reset ? 0 : mails.value.length;
-      const newMails = await invoke<MailHeader[]>('get_inbox_mail_list', {
+      const newMails = await call<MailHeader[]>('get_inbox_mail_list', {
         accountIds,
         limit: PAGE_SIZE,
         offset,
@@ -94,7 +95,7 @@ export const useMailStore = defineStore('mail', () => {
       currentFolderId.value = folderId;
       const isVirtual = VIRTUAL_FOLDERS.includes(folderId);
       const offset = reset ? 0 : mails.value.length;
-      let newMails = await invoke<MailHeader[]>(
+      let newMails = await call<MailHeader[]>(
         isVirtual ? 'get_virtual_mail_list' : 'get_mail_list',
         {
           folderId,
@@ -106,12 +107,12 @@ export const useMailStore = defineStore('mail', () => {
       // 当本地页为空且期望有更多数据时，请求后端从 IMAP 服务器回填旧邮件
       // 仅对真实文件夹执行；虚拟文件夹无远程旧邮件源
       if (!reset && newMails.length === 0 && hasMore.value && !isVirtual) {
-        const fetched = await invoke<number>('fetch_older_mails', {
+        const fetched = await call<number>('fetch_older_mails', {
           folderId,
           limit: PAGE_SIZE,
         });
         if (fetched > 0) {
-          newMails = await invoke<MailHeader[]>('get_mail_list', {
+          newMails = await call<MailHeader[]>('get_mail_list', {
             folderId,
             limit: PAGE_SIZE,
             offset,
@@ -147,7 +148,7 @@ export const useMailStore = defineStore('mail', () => {
       // already-visible items lets Vue's keyed list keep the DOM nodes in
       // place, which removes the post-sync flicker.
       const limit = Math.max(PAGE_SIZE, mails.value.length);
-      const fetched = await invoke<MailHeader[]>(
+      const fetched = await call<MailHeader[]>(
         isVirtual ? 'get_virtual_mail_list' : 'get_mail_list',
         {
           folderId,
@@ -183,7 +184,7 @@ export const useMailStore = defineStore('mail', () => {
 
     try {
       const limit = Math.max(PAGE_SIZE, mails.value.length);
-      const fetched = await invoke<MailHeader[]>('get_inbox_mail_list', {
+      const fetched = await call<MailHeader[]>('get_inbox_mail_list', {
         accountIds,
         limit,
         offset: 0,
@@ -219,7 +220,7 @@ export const useMailStore = defineStore('mail', () => {
     selectedMailId.value = mailId;
     selectedMail.value = null;
     try {
-      const detail = await invoke<MailDetail>('get_mail_detail', { mailId });
+      const detail = await call<MailDetail>('get_mail_detail', { mailId });
       // 如果已有更新的加载请求，丢弃本次结果
       if (loadId !== currentLoadId) return;
       selectedMail.value = detail;
@@ -249,7 +250,7 @@ export const useMailStore = defineStore('mail', () => {
 
   async function markRead(mailId: string, isRead: boolean) {
     try {
-      await invoke('mark_mail_read', { mailId, isRead });
+      await call('mark_mail_read', { mailId, isRead });
       // Update local state immediately
       const mail = mails.value.find((m) => m.id === mailId);
       if (mail && mail.isRead !== isRead) {
@@ -267,7 +268,7 @@ export const useMailStore = defineStore('mail', () => {
 
   async function toggleStar(mailId: string) {
     try {
-      const newStarred = await invoke<boolean>('toggle_mail_star', { mailId });
+      const newStarred = await call<boolean>('toggle_mail_star', { mailId });
       const mail = mails.value.find((m) => m.id === mailId);
       if (mail) {
         mail.isStarred = newStarred;
@@ -282,7 +283,7 @@ export const useMailStore = defineStore('mail', () => {
 
   async function archiveMail(mailId: string) {
     try {
-      await invoke('archive_mail', { mailId });
+      await call('archive_mail', { mailId });
       const mail = mails.value.find((m) => m.id === mailId);
       if (mail) {
         mail.isArchived = true;
@@ -306,7 +307,7 @@ export const useMailStore = defineStore('mail', () => {
 
   async function toggleSpam(mailId: string) {
     try {
-      const newSpam = await invoke<boolean>('toggle_mail_spam', { mailId });
+      const newSpam = await call<boolean>('toggle_mail_spam', { mailId });
       const mail = mails.value.find((m) => m.id === mailId);
       if (mail) {
         mail.isSpam = newSpam;
@@ -332,7 +333,7 @@ export const useMailStore = defineStore('mail', () => {
   async function deleteMail(mailId: string) {
     deletingMailIds.value.add(mailId);
     try {
-      await invoke('delete_mail', { mailId });
+      await call('delete_mail', { mailId });
       // Remove from list
       const index = mails.value.findIndex((m) => m.id === mailId);
       if (index !== -1) {
@@ -455,7 +456,7 @@ export const useMailStore = defineStore('mail', () => {
 
   async function moveMail(mailId: string, targetFolderId: string) {
     try {
-      await invoke('move_mail', { mailId, targetFolderId });
+      await call('move_mail', { mailId, targetFolderId });
       // Remove from list
       const index = mails.value.findIndex((m) => m.id === mailId);
       if (index !== -1) {

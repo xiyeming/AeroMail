@@ -4,10 +4,10 @@ import { useSettingsStore } from '@/stores/settings';
 export type Theme = 'dark' | 'light';
 
 const SETTINGS_KEY = 'app.theme';
-const theme = ref<Theme>('dark');
 
 export function useTheme() {
   const settings = useSettingsStore();
+  const theme = ref<Theme>('dark');
 
   function setTheme(value: Theme, persist = true) {
     theme.value = value;

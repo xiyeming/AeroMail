@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed, ref, onMounted, watch } from 'vue';
-import { invoke } from '@tauri-apps/api/core';
+import { useTauriInvoke } from '@/composables/useTauriInvoke';
 import { Star, Trash2, Pencil } from '@lucide/vue';
 import { useLocale, type Locale } from '@/composables/useLocale';
 import { useLogConfig } from '@/composables/useLogConfig';
@@ -21,6 +21,7 @@ import type { AiMcpServer, AiSkill } from '@/types/ai';
 const { locale, setLocale, supportedLocales } = useLocale();
 const { theme, setTheme } = useTheme();
 const { decorations, setDecorations } = useWindowFrame();
+const { call } = useTauriInvoke();
 
 const currentLocale = computed({
   get: () => locale.value as Locale,
@@ -216,7 +217,7 @@ async function addProvider() {
   savingProvider.value = true;
   try {
     console.log('[SettingsView] invoking upsert_ai_provider');
-    const result = await invoke('upsert_ai_provider', {
+    const result = await call('upsert_ai_provider', {
       provider: {
         id: crypto.randomUUID(),
         name: newName.value,
@@ -275,7 +276,7 @@ async function testAccount(config: AccountConfig, _password: string) {
 }
 
 async function removeProvider(id: string) {
-  await invoke('delete_ai_provider', { providerId: id });
+  await call('delete_ai_provider', { providerId: id });
   await aiStore.loadProviders();
 }
 
@@ -311,7 +312,7 @@ const traditionalKinds: TraditionalProviderKind[] = [
 ];
 
 async function loadTranslationProviders() {
-  translationProviders.value = await invoke<TranslationProviderSummary[]>(
+  translationProviders.value = await call<TranslationProviderSummary[]>(
     'list_translation_providers'
   );
 }
@@ -327,7 +328,7 @@ function resetTranslationForm() {
 
 async function addTranslationProvider() {
   if (translationFormType.value === 'traditional') {
-    await invoke('upsert_translation_provider', {
+    await call('upsert_translation_provider', {
       provider: {
         type: 'traditional',
         id: crypto.randomUUID(),
@@ -339,7 +340,7 @@ async function addTranslationProvider() {
       },
     });
   } else {
-    await invoke('upsert_translation_provider', {
+    await call('upsert_translation_provider', {
       provider: {
         type: 'ai',
         id: crypto.randomUUID(),
@@ -355,7 +356,7 @@ async function addTranslationProvider() {
 }
 
 async function removeTranslationProvider(id: string) {
-  await invoke('delete_translation_provider', { providerId: id });
+  await call('delete_translation_provider', { providerId: id });
   await loadTranslationProviders();
 }
 
@@ -430,14 +431,14 @@ async function addMcpServer() {
     updatedAt: Date.now(),
   };
 
-  await invoke('upsert_ai_mcp_server', { server });
+  await call('upsert_ai_mcp_server', { server });
   await aiStore.loadMcpServers();
   resetMcpForm();
   showMcpForm.value = false;
 }
 
 async function removeMcpServer(id: string) {
-  await invoke('delete_ai_mcp_server', { serverId: id });
+  await call('delete_ai_mcp_server', { serverId: id });
   await aiStore.loadMcpServers();
 }
 
@@ -482,14 +483,14 @@ async function addSkill() {
     updatedAt: Date.now(),
   };
 
-  await invoke('upsert_ai_skill', { skill });
+  await call('upsert_ai_skill', { skill });
   await aiStore.loadSkills();
   resetSkillForm();
   showSkillForm.value = false;
 }
 
 async function removeSkill(id: string) {
-  await invoke('delete_ai_skill', { skillId: id });
+  await call('delete_ai_skill', { skillId: id });
   await aiStore.loadSkills();
 }
 </script>

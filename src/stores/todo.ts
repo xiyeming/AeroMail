@@ -1,6 +1,6 @@
 import { ref, computed, onMounted, onUnmounted } from 'vue';
 import { defineStore } from 'pinia';
-import { invoke } from '@tauri-apps/api/core';
+import { useTauriInvoke } from '@/composables/useTauriInvoke';
 import {
   isPermissionGranted,
   requestPermission,
@@ -28,6 +28,7 @@ function generateId(): string {
 }
 
 export const useTodoStore = defineStore('todo', () => {
+  const { call } = useTauriInvoke();
   const items = ref<TodoItem[]>([]);
   const isPanelOpen = ref(false);
   const isLoading = ref(false);
@@ -38,7 +39,7 @@ export const useTodoStore = defineStore('todo', () => {
   async function loadTodos() {
     isLoading.value = true;
     try {
-      items.value = await invoke<TodoItem[]>('list_todos');
+      items.value = await call<TodoItem[]>('list_todos');
     } finally {
       isLoading.value = false;
     }
@@ -56,12 +57,12 @@ export const useTodoStore = defineStore('todo', () => {
       reminderAt,
       completionLog: [],
     };
-    await invoke('upsert_todo', { todo });
+    await call('upsert_todo', { todo });
     items.value.push(todo);
   }
 
   async function removeTodo(id: string) {
-    await invoke('delete_todo', { todoId: id });
+    await call('delete_todo', { todoId: id });
     items.value = items.value.filter((i) => i.id !== id);
   }
 
@@ -78,7 +79,7 @@ export const useTodoStore = defineStore('todo', () => {
       item.completedAt = undefined;
     }
 
-    await invoke('upsert_todo', { todo: item });
+    await call('upsert_todo', { todo: item });
   }
 
   function toggleDone(id: string) {
@@ -92,7 +93,7 @@ export const useTodoStore = defineStore('todo', () => {
     const item = items.value.find((i) => i.id === id);
     if (!item) return;
     item.text = text.trim();
-    await invoke('upsert_todo', { todo: item });
+    await call('upsert_todo', { todo: item });
   }
 
   async function setReminder(id: string, reminderAt?: number) {
@@ -100,7 +101,7 @@ export const useTodoStore = defineStore('todo', () => {
     if (!item) return;
     item.reminderAt = reminderAt;
     item.notifiedAt = undefined;
-    await invoke('upsert_todo', { todo: item });
+    await call('upsert_todo', { todo: item });
   }
 
   async function setFromAiTodos(todos: string[], mailId?: string) {
@@ -126,7 +127,7 @@ export const useTodoStore = defineStore('todo', () => {
   }
 
   async function clearCompleted() {
-    await invoke('clear_completed_todos');
+    await call('clear_completed_todos');
     items.value = items.value.filter((i) => !i.done);
   }
 
@@ -155,7 +156,7 @@ export const useTodoStore = defineStore('todo', () => {
           // Ignore notification errors to avoid breaking the store.
         }
         item.notifiedAt = now;
-        void invoke('upsert_todo', { todo: item });
+        void call('upsert_todo', { todo: item });
       }
     }
   }

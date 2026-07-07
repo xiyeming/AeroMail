@@ -2,7 +2,7 @@
 import { computed, onMounted, onUnmounted, ref } from 'vue';
 import { getCurrentWindow } from '@tauri-apps/api/window';
 import { listen, type UnlistenFn } from '@tauri-apps/api/event';
-import { invoke } from '@tauri-apps/api/core';
+import { useTauriInvoke } from '@/composables/useTauriInvoke';
 import { Minus, Square, X } from '@lucide/vue';
 import { useResponsive } from '@/composables/useResponsive';
 import { useWindowFrame } from '@/composables/useWindowFrame';
@@ -20,6 +20,7 @@ import CommandPalette from '@/components/CommandPalette.vue';
 const aiStore = useAiStore();
 const mailStore = useMailStore();
 const todoStore = useTodoStore();
+const { call } = useTauriInvoke();
 const { decorations } = useWindowFrame();
 const win = getCurrentWindow();
 
@@ -79,7 +80,7 @@ async function closeWindow() {
 
 async function confirmClose() {
   showCloseConfirm.value = false;
-  await invoke('confirmed_exit');
+  await call('confirmed_exit');
 }
 
 function cancelClose() {

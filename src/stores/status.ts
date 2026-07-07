@@ -1,6 +1,6 @@
 import { defineStore } from 'pinia';
 import { ref, computed } from 'vue';
-import { invoke } from '@tauri-apps/api/core';
+import { useTauriInvoke } from '@/composables/useTauriInvoke';
 import { listen } from '@tauri-apps/api/event';
 import type { SyncProgress } from '@/types/mail';
 
@@ -13,6 +13,7 @@ export interface SyncStatusItem {
 }
 
 export const useStatusStore = defineStore('status', () => {
+  const { call } = useTauriInvoke();
   const syncStatus = ref<SyncStatusItem[]>([]);
   const unreadCount = ref(0);
   const lastSyncTime = ref<string | null>(null);
@@ -48,7 +49,7 @@ export const useStatusStore = defineStore('status', () => {
   // Load the persisted last-sync timestamp from the backend settings store.
   async function loadLastSyncTime() {
     try {
-      const value = await invoke<string | null>('get_setting', { key: LAST_SYNC_TIME_KEY });
+      const value = await call<string | null>('get_setting', { key: LAST_SYNC_TIME_KEY });
       if (value) {
         setLastSyncTime(value);
       }

@@ -1,7 +1,8 @@
 import { ref } from 'vue';
-import { invoke } from '@tauri-apps/api/core';
+import { useTauriInvoke } from '@/composables/useTauriInvoke';
 
 export function useAiCompose() {
+  const { call } = useTauriInvoke();
   const isLoading = ref(false);
   const error = ref<string | null>(null);
 
@@ -13,7 +14,7 @@ export function useAiCompose() {
     isLoading.value = true;
     error.value = null;
     try {
-      const result = await invoke<string>('ai_compose_assist', {
+      const result = await call<string>('ai_compose_assist', {
         action,
         content,
         providerId,

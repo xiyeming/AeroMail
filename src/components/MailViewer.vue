@@ -22,7 +22,7 @@ import {
   X,
   Loader2,
 } from '@lucide/vue';
-import { invoke } from '@tauri-apps/api/core';
+import { useTauriInvoke } from '@/composables/useTauriInvoke';
 import { save } from '@tauri-apps/plugin-dialog';
 import AiQuickActions from '@/components/AiQuickActions.vue';
 import SandboxedHtml from '@/components/SandboxedHtml.vue';
@@ -39,6 +39,7 @@ import type { AttachmentInfo } from '@/types/mail';
 import type { TranslationProviderSummary } from '@/types/translation';
 
 const { t } = useI18n();
+const { call } = useTauriInvoke();
 const router = useRouter();
 const { summarizeMail, extractTodos } = useAiChat();
 const {
@@ -89,6 +90,7 @@ const translationLanguages = [
 const summaryText = ref('');
 const isSummarizing = ref(false);
 const isExtractingTodos = ref(false);
+let currentAttachmentLoadId = 0;
 
 async function loadTranslationProviders() {
   translationProviders.value = await listTranslationProviders();
@@ -160,7 +162,7 @@ function handleIframeSelection(payload: { text: string; clientX: number; clientY
 }
 
 function handleLinkClick(url: string) {
-  invoke('open_url', { url }).catch((e) => {
+  call('open_url', { url }).catch((e) => {
     console.error('Failed to open link:', e);
   });
 }
@@ -217,25 +219,31 @@ const isSpam = computed(() => mail.value?.isSpam ?? false);
 const isArchived = computed(() => mail.value?.isArchived ?? false);
 
 async function loadAttachments(mailId: string) {
+  const loadId = ++currentAttachmentLoadId;
+
   try {
-    const list = await invoke<AttachmentInfo[]>('get_attachments', { mailId });
+    const list = await call<AttachmentInfo[]>('get_attachments', { mailId });
+    if (loadId !== currentAttachmentLoadId) return;
     attachments.value = list;
 
     const map: Record<string, string> = {};
-    await Promise.all(
-      list
-        .filter((att) => att.contentId)
-        .map(async (att) => {
+    const contentIdAttachments = list.filter((att) => att.contentId);
+
+    const CONCURRENT = 5;
+    for (let i = 0; i < contentIdAttachments.length; i += CONCURRENT) {
+      if (loadId !== currentAttachmentLoadId) return;
+      const chunk = contentIdAttachments.slice(i, i + CONCURRENT);
+      await Promise.all(
+        chunk.map(async (att) => {
+          if (loadId !== currentAttachmentLoadId) return;
           try {
-            const bytes = await invoke<number[]>('get_attachment_content', {
+            const bytes = await call<number[]>('get_attachment_content', {
               attachmentId: att.id,
             });
+            if (loadId !== currentAttachmentLoadId) return;
             const dataUrl = `data:${att.mimeType || 'application/octet-stream'};base64,${uint8ArrayToBase64(new Uint8Array(bytes))}`;
             const fullCid = normalizeCid(att.contentId!);
             map[fullCid] = dataUrl;
-            // HTML often references inline images by the local part only (cid:logo),
-            // while Content-ID headers include a domain suffix (<logo@domain.com>).
-            // Register both forms so either reference resolves.
             const atIdx = fullCid.indexOf('@');
             if (atIdx > 0) {
               map[fullCid.slice(0, atIdx)] = dataUrl;
@@ -244,12 +252,18 @@ async function loadAttachments(mailId: string) {
             console.error(`Failed to load inline image ${att.filename}:`, e);
           }
         })
-    );
+      );
+    }
+
+    if (loadId !== currentAttachmentLoadId) return;
     inlineImageMap.value = map;
   } catch (e) {
+    if (loadId !== currentAttachmentLoadId) return;
     console.error('Failed to load attachments:', e);
   } finally {
-    attachmentsLoaded.value = true;
+    if (loadId === currentAttachmentLoadId) {
+      attachmentsLoaded.value = true;
+    }
   }
 }
 
@@ -259,7 +273,7 @@ async function downloadAttachment(att: AttachmentInfo) {
     if (!targetPath) {
       return;
     }
-    await invoke('download_attachment', {
+    await call('download_attachment', {
       attachmentId: att.id,
       targetPath,
     });
@@ -415,6 +429,15 @@ function formatAddresses(addresses: string | null): string {
 }
 
 function extractRemoteDomains(html: string): string[] {
+  const MAX_HTML_LENGTH = 1_048_576;
+  if (html.length > MAX_HTML_LENGTH) {
+    return [];
+  }
+
+  if (extractedDomainsCache && extractedDomainsCache.html === html) {
+    return extractedDomainsCache.domains;
+  }
+
   const domains = new Set<string>();
 
   const capture = (url: string) => {
@@ -463,7 +486,9 @@ function extractRemoteDomains(html: string): string[] {
     }
   }
 
-  return Array.from(domains).sort();
+  const result = Array.from(domains).sort();
+  extractedDomainsCache = { html, domains: result };
+  return result;
 }
 
 const remoteDomains = computed(() => {
@@ -526,13 +551,23 @@ function allowAllRemoteOnce() {
 
 async function trustDomain(domain: string) {
   console.debug('[MailViewer] trustDomain:', domain);
-  if (!trustedDomains.value.includes(domain)) {
-    trustedDomains.value.push(domain);
-    await settingsStore.set('trustedDomains', JSON.stringify(trustedDomains.value));
-    resetSecurityDomainTracking();
-    cspRevision.value++;
-    console.debug('[MailViewer] allowedDomains after trust:', allowedDomains.value);
+  if (trustedDomains.value.includes(domain)) return;
+
+  const MAX_TRUSTED_DOMAINS = 50;
+  if (trustedDomains.value.length >= MAX_TRUSTED_DOMAINS) {
+    toast.add({
+      type: 'warning',
+      message: t('mail.tooManyTrustedDomains', { max: MAX_TRUSTED_DOMAINS }),
+      duration: 4000,
+    });
+    return;
   }
+
+  trustedDomains.value.push(domain);
+  await settingsStore.set('trustedDomains', JSON.stringify(trustedDomains.value));
+  resetSecurityDomainTracking();
+  cspRevision.value++;
+  console.debug('[MailViewer] allowedDomains after trust:', allowedDomains.value);
 }
 
 async function loadTrustedDomains() {

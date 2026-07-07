@@ -1,5 +1,5 @@
 import { ref } from 'vue';
-import { invoke } from '@tauri-apps/api/core';
+import { useTauriInvoke } from '@/composables/useTauriInvoke';
 import type { TranslationProviderSummary } from '@/types/translation';
 import { useLocale } from '@/composables/useLocale';
 import { useSettingsStore } from '@/stores/settings';
@@ -7,6 +7,7 @@ import { useSettingsStore } from '@/stores/settings';
 const DEFAULT_TARGET_LANG_KEY = 'translation.defaultTargetLang';
 
 export function useTranslation() {
+  const { call } = useTauriInvoke();
   const { locale: appLocale } = useLocale();
   const settingsStore = useSettingsStore();
   const isTranslating = ref(false);
@@ -42,7 +43,7 @@ export function useTranslation() {
     isTranslating.value = true;
     error.value = null;
     try {
-      return await invoke<string>('translate_mail_text', {
+      return await call<string>('translate_mail_text', {
         mailId,
         targetLang,
         providerId,
@@ -63,7 +64,7 @@ export function useTranslation() {
     isTranslating.value = true;
     error.value = null;
     try {
-      return await invoke<string>('translate_text', {
+      return await call<string>('translate_text', {
         text,
         targetLang,
         providerId,
@@ -77,7 +78,7 @@ export function useTranslation() {
   }
 
   async function listProviders(): Promise<TranslationProviderSummary[]> {
-    return await invoke<TranslationProviderSummary[]>('list_translation_providers');
+    return await call<TranslationProviderSummary[]>('list_translation_providers');
   }
 
   return {

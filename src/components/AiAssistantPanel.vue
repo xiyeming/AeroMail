@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { ref, onMounted, nextTick, watch, computed } from 'vue';
 import { useI18n } from 'vue-i18n';
-import { invoke } from '@tauri-apps/api/core';
+import { useTauriInvoke } from '@/composables/useTauriInvoke';
 import { ChevronDown, Eraser, Pencil, Trash2, X } from '@lucide/vue';
 import { useAiChat } from '@/composables/useAiChat';
 import AiMessageList from '@/components/AiMessageList.vue';
@@ -9,6 +9,7 @@ import { useAiStore } from '@/stores/ai';
 import type { MailDetail, MailHeader } from '@/types/mail';
 
 const { t } = useI18n();
+const { call } = useTauriInvoke();
 const aiStore = useAiStore();
 const {
   sessions,
@@ -70,7 +71,7 @@ function getMentionAtCursor(): { startIndex: number; query: string } | null {
 
 async function searchMentions(query: string) {
   try {
-    const results = await invoke<MailHeader[]>('search_mail_summaries', { query });
+    const results = await call<MailHeader[]>('search_mail_summaries', { query });
     mentionResults.value = results;
     mentionIndex.value = 0;
   } catch (e) {
@@ -157,7 +158,7 @@ async function buildContentWithMentions(): Promise<string> {
   const quotes: string[] = [];
   for (const mail of mentionedMails.value) {
     try {
-      const detail = await invoke<MailDetail>('get_mail_detail', { mailId: mail.id });
+      const detail = await call<MailDetail>('get_mail_detail', { mailId: mail.id });
       const body = detail.bodyText || detail.bodyHtml || '';
       const from = detail.fromName || detail.fromAddress || t('mail.unknownSender');
       quotes.push(`[${t('mail.quotedToAi')}]

@@ -2,6 +2,7 @@
 import { computed, nextTick, onMounted, onUnmounted, ref, watch } from 'vue';
 import { useI18n } from 'vue-i18n';
 import { useRoute, useRouter } from 'vue-router';
+import { useDebounceFn } from '@vueuse/core';
 import {
   Star,
   Archive,
@@ -67,9 +68,15 @@ const contextMenu = ref<{
 const showMoveDialog = ref(false);
 const moveTargetMailId = ref<string | null>(null);
 const searchQuery = ref('');
+const debouncedSearchQuery = ref('');
 const scrollbarRef = ref<InstanceType<typeof CustomScrollbar> | null>(null);
 const sentinelRef = ref<HTMLElement | null>(null);
 let scrollObserver: IntersectionObserver | null = null;
+let sentinelObserved = false;
+
+const updateDebouncedSearch = useDebounceFn((value: string) => {
+  debouncedSearchQuery.value = value;
+}, 300);
 
 function getScrollElement(): HTMLElement | null {
   return scrollbarRef.value?.getScrollElement() ?? null;
@@ -89,26 +96,16 @@ onMounted(async () => {
 });
 
 watch(
-  currentFolderId,
-  async (folderId) => {
-    if (!folderId || route.path === '/') return;
-    mailStore.closeReader();
-    scrollToTop();
-    await mailStore.loadMails(folderId);
-    await checkLoadMore();
-  },
-  { immediate: true }
-);
-
-watch(
   () => [route.path, accountStore.selectedAccountIds.join(',')],
   async ([path]) => {
+    mailStore.closeReader();
+    scrollToTop();
     if (path === '/') {
-      mailStore.closeReader();
-      scrollToTop();
       await mailStore.loadInboxMails(accountStore.selectedAccountIds);
-      await checkLoadMore();
+    } else if (currentFolderId.value) {
+      await mailStore.loadMails(currentFolderId.value);
     }
+    await checkLoadMore();
   },
   { immediate: true }
 );
@@ -156,14 +153,22 @@ watch(
 );
 
 const displayedMails = computed(() => {
-  if (!searchQuery.value.trim()) return mailStore.mails;
-  const q = searchQuery.value.toLowerCase();
+  const query = debouncedSearchQuery.value.trim();
+  if (!query) return mailStore.mails;
+  const q = query.toLowerCase();
   return mailStore.mails.filter(
     (m) =>
       (m.subject ?? '').toLowerCase().includes(q) ||
       (m.fromName ?? '').toLowerCase().includes(q) ||
       (m.fromAddress ?? '').toLowerCase().includes(q)
   );
+});
+
+const isSearching = computed(() => searchQuery.value.trim().length > 0 && searchQuery.value !== debouncedSearchQuery.value);
+const hasSearchResults = computed(() => {
+  const query = debouncedSearchQuery.value.trim();
+  if (!query) return true;
+  return displayedMails.value.length > 0;
 });
 
 const selectedCount = computed(() => mailStore.selectedMailIds.length);
@@ -223,13 +228,19 @@ function disconnectObserver() {
   if (scrollObserver) {
     scrollObserver.disconnect();
     scrollObserver = null;
+    sentinelObserved = false;
   }
 }
 
 function setupInfiniteScroll() {
-  disconnectObserver();
   const sentinel = sentinelRef.value;
   if (!sentinel) return;
+
+  if (scrollObserver && sentinelObserved) {
+    return;
+  }
+
+  disconnectObserver();
 
   scrollObserver = new IntersectionObserver(
     (entries) => {
@@ -248,6 +259,7 @@ function setupInfiniteScroll() {
     }
   );
   scrollObserver.observe(sentinel);
+  sentinelObserved = true;
 }
 
 onMounted(() => {
@@ -431,10 +443,11 @@ async function bulkMarkRead(isRead: boolean) {
         <label for="mail-search" class="sr-only">{{ t('common.search') }}</label>
         <input
           id="mail-search"
-          v-model="searchQuery"
+          :value="searchQuery"
           type="search"
           :placeholder="t('commandPalette.placeholder')"
           class="h-8 w-44 rounded-md border border-border bg-base px-3 text-sm text-primary placeholder:text-tertiary outline-none focus:border-accent"
+          @input="updateDebouncedSearch(($event.target as HTMLInputElement).value); searchQuery = ($event.target as HTMLInputElement).value"
         />
       </form>
     </div>
@@ -457,7 +470,7 @@ async function bulkMarkRead(isRead: boolean) {
       v-else-if="displayedMails.length === 0"
       class="flex flex-1 items-center justify-center text-secondary"
     >
-      {{ t('mail.noEmails') }}
+      {{ hasSearchResults.value ? t('mail.noEmails') : t('mail.noSearchResults') }}
     </div>
 
     <!-- Mail list -->

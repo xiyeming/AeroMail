@@ -36,7 +36,10 @@ function buildCsp(scriptNonce: string): string {
   }
 
   // Allow exact host, its direct subdomains, and (for deep hosts) sibling
-  // subdomains under the parent domain.
+  // subdomains under the parent domain.  Each domain is emitted with both
+  // http and https scheme prefixes because CSP source expressions without a
+  // scheme only match the exact hostname (no protocol restriction), and some
+  // browsers treat bare hostnames inconsistently.
   const hosts = allowed.flatMap((domain) => {
     const labels = domain.split('.');
     const entries = [domain, `*.${domain}`];
@@ -45,12 +48,12 @@ function buildCsp(scriptNonce: string): string {
     }
     return entries;
   });
+  const hostWithScheme = hosts.flatMap((h) => [`http:${h}`, `https:${h}`]);
 
-  // 只允许特定域名的资源，不包含通配的 http:/https:
-  const imgSrc = ["'self'", 'data:', 'cid:', ...hosts].join(' ');
-  const styleSrc = ["'unsafe-inline'", "'self'", ...hosts].join(' ');
-  const fontSrc = ["'self'", ...hosts].join(' ');
-  const mediaSrc = ["'self'", ...hosts].join(' ');
+  const imgSrc = ["'self'", 'data:', 'cid:', ...hostWithScheme].join(' ');
+  const styleSrc = ["'unsafe-inline'", "'self'", ...hostWithScheme].join(' ');
+  const fontSrc = ["'self'", ...hostWithScheme].join(' ');
+  const mediaSrc = ["'self'", ...hostWithScheme].join(' ');
   return [
     "default-src 'none'",
     `img-src ${imgSrc}`,

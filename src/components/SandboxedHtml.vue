@@ -46,8 +46,8 @@ function buildCsp(scriptNonce: string): string {
     return entries;
   });
 
-  const imgSrc = ["'self'", 'data:', 'cid:', ...hosts].join(' ');
-  const styleSrc = ["'unsafe-inline'", "'self'", ...hosts].join(' ');
+  const imgSrc = ["'self'", 'data:', 'cid:', 'http:', 'https:', ...hosts].join(' ');
+  const styleSrc = ["'unsafe-inline'", "'self'", 'http:', 'https:', ...hosts].join(' ');
   const fontSrc = ["'self'", ...hosts].join(' ');
   const mediaSrc = ["'self'", ...hosts].join(' ');
   return [

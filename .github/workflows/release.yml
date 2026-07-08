@@ -320,3 +320,90 @@ jobs:
             echo "Package not found: $PKG"
             exit 1
           fi
+
+  generate-update-json:
+    needs: build
+    if: startsWith(github.ref, 'refs/tags/v')
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Get version and generate latest.json
+        shell: bash
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAG_NAME: ${{ github.ref_name }}
+        run: |
+          set -e
+          VERSION="${TAG_NAME#v}"
+          PUB_DATE=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
+          REPO="${{ github.repository }}"
+
+          # 获取各平台的签名文件
+          get_asset_signature() {
+            local pattern="$1"
+            local assets=$(gh release view "$TAG_NAME" --json assets --jq '.assets[].name')
+            for asset in $assets; do
+              if [[ "$asset" == $pattern ]]; then
+                local sig_file="${asset}.sig"
+                # 尝试从 release assets 获取签名
+                gh release download "$TAG_NAME" -p "$sig_file" -D /tmp/sigs 2>/dev/null || true
+                if [ -f "/tmp/sigs/$sig_file" ]; then
+                  cat "/tmp/sigs/$sig_file"
+                  return 0
+                fi
+              fi
+            done
+            echo ""
+          }
+
+          mkdir -p /tmp/sigs
+
+          # Linux x86_64
+          LINUX_X64_SIG=$(get_asset_signature "aeromail-${VERSION}_amd64.AppImage")
+          # Linux aarch64
+          LINUX_ARM_SIG=$(get_asset_signature "aeromail-${VERSION}_aarch64.AppImage")
+          # macOS
+          MACOS_SIG=$(get_asset_signature "AeroMail_${VERSION}_*.dmg")
+          # Windows
+          WIN_SIG=$(get_asset_signature "AeroMail_${VERSION}_x64-setup.nsis.exe")
+
+          cat > latest.json << EOF
+          {
+            "version": "$VERSION",
+            "notes": "Release v$VERSION",
+            "pub_date": "$PUB_DATE",
+            "platforms": {
+              "linux-x86_64": {
+                "signature": "$LINUX_X64_SIG",
+                "url": "https://github.com/$REPO/releases/download/v$VERSION/aeromail-${VERSION}_amd64.AppImage.tar.gz"
+              },
+              "linux-aarch64": {
+                "signature": "$LINUX_ARM_SIG",
+                "url": "https://github.com/$REPO/releases/download/v$VERSION/aeromail-${VERSION}_aarch64.AppImage.tar.gz"
+              },
+              "darwin-x86_64": {
+                "signature": "$MACOS_SIG",
+                "url": "https://github.com/$REPO/releases/download/v$VERSION/AeroMail_${VERSION}_x64.dmg"
+              },
+              "darwin-aarch64": {
+                "signature": "$MACOS_SIG",
+                "url": "https://github.com/$REPO/releases/download/v$VERSION/AeroMail_${VERSION}_aarch64.dmg"
+              },
+              "windows-x86_64": {
+                "signature": "$WIN_SIG",
+                "url": "https://github.com/$REPO/releases/download/v$VERSION/AeroMail_${VERSION}_x64-setup.nsis.exe"
+              }
+            }
+          }
+          EOF
+
+          cat latest.json
+
+      - name: Upload latest.json to release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ github.ref_name }}
+          files: latest.json
+          overwrite: true

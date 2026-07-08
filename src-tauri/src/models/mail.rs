@@ -82,6 +82,18 @@ pub enum SyncStatus {
     Completed,
 }
 
+/// Incremental new-mails event payload emitted to the frontend.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct NewMailsEvent {
+    /// Account that was synced.
+    pub account_id: String,
+    /// Folder that was synced.
+    pub folder_id: String,
+    /// The new mail headers to insert.
+    pub mails: Vec<MailHeader>,
+}
+
 /// Parsed mail from mail-parser, ready for database insertion.
 #[derive(Debug, Clone)]
 pub struct ParsedMail {

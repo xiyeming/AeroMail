@@ -89,6 +89,7 @@ function scrollToTop() {
 }
 
 onMounted(async () => {
+  await mailStore.initEventListeners();
   if (accountStore.accounts.length === 0) {
     await accountStore.loadAccounts();
   }

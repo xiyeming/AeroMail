@@ -1,7 +1,8 @@
 import { ref, computed } from 'vue';
 import { defineStore } from 'pinia';
+import { listen } from '@tauri-apps/api/event';
 import { useTauriInvoke } from '@/composables/useTauriInvoke';
-import type { MailHeader, MailDetail, FolderInfo } from '@/types/mail';
+import type { MailHeader, MailDetail, FolderInfo, NewMailsEvent } from '@/types/mail';
 
 const PAGE_SIZE = 50;
 
@@ -210,6 +211,32 @@ export const useMailStore = defineStore('mail', () => {
     } catch (e) {
       error.value = e instanceof Error ? e.message : String(e);
     }
+  }
+
+  function insertMails(newMails: MailHeader[]) {
+    if (newMails.length === 0) return;
+    const existingIds = new Set(mails.value.map((m) => m.id));
+    const unique = newMails.filter((m) => !existingIds.has(m.id));
+    if (unique.length === 0) return;
+
+    const seen = new Set<string>();
+    const deduped = unique.filter((m) => {
+      if (seen.has(m.id)) return false;
+      seen.add(m.id);
+      return true;
+    });
+
+    mails.value = [...deduped, ...mails.value];
+    error.value = null;
+  }
+
+  async function initEventListeners() {
+    await listen<NewMailsEvent>('sync:new_mails', (event) => {
+      const { folderId, mails: newMails } = event.payload;
+      if (folderId === currentFolderId.value && !loading.value) {
+        insertMails(newMails);
+      }
+    });
   }
 
   async function loadMailDetail(mailId: string) {
@@ -498,6 +525,8 @@ export const useMailStore = defineStore('mail', () => {
     loadInboxMails,
     refreshMails,
     refreshInboxMails,
+    insertMails,
+    initEventListeners,
     loadMailDetail,
     selectMail,
     markRead,

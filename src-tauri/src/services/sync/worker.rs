@@ -3,6 +3,7 @@ use std::sync::Arc;
 use std::time::Duration;
 
 use futures::StreamExt;
+use tauri::Emitter;
 use tauri_plugin_notification::NotificationExt;
 use tokio::sync::{Notify, RwLock, mpsc};
 use tokio::time::{sleep, timeout};
@@ -11,7 +12,7 @@ use tracing::{debug, error, info, instrument, warn};
 use crate::db::pool::Database;
 use crate::error::AeroError;
 use crate::models::account::AccountConfig;
-use crate::models::mail::{ParsedAttachment, SyncProgress, SyncStatus};
+use crate::models::mail::{NewMailsEvent, ParsedAttachment, SyncProgress, SyncStatus};
 use crate::services::imap_client;
 
 use super::mail_parser;
@@ -407,7 +408,8 @@ impl SyncWorker {
 
     /// Fetches a UID range from the current folder, parses each message and
     /// upserts it into the local database. Returns the total number of messages
-    /// synced so far (`starting_count` + messages fetched in this range).
+    /// synced so far (`starting_count` + messages fetched in this range) and
+    /// the IDs of newly synced mails.
     #[allow(clippy::too_many_arguments)]
     #[instrument(skip_all, fields(account_id = %self.account_id, folder_name = %folder_name, uid_set = %uid_set))]
     async fn fetch_and_upsert_range(
@@ -419,7 +421,7 @@ impl SyncWorker {
         uid_set: &str,
         starting_count: u32,
         total_count: u32,
-    ) -> Result<u32, AeroError> {
+    ) -> Result<(u32, Vec<String>), AeroError> {
         let fetch_items = "(UID BODY.PEEK[] FLAGS)";
         debug!(uids = %uid_set, "fetching mails from server");
         let mut fetch_stream = session
@@ -428,6 +430,7 @@ impl SyncWorker {
             .map_err(|e| AeroError::ImapConnectionFailed(e.to_string()))?;
 
         let mut synced_count = starting_count;
+        let mut new_mail_ids: Vec<String> = Vec::new();
         const BATCH_SIZE: usize = 50;
         let mut mail_batch: Vec<crate::models::mail::MailDetail> = Vec::with_capacity(BATCH_SIZE);
 
@@ -488,6 +491,7 @@ impl SyncWorker {
             };
 
             mail_batch.push(mail);
+            new_mail_ids.push(mail_id);
             Self::save_attachments(&mail_id, attachments_dir, &self.db, &parsed.attachments)?;
             synced_count += 1;
 
@@ -512,7 +516,7 @@ impl SyncWorker {
             self.db.upsert_mails_batch(&mail_batch)?;
         }
 
-        Ok(synced_count)
+        Ok((synced_count, new_mail_ids))
     }
 
     /// Syncs a single folder.
@@ -586,16 +590,21 @@ impl SyncWorker {
             if uid_set.is_empty() {
                 0
             } else {
-                self.fetch_and_upsert_range(
-                    session,
-                    &folder_id,
-                    folder_name,
-                    attachments_dir,
-                    &uid_set,
-                    0,
-                    remote_exists,
-                )
-                .await?
+                let (count, new_ids) = self
+                    .fetch_and_upsert_range(
+                        session,
+                        &folder_id,
+                        folder_name,
+                        attachments_dir,
+                        &uid_set,
+                        0,
+                        remote_exists,
+                    )
+                    .await?;
+                if !new_ids.is_empty() {
+                    self.emit_new_mails_event(&folder_id, &new_ids);
+                }
+                count
             }
         } else {
             let mut count = 0;
@@ -672,7 +681,7 @@ impl SyncWorker {
                         0
                     };
 
-                    count = self
+                    let (fetched_count, new_ids) = self
                         .fetch_and_upsert_range(
                             session,
                             &folder_id,
@@ -683,6 +692,12 @@ impl SyncWorker {
                             count + total,
                         )
                         .await?;
+                    count = fetched_count;
+
+                    // Emit incremental push for genuinely new mails
+                    if !new_ids.is_empty() {
+                        self.emit_new_mails_event(&folder_id, &new_ids);
+                    }
 
                     // Notify based on genuinely new DB rows, not fetched count
                     if prev_max_uid > 0 && folder_name.eq_ignore_ascii_case("INBOX") {
@@ -787,6 +802,28 @@ impl SyncWorker {
             .show()
         {
             warn!(error = %e, "failed to send new mail notification");
+        }
+    }
+
+    /// Emits a `sync:new_mails` event to the frontend with the mail headers
+    /// of newly synced messages.
+    fn emit_new_mails_event(&self, folder_id: &str, mail_ids: &[String]) {
+        let mut headers = Vec::with_capacity(mail_ids.len());
+        for id in mail_ids {
+            if let Ok(Some(header)) = self.db.get_mail_header(id) {
+                headers.push(header);
+            }
+        }
+        if headers.is_empty() {
+            return;
+        }
+        let event = NewMailsEvent {
+            account_id: self.account_id.clone(),
+            folder_id: folder_id.to_string(),
+            mails: headers,
+        };
+        if let Err(e) = self.app_handle.emit("sync:new_mails", &event) {
+            warn!(error = %e, "failed to emit sync:new_mails event");
         }
     }
 

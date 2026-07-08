@@ -43,6 +43,12 @@ export interface SyncProgress {
   message?: string;
 }
 
+export interface NewMailsEvent {
+  accountId: string;
+  folderId: string;
+  mails: MailHeader[];
+}
+
 export interface AttachmentInfo {
   id: string;
   mailId: string;

@@ -20,7 +20,7 @@ import type { AiMcpServer, AiSkill } from '@/types/ai';
 
 const { locale, setLocale, supportedLocales } = useLocale();
 const { theme, setTheme } = useTheme();
-const { decorations, setDecorations } = useWindowFrame();
+const { decorations, setDecorations, initDecorations } = useWindowFrame();
 const { call } = useTauriInvoke();
 
 const currentLocale = computed({
@@ -139,6 +139,7 @@ watch(syncMailDays, async (value) => {
 });
 
 onMounted(() => {
+  void initDecorations();
   void accountStore.loadAccounts();
   void aiStore.loadProviders();
   void aiStore.loadDefaultProvider();

@@ -339,6 +339,9 @@ impl SyncWorker {
         let mut folders = Vec::new();
         while let Some(name_res) = stream.next().await {
             let name = name_res.map_err(|e| AeroError::ImapConnectionFailed(e.to_string()))?;
+            if name.attributes().iter().any(|attr| matches!(attr, async_imap::types::NameAttribute::NoSelect)) {
+                continue;
+            }
             folders.push(name.name().to_string());
         }
 

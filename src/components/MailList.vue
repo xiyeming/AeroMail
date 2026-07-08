@@ -22,6 +22,7 @@ import { useStatusStore } from '@/stores/status';
 import ContextMenu from '@/components/ContextMenu.vue';
 import MoveMailDialog from '@/components/MoveMailDialog.vue';
 import CustomScrollbar from '@/components/CustomScrollbar.vue';
+import SkeletonBlock from '@/components/SkeletonBlock.vue';
 import type { MailHeader } from '@/types/mail';
 
 const { t } = useI18n();
@@ -73,6 +74,7 @@ const scrollbarRef = ref<InstanceType<typeof CustomScrollbar> | null>(null);
 const sentinelRef = ref<HTMLElement | null>(null);
 let scrollObserver: IntersectionObserver | null = null;
 let sentinelObserved = false;
+const initializing = ref(true);
 
 const updateDebouncedSearch = useDebounceFn((value: string) => {
   debouncedSearchQuery.value = value;
@@ -98,12 +100,17 @@ onMounted(async () => {
 watch(
   () => [route.path, accountStore.selectedAccountIds.join(',')],
   async ([path]) => {
+    initializing.value = true;
     mailStore.closeReader();
     scrollToTop();
-    if (path === '/') {
-      await mailStore.loadInboxMails(accountStore.selectedAccountIds);
-    } else if (currentFolderId.value) {
-      await mailStore.loadMails(currentFolderId.value);
+    try {
+      if (path === '/') {
+        await mailStore.loadInboxMails(accountStore.selectedAccountIds);
+      } else if (currentFolderId.value) {
+        await mailStore.loadMails(currentFolderId.value);
+      }
+    } finally {
+      initializing.value = false;
     }
     await checkLoadMore();
   },
@@ -451,16 +458,23 @@ async function bulkMarkRead(isRead: boolean) {
       </form>
     </div>
 
-    <!-- Loading state -->
+    <!-- Skeleton state -->
     <div
-      v-if="mailStore.loading && mailStore.mails.length === 0"
-      class="flex flex-1 items-center justify-center text-secondary"
+      v-if="initializing || (mailStore.loading && mailStore.mails.length === 0)"
+      class="flex-1 overflow-hidden"
     >
-      <div class="flex items-center gap-2">
-        <div
-          class="h-4 w-4 animate-spin rounded-full border-2 border-accent border-t-transparent"
-        />
-        {{ t('mail.loading') }}
+      <div class="flex flex-col">
+        <div v-for="i in 10" :key="i" class="flex items-center gap-3 border-b border-border px-3 py-3">
+          <SkeletonBlock shape="circle" class="h-4 w-4 shrink-0" />
+          <div class="flex-1 space-y-2">
+            <div class="flex items-center justify-between gap-2">
+              <SkeletonBlock class="h-3.5 w-1/3" />
+              <SkeletonBlock class="h-3 w-8 shrink-0" />
+            </div>
+            <SkeletonBlock class="h-3 w-2/3" />
+            <SkeletonBlock class="h-3 w-1/3" />
+          </div>
+        </div>
       </div>
     </div>
 

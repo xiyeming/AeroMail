@@ -28,6 +28,7 @@ import AiQuickActions from '@/components/AiQuickActions.vue';
 import SandboxedHtml from '@/components/SandboxedHtml.vue';
 import TranslatePanel from '@/components/TranslatePanel.vue';
 import BaseSelect from '@/components/BaseSelect.vue';
+import SkeletonBlock from '@/components/SkeletonBlock.vue';
 import { useAiChat } from '@/composables/useAiChat';
 import { useAiStore } from '@/stores/ai';
 import { useMailStore } from '@/stores/mail';
@@ -1024,12 +1025,35 @@ watch(currentMailId, (newMailId) => {
     </template>
 
     <!-- Loading state -->
-    <div v-else-if="currentMailId" class="flex flex-1 items-center justify-center text-secondary">
-      <div class="flex items-center gap-2">
-        <div
-          class="h-4 w-4 animate-spin rounded-full border-2 border-accent border-t-transparent"
-        />
-        {{ t('mail.loading') }}
+    <div v-else-if="currentMailId" class="flex flex-1 flex-col text-secondary">
+      <div class="flex items-center justify-between border-b border-border px-3 py-2">
+        <SkeletonBlock class="h-8 w-8" />
+        <div class="flex items-center gap-1">
+          <SkeletonBlock v-for="i in 6" :key="i" class="h-8 w-8" />
+        </div>
+      </div>
+      <div class="flex-1 overflow-y-auto p-4">
+        <div class="mx-auto max-w-3xl space-y-4">
+          <div class="flex items-center justify-between">
+            <div class="flex items-center gap-3">
+              <SkeletonBlock shape="circle" class="h-10 w-10" />
+              <div class="space-y-2">
+                <SkeletonBlock class="h-4 w-48" />
+                <SkeletonBlock class="h-3 w-32" />
+              </div>
+            </div>
+            <SkeletonBlock class="h-4 w-20" />
+          </div>
+          <SkeletonBlock class="h-5 w-64" />
+          <div class="mt-6 space-y-3">
+            <SkeletonBlock class="h-3 w-full" />
+            <SkeletonBlock class="h-3 w-full" />
+            <SkeletonBlock class="h-3 w-5/6" />
+            <SkeletonBlock class="h-3 w-4/6" />
+            <SkeletonBlock class="h-3 w-full" />
+            <SkeletonBlock class="h-3 w-3/6" />
+          </div>
+        </div>
       </div>
     </div>
 

@@ -16,12 +16,13 @@ import AiAssistantPanel from '@/components/AiAssistantPanel.vue';
 import TodoPanel from '@/components/TodoPanel.vue';
 import ToastContainer from '@/components/ToastContainer.vue';
 import CommandPalette from '@/components/CommandPalette.vue';
+import SkeletonBlock from '@/components/SkeletonBlock.vue';
 
 const aiStore = useAiStore();
 const mailStore = useMailStore();
 const todoStore = useTodoStore();
 const { call } = useTauriInvoke();
-const { decorations } = useWindowFrame();
+const { decorations, initDecorations } = useWindowFrame();
 const win = getCurrentWindow();
 
 const { isWideScreen, isCollapsed, layoutMode } = useResponsive();
@@ -31,10 +32,14 @@ const mailListWidth = computed(() => (isWideScreen.value ? 'w-96' : 'w-80'));
 const showCustomTitleBar = computed(() => decorations.value === 'none');
 
 const showCloseConfirm = ref(false);
+const initializing = ref(true);
 let unlistenClose: UnlistenFn | undefined;
 let unlistenFocus: UnlistenFn | undefined;
 
 onMounted(async () => {
+  await initDecorations();
+  initializing.value = false;
+
   unlistenClose = await listen('app://close-requested', () => {
     showCloseConfirm.value = true;
   });
@@ -124,50 +129,94 @@ function cancelClose() {
       </div>
     </div>
 
-    <div class="flex min-h-0 flex-1">
-      <div
-        class="sr-only focus-within:not-sr-only focus-within:absolute focus-within:z-50 focus-within:bg-accent focus-within:p-2 focus-within:text-white"
-      >
-        <a href="#mail-list" class="mr-4 underline">{{ $t('mail.skipToList') }}</a>
-        <a href="#reader" class="underline">{{ $t('mail.skipToReader') }}</a>
+    <!-- Skeleton loading state -->
+    <div v-if="initializing" class="flex min-h-0 flex-1">
+      <div class="w-64 shrink-0 border-r border-border bg-elevated p-3">
+        <div class="mb-3 h-9 w-full rounded-md bg-raised" />
+        <div class="space-y-1">
+          <div v-for="i in 7" :key="i" class="flex items-center gap-3 rounded-md px-3 py-2">
+            <SkeletonBlock shape="circle" class="h-4 w-4 shrink-0" />
+            <SkeletonBlock class="h-4 w-24" />
+          </div>
+        </div>
       </div>
-
-      <AppSidebar
-        v-show="!mailStore.isReadingMode"
-        :class="[
-          'shrink-0 overflow-hidden border-r border-border transition-all duration-200',
-          sidebarWidth,
-          isCollapsed ? 'w-0 opacity-0' : 'opacity-100',
-        ]"
-      />
-
       <div class="flex min-w-0 flex-1 flex-col">
         <div class="flex min-h-0 flex-1">
-          <div
-            v-show="!mailStore.isReadingMode"
-            id="mail-list"
-            :class="[
-              'flex shrink-0 flex-col border-r border-border',
-              mailListWidth,
-              layoutMode === 'mobile' ? 'hidden' : 'flex',
-            ]"
-          >
-            <MailList class="min-h-0 flex-1" />
+          <div class="w-96 shrink-0 border-r border-border">
+            <div class="flex h-12 items-center border-b border-border px-4">
+              <SkeletonBlock class="h-4 w-24" />
+            </div>
+            <div class="flex flex-col">
+              <div v-for="i in 10" :key="i" class="flex items-center gap-3 border-b border-border px-3 py-3">
+                <SkeletonBlock shape="circle" class="h-4 w-4 shrink-0" />
+                <div class="flex-1 space-y-2">
+                  <div class="flex items-center justify-between gap-2">
+                    <SkeletonBlock class="h-3.5 w-1/3" />
+                    <SkeletonBlock class="h-3 w-8 shrink-0" />
+                  </div>
+                  <SkeletonBlock class="h-3 w-2/3" />
+                  <SkeletonBlock class="h-3 w-1/3" />
+                </div>
+              </div>
+            </div>
           </div>
-
-          <main id="reader" class="flex min-w-0 flex-1 flex-col overflow-hidden">
+          <main class="flex min-w-0 flex-1 flex-col overflow-hidden">
             <slot />
           </main>
         </div>
-
-        <StatusBar class="shrink-0 border-t border-border" />
+        <div class="shrink-0 border-t border-border p-2">
+          <SkeletonBlock class="h-4 w-32" />
+        </div>
       </div>
     </div>
 
-    <AiAssistantPanel v-if="aiStore.isPanelOpen" />
-    <TodoPanel v-if="todoStore.isPanelOpen" />
-    <ToastContainer />
-    <CommandPalette />
+    <!-- Main content -->
+    <template v-else>
+      <div class="flex min-h-0 flex-1">
+        <div
+          class="sr-only focus-within:not-sr-only focus-within:absolute focus-within:z-50 focus-within:bg-accent focus-within:p-2 focus-within:text-white"
+        >
+          <a href="#mail-list" class="mr-4 underline">{{ $t('mail.skipToList') }}</a>
+          <a href="#reader" class="underline">{{ $t('mail.skipToReader') }}</a>
+        </div>
+
+        <AppSidebar
+          v-show="!mailStore.isReadingMode"
+          :class="[
+            'shrink-0 overflow-hidden border-r border-border transition-all duration-200',
+            sidebarWidth,
+            isCollapsed ? 'w-0 opacity-0' : 'opacity-100',
+          ]"
+        />
+
+        <div class="flex min-w-0 flex-1 flex-col">
+          <div class="flex min-h-0 flex-1">
+            <div
+              v-show="!mailStore.isReadingMode"
+              id="mail-list"
+              :class="[
+                'flex shrink-0 flex-col border-r border-border',
+                mailListWidth,
+                layoutMode === 'mobile' ? 'hidden' : 'flex',
+              ]"
+            >
+              <MailList class="min-h-0 flex-1" />
+            </div>
+
+            <main id="reader" class="flex min-w-0 flex-1 flex-col overflow-hidden">
+              <slot />
+            </main>
+          </div>
+
+          <StatusBar class="shrink-0 border-t border-border" />
+        </div>
+      </div>
+
+      <AiAssistantPanel v-if="aiStore.isPanelOpen" />
+      <TodoPanel v-if="todoStore.isPanelOpen" />
+      <ToastContainer />
+      <CommandPalette />
+    </template>
 
     <!-- Close confirmation dialog -->
     <div

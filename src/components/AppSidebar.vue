@@ -18,6 +18,7 @@ import { useAccountStore } from '@/stores/account';
 import { useMailStore } from '@/stores/mail';
 import { useTodoStore } from '@/stores/todo';
 import BaseCheckbox from '@/components/BaseCheckbox.vue';
+import SkeletonBlock from '@/components/SkeletonBlock.vue';
 
 const route = useRoute();
 const router = useRouter();
@@ -27,11 +28,14 @@ const accountStore = useAccountStore();
 const mailStore = useMailStore();
 const todoStore = useTodoStore();
 
-onMounted(() => {
-  void accountStore.loadAccounts();
+onMounted(async () => {
+  initializing.value = true;
+  await accountStore.loadAccounts();
+  initializing.value = false;
 });
 
 const popoverOpen = ref(false);
+const initializing = ref(true);
 
 function getUnreadCount(folderName: string): number | null {
   const matching = mailStore.folders.filter(
@@ -135,28 +139,36 @@ function closePopoverOnBlur(event: FocusEvent) {
 
     <nav class="flex-1 overflow-y-auto px-2" aria-label="Mail folders">
       <ul class="space-y-0.5">
-        <li v-for="folder in folders" :key="folder.id">
-          <RouterLink
-            :to="folder.path"
-            class="flex h-9 items-center justify-between rounded-md px-3 text-sm transition-colors"
-            :class="
-              isActiveFolder(folder.path)
-                ? 'bg-raised text-primary'
-                : 'text-secondary hover:bg-raised/60'
-            "
-          >
-            <div class="flex items-center gap-3">
-              <component :is="folder.icon" class="h-4 w-4" />
-              <span>{{ folder.name }}</span>
-            </div>
-            <span
-              v-if="folder.count"
-              class="flex h-5 min-w-5 items-center justify-center rounded-full bg-accent px-2 text-xs font-medium text-white"
+        <template v-if="initializing || (accountStore.loading && accountStore.accounts.length === 0)">
+          <li v-for="i in 7" :key="i" class="flex items-center gap-3 px-3 py-2">
+            <SkeletonBlock shape="circle" class="h-4 w-4 shrink-0" />
+            <SkeletonBlock class="h-4 w-24" />
+          </li>
+        </template>
+        <template v-else>
+          <li v-for="folder in folders" :key="folder.id">
+            <RouterLink
+              :to="folder.path"
+              class="flex h-9 items-center justify-between rounded-md px-3 text-sm transition-colors"
+              :class="
+                isActiveFolder(folder.path)
+                  ? 'bg-raised text-primary'
+                  : 'text-secondary hover:bg-raised/60'
+              "
             >
-              {{ folder.count }}
-            </span>
-          </RouterLink>
-        </li>
+              <div class="flex items-center gap-3">
+                <component :is="folder.icon" class="h-4 w-4" />
+                <span>{{ folder.name }}</span>
+              </div>
+              <span
+                v-if="folder.count"
+                class="flex h-5 min-w-5 items-center justify-center rounded-full bg-accent px-2 text-xs font-medium text-white"
+              >
+                {{ folder.count }}
+              </span>
+            </RouterLink>
+          </li>
+        </template>
       </ul>
 
       <div class="mt-2 border-t border-border pt-2">

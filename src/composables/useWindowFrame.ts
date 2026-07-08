@@ -7,21 +7,18 @@ export type Decorations = 'system' | 'none';
 
 const SETTINGS_KEY = 'app.systemTitleBar';
 
+const decorations = ref<Decorations>('system');
+
 export function useWindowFrame() {
   const { call } = useTauriInvoke();
   const settings = useSettingsStore();
   const win = getCurrentWindow();
-  const decorations = ref<Decorations>('system');
 
   async function applyDecorations(value: Decorations) {
     try {
-      // Apply the decoration change through the backend command. On Linux
-      // the runtime window.setDecorations call is not always respected
-      // immediately, so the command defers it slightly.
       await call('apply_window_decorations', {
         enabled: value === 'system',
       });
-      // Keep the local window state in sync as a best-effort fallback.
       await win.setDecorations(value === 'system');
     } catch (e) {
       console.error('Failed to apply window decorations:', e);

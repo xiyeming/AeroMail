@@ -18,7 +18,7 @@
   },
   "plugins": {
     "updater": {
-      "pubkey": "MCowBQYDK2VwAyEAwM8zTbsi7GulX6YFKYpm/nPnWAf6iY0jafGeqPj8etc=",
+      "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IDM4MzQwOUE5RkFFMDVBQTAKUldTZ1d1RDZxUWswT0FObTJvYkFlWFA3dkQ5NXQ2dlpFMHpOVmcvNGFFMjlzRjZVUU9SdDlmUnoK",
       "endpoints": [
         "https://github.com/xiyeming/AeroMail/releases/latest/download/latest.json"
       ]

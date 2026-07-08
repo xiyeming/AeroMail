@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed } from 'vue';
+import { computed, ref, onMounted } from 'vue';
 import { useI18n } from 'vue-i18n';
 import { RefreshCw } from '@lucide/vue';
 import { useStatusStore } from '@/stores/status';
@@ -12,6 +12,17 @@ const statusStore = useStatusStore();
 const accountStore = useAccountStore();
 const toastStore = useToastStore();
 const { call: invokeCommand } = useTauriInvoke();
+
+const appVersion = ref('0.0.0');
+
+onMounted(async () => {
+  try {
+    const version = await invokeCommand<string>('get_app_version');
+    appVersion.value = version;
+  } catch (e) {
+    console.error('Failed to get app version:', e);
+  }
+});
 
 const isSyncing = computed(() => statusStore.syncingAccounts > 0);
 
@@ -133,7 +144,7 @@ const formattedLastSync = computed(() => {
       >
         <RefreshCw class="h-3.5 w-3.5" :class="{ 'animate-spin': isSyncing }" />
       </button>
-      <span class="text-tertiary">{{ t('statusBar.version', { version: '0.1.0' }) }}</span>
+      <span class="text-tertiary">{{ t('statusBar.version', { version: appVersion }) }}</span>
     </div>
   </div>
 </template>

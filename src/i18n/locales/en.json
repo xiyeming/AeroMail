@@ -316,7 +316,15 @@
     "skillTimeoutPlaceholder": "60",
     "saveAiSkill": "Save skill",
     "enabled": "Enabled",
-    "disabled": "Disabled"
+    "disabled": "Disabled",
+    "update": "Update",
+    "currentVersion": "Current version: {version}",
+    "newVersionAvailable": "New version {version} available",
+    "checkForUpdates": "Check for updates",
+    "checking": "Checking...",
+    "installUpdate": "Install update",
+    "installing": "Installing...",
+    "restartRequired": "Restart required after installation"
   },
   "aiAssistant": {
     "title": "Smart Assistant",

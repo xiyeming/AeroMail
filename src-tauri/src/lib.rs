@@ -8,6 +8,7 @@ use commands::account::{
     add_account, delete_account, get_account_config, list_accounts, test_account_connection,
     update_account,
 };
+use commands::update::{check_for_updates, get_app_version, install_update};
 use commands::ai::{
     ai_compose_assist, clear_chat_session, create_chat_session, delete_ai_mcp_server,
     delete_ai_provider, delete_ai_skill, delete_chat_session, extract_todos, get_ai_session_usage,
@@ -188,6 +189,7 @@ pub fn run() {
     let run_result = tauri::Builder::default()
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_notification::init())
+        .plugin(tauri_plugin_updater::Builder::new().build())
         .setup(|app| {
             let handle = app.handle().clone();
 
@@ -386,6 +388,9 @@ pub fn run() {
             close_main_window,
             set_tray_menu_locale,
             open_url,
+            check_for_updates,
+            install_update,
+            get_app_version,
         ])
         .run(tauri::generate_context!());
 

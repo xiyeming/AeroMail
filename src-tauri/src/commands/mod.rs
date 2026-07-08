@@ -7,4 +7,5 @@ pub mod settings;
 pub mod sync;
 pub mod todo;
 pub mod translation;
+pub mod update;
 pub mod window;

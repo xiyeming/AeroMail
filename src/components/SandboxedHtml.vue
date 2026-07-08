@@ -46,8 +46,9 @@ function buildCsp(scriptNonce: string): string {
     return entries;
   });
 
-  const imgSrc = ["'self'", 'data:', 'cid:', 'http:', 'https:', ...hosts].join(' ');
-  const styleSrc = ["'unsafe-inline'", "'self'", 'http:', 'https:', ...hosts].join(' ');
+  // 只允许特定域名的资源，不包含通配的 http:/https:
+  const imgSrc = ["'self'", 'data:', 'cid:', ...hosts].join(' ');
+  const styleSrc = ["'unsafe-inline'", "'self'", ...hosts].join(' ');
   const fontSrc = ["'self'", ...hosts].join(' ');
   const mediaSrc = ["'self'", ...hosts].join(' ');
   return [

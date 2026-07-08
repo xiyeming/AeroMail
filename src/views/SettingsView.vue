@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed, ref, onMounted, watch } from 'vue';
 import { useTauriInvoke } from '@/composables/useTauriInvoke';
+import { useUpdater } from '@/composables/useUpdater';
 import { Star, Trash2, Pencil } from '@lucide/vue';
 import { useLocale, type Locale } from '@/composables/useLocale';
 import { useLogConfig } from '@/composables/useLogConfig';
@@ -22,6 +23,15 @@ const { locale, setLocale, supportedLocales } = useLocale();
 const { theme, setTheme } = useTheme();
 const { decorations, setDecorations, initDecorations } = useWindowFrame();
 const { call } = useTauriInvoke();
+const updater = useUpdater();
+
+async function checkForUpdates() {
+  await updater.checkForUpdates();
+}
+
+async function installUpdate() {
+  await updater.installUpdate();
+}
 
 const currentLocale = computed({
   get: () => locale.value as Locale,
@@ -149,6 +159,7 @@ onMounted(() => {
   void loadLogConfig();
   void loadTrustedDomains();
   void loadSyncMailDays();
+  void updater.getCurrentVersion();
 });
 
 // --- Trusted domains ---
@@ -1257,6 +1268,41 @@ async function removeSkill(id: string) {
         >
           {{ $t('settings.saveAiSkill') }}
         </button>
+      </div>
+    </section>
+
+    <!-- Update Section -->
+    <section class="space-y-4">
+      <h2 class="text-lg font-semibold text-primary">{{ $t('settings.update') }}</h2>
+      <div class="space-y-4">
+        <div class="flex items-center justify-between">
+          <div>
+            <p class="text-sm text-primary">{{ $t('settings.currentVersion', { version: updater.currentVersion.value }) }}</p>
+            <p v-if="updater.updateAvailable.value" class="text-sm text-accent">
+              {{ $t('settings.newVersionAvailable', { version: updater.updateInfo.value?.version }) }}
+            </p>
+          </div>
+          <button
+            type="button"
+            class="flex h-9 items-center justify-center rounded-md border border-border bg-elevated px-4 text-sm text-primary transition-colors hover:bg-raised disabled:opacity-50"
+            :disabled="updater.isChecking.value"
+            @click="checkForUpdates"
+          >
+            {{ updater.isChecking.value ? $t('settings.checking') : $t('settings.checkForUpdates') }}
+          </button>
+        </div>
+        <div v-if="updater.error.value" class="text-sm text-danger">{{ updater.error.value }}</div>
+        <div v-if="updater.updateAvailable.value && updater.isNewerVersion.value" class="flex items-center gap-2">
+          <button
+            type="button"
+            class="flex h-9 items-center justify-center rounded-md bg-accent px-4 text-sm font-medium text-white transition-colors hover:bg-accent-hover disabled:opacity-50"
+            :disabled="updater.isInstalling.value"
+            @click="installUpdate"
+          >
+            {{ updater.isInstalling.value ? $t('settings.installing') : $t('settings.installUpdate') }}
+          </button>
+          <span class="text-sm text-secondary">{{ $t('settings.restartRequired') }}</span>
+        </div>
       </div>
     </section>
   </div>

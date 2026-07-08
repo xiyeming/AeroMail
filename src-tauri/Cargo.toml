@@ -1,6 +1,6 @@
 [package]
 name = "aeromail"
-version = "0.0.22"
+version = "0.0.23"
 description = "AeroMail - Modern cross-platform email client"
 authors = ["AeroMail Team"]
 edition = "2024"
@@ -13,6 +13,7 @@ tauri-build = { version = "2.2", features = [] }
 tauri = { version = "2.5", features = ["tray-icon", "image-png"] }
 tauri-plugin-dialog = "2"
 tauri-plugin-notification = "2"
+tauri-plugin-updater = { version = "2", features = ["rustls-tls"] }
 serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"
 tokio = { version = "1.44", features = ["full"] }

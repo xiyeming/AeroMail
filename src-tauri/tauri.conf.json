@@ -1,7 +1,15 @@
 {
   "$schema": "https://schema.tauri.app/config/2",
   "productName": "AeroMail",
-  "version": "0.0.22",
+  "version": "0.0.23",
+  "plugins": {
+    "updater": {
+      "pubkey": "",
+      "endpoints": [
+        "https://github.com/xiyeming/AeroMail/releases/latest/download/latest.json"
+      ]
+    }
+  },
   "identifier": "com.aeromail.desktop",
   "build": {
     "beforeDevCommand": "pnpm dev",

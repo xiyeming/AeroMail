@@ -17,6 +17,7 @@
     "@tauri-apps/plugin-dialog": "^2.2.0",
     "@tauri-apps/plugin-notification": "^2.2.0",
     "@tauri-apps/plugin-os": "^2.2.0",
+    "@tauri-apps/plugin-updater": "^2.2.0",
     "@tiptap/core": "^3.27.1",
     "@tiptap/extension-color": "^3.27.1",
     "@tiptap/extension-font-family": "^3.27.1",

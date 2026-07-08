@@ -491,8 +491,8 @@ impl SyncWorker {
             };
 
             mail_batch.push(mail);
-            new_mail_ids.push(mail_id);
             Self::save_attachments(&mail_id, attachments_dir, &self.db, &parsed.attachments)?;
+            new_mail_ids.push(mail_id);
             synced_count += 1;
 
             if mail_batch.len() >= BATCH_SIZE {
@@ -625,7 +625,7 @@ impl SyncWorker {
                         let uid_set =
                             build_sync_uid_set(session, sync_days, Some(&range), &range).await?;
                         if !uid_set.is_empty() {
-                            count = self
+                            let (c, _) = self
                                 .fetch_and_upsert_range(
                                     session,
                                     &folder_id,
@@ -636,6 +636,7 @@ impl SyncWorker {
                                     count + missing,
                                 )
                                 .await?;
+                            count = c;
                         }
                     }
                 }

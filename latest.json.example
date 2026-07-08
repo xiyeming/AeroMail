@@ -1,0 +1,19 @@
+{
+  "version": "0.0.23",
+  "notes": "Test update",
+  "pub_date": "2026-07-08T00:00:00Z",
+  "platforms": {
+    "linux-x86_64": {
+      "signature": "dW50cnVzdGVkIGNvbW1lbnQ6dW50cnVzdGVkIGNvbW1lbnQ6dW50cnVzdGVkIGNvbW1lbnQ6dW50cnVzdGVkIGNvbW1lbnQ6dW50cnVzdGVkIGNvbW1lbnQ6dW50cnVzdGVkIGNvbW1lbnQ6dW50cnVzdGVkIGNvbW1lbnQ6dW50cnVzdGVkIGNvbW1lbnQ6dW50cnVzdGVkIGNvbW1lbnQ6dW50cnVzdGVkIGNvbW1lbnQ6",
+      "url": "https://github.com/xiyeming/AeroMail/releases/download/v0.0.23/aeromail_0.0.23_amd64.AppImage.tar.gz"
+    },
+    "windows-x86_64": {
+      "signature": "dW50cnVzdGVkIGNvbW1lbnQ6dW50cnVzdGVkIGNvbW1lbnQ6dW50cnVzdGVkIGNvbW1lbnQ6dW50cnVzdGVkIGNvbW1lbnQ6dW50cnVzdGVkIGNvbW1lbnQ6dW50cnVzdGVkIGNvbW1lbnQ6dW50cnVzdGVkIGNvbW1lbnQ6dW50cnVzdGVkIGNvbW1lbnQ6dW50cnVzdGVkIGNvbW1lbnQ6",
+      "url": "https://github.com/xiyeming/AeroMail/releases/download/v0.0.23/AeroMail_0.0.23_x64-setup.nsis.zip"
+    },
+    "darwin-x86_64": {
+      "signature": "dW50cnVzdGVkIGNvbW1lbnQ6dW50cnVzdGVkIGNvbW1lbnQ6dW50cnVzdGVkIGNvbW1lbnQ6dW50cnVzdGVkIGNvbW1lbnQ6dW50cnVzdGVkIGNvbW1lbnQ6dW50cnVzdGVkIGNvbW1lbnQ6dW50cnVzdGVkIGNvbW1lbnQ6dW50cnVzdGVkIGNvbW1lbnQ6dW50cnVzdGVkIGNvbW1lbnQ6dW50cnVzdGVkIGNvbW1lbnQ6dW50cnVzdGVkIGNvbW1lbnQ6",
+      "url": "https://github.com/xiyeming/AeroMail/releases/download/v0.0.23/AeroMail_0.0.23_x64.dmg"
+    }
+  }
+}

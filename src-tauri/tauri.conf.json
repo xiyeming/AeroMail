@@ -2,9 +2,23 @@
   "$schema": "https://schema.tauri.app/config/2",
   "productName": "AeroMail",
   "version": "0.0.23",
+  "bundle": {
+    "createUpdaterArtifacts": true,
+    "active": true,
+    "targets": ["deb", "appimage", "dmg", "msi", "nsis"],
+    "icon": [
+      "icons/32x32.png",
+      "icons/64x64.png",
+      "icons/128x128.png",
+      "icons/128x128@2x.png",
+      "icons/icon.png",
+      "icons/icon.icns",
+      "icons/icon.ico"
+    ]
+  },
   "plugins": {
     "updater": {
-      "pubkey": "",
+      "pubkey": "MCowBQYDK2VwAyEAwM8zTbsi7GulX6YFKYpm/nPnWAf6iY0jafGeqPj8etc=",
       "endpoints": [
         "https://github.com/xiyeming/AeroMail/releases/latest/download/latest.json"
       ]
@@ -34,18 +48,5 @@
     "security": {
       "csp": "default-src 'self'; img-src 'self' http: https: data:; style-src 'self' 'unsafe-inline' http: https:; font-src 'self' http: https:; media-src 'self' http: https:; script-src 'none';"
     }
-  },
-  "bundle": {
-    "active": true,
-    "targets": ["deb", "appimage", "dmg", "msi", "nsis"],
-    "icon": [
-      "icons/32x32.png",
-      "icons/64x64.png",
-      "icons/128x128.png",
-      "icons/128x128@2x.png",
-      "icons/icon.png",
-      "icons/icon.icns",
-      "icons/icon.ico"
-    ]
   }
 }

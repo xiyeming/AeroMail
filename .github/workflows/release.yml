@@ -6,10 +6,6 @@ on:
       - 'v*'
   workflow_dispatch:
     inputs:
-      include-armv7:
-        description: 'Build optional Linux armv7 .deb via emulation (slow, ~1 hour)'
-        required: false
-        default: 'false'
       include-arch:
         description: 'Build Arch Linux pkg.tar.zst'
         required: false
@@ -186,7 +182,6 @@ jobs:
             |----------|--------------|---------|
             | Linux | x86_64 | `.deb`, `.AppImage`, `.tar.gz` |
             | Linux | aarch64 | `.deb`, `.AppImage`, `.tar.gz` |
-            | Linux | armv7 (optional) | `.deb` |
             | macOS | universal | `.dmg` |
             | Windows | x86_64 | `.msi`, `.exe` (NSIS) |
             | Windows | i686 | `.msi`, `.exe` (NSIS) |
@@ -223,7 +218,6 @@ jobs:
           |----------|--------------|---------|
           | Linux | x86_64 | `.deb`, `.AppImage`, `.tar.gz` |
           | Linux | aarch64 | `.deb`, `.AppImage`, `.tar.gz` |
-          | Linux | armv7 (optional) | `.deb` |
           | macOS | universal | `.dmg` |
           | Windows | x86_64 | `.msi`, `.exe` (NSIS) |
           | Windows | i686 | `.msi`, `.exe` (NSIS) |
@@ -267,93 +261,6 @@ jobs:
           else
             echo "AppImage not found at ${APPIMAGE_DIR}/${APPIMAGE_NAME}; skipping tar.gz"
           fi
-
-  build-linux-armv7:
-    if: startsWith(github.ref, 'refs/tags/v') && (github.event_name == 'push' || inputs.include-armv7 == 'true')
-    needs: build
-    runs-on: ubuntu-22.04
-    steps:
-      - name: Checkout repository
-        uses: actions/checkout@v4
-
-      - name: Download and verify ARMv7 base image
-        run: |
-          set -e
-          IMAGE_URL="https://dietpi.com/downloads/images/DietPi_RPi2-ARMv7-Bookworm.img.xz"
-          IMAGE_SHA256="51bed57eb2f8bc9269f66549b608095070e006c9d93c770e256da1517ddd837c"
-          IMAGE_PATH="/tmp/DietPi_RPi2-ARMv7-Bookworm.img.xz"
-
-          curl -L -o "$IMAGE_PATH" "$IMAGE_URL"
-          echo "$IMAGE_SHA256  $IMAGE_PATH" | sha256sum -c -
-
-      - name: Build armv7 .deb in emulated ARM environment
-        uses: pguyot/arm-runner-action@e1773de1ed6eb61848f5693de824d836f0b0ea25 # v2.6.5
-        with:
-          base_image: file:///tmp/DietPi_RPi2-ARMv7-Bookworm.img.xz
-          cpu: cortex-a53
-          bind_mount_repository: true
-          image_additional_mb: 10240
-          optimize_image: no
-          commands: |
-            export HOME=/root
-            export CARGO_REGISTRIES_CRATES_IO_PROTOCOL=sparse
-
-            # Disable fat LTO for ARM QEMU builds — LLVM OOMs on the limited-memory
-            # emulated environment. Override at env level so Cargo.toml stays optimised
-            # for native x86_64 / aarch64 / macOS / Windows releases.
-            export CARGO_PROFILE_RELEASE_LTO=false
-            export CARGO_PROFILE_RELEASE_OPT_LEVEL=s
-            export CARGO_PROFILE_RELEASE_STRIP=true
-            export CARGO_PROFILE_RELEASE_CODEGEN_UNITS=256
-
-            apt-get update -y --allow-releaseinfo-change
-            apt-get autoremove -y
-            apt-get install -y --no-install-recommends --no-install-suggests ca-certificates curl xz-utils libwebkit2gtk-4.1-dev build-essential libssl-dev libgtk-3-dev libayatana-appindicator3-dev librsvg2-dev patchelf libfuse2 file jq
-
-            # Debian Bookworm ships Node.js 18, but this project needs Node.js 22.
-            # Install the official Node.js armv7l binary tarball and verify its checksum.
-            NODE_VERSION="22.23.1"
-            NODE_TARBALL="node-v${NODE_VERSION}-linux-armv7l.tar.xz"
-            NODE_URL="https://nodejs.org/dist/v${NODE_VERSION}/${NODE_TARBALL}"
-            NODE_SHA256="c24dcdd3df032a34d1c858ddac9e514d3cac6fa655cc92cd4afe4e589c866a10"
-
-            curl -fsSL "${NODE_URL}" -o "/tmp/${NODE_TARBALL}"
-            echo "${NODE_SHA256}  /tmp/${NODE_TARBALL}" | sha256sum -c -
-            tar -xJf "/tmp/${NODE_TARBALL}" -C /usr/local --strip-components=1
-
-            npm install -g pnpm@9
-
-            curl https://sh.rustup.rs -sSf | sh -s -- -y --default-toolchain stable
-            . "$HOME/.cargo/env"
-
-            pnpm install
-            pnpm tauri build --bundles deb
-
-            # Upload .deb directly from inside the emulated environment.
-            # The host runner cannot see files written by QEMU, so we must
-            # upload here using the GitHub API via curl.
-            VERSION="$(jq -r .version src-tauri/tauri.conf.json)"
-            DEB="src-tauri/target/release/bundle/deb/aeromail_${VERSION}_armhf.deb"
-            if [ -f "$DEB" ]; then
-              TAG_NAME="${{ github.ref_name }}"
-              GH_REPO="${{ github.repository }}"
-              GITHUB_TOKEN="${{ secrets.GITHUB_TOKEN }}"
-
-              RELEASE_ID=$(curl -fsSL \
-                -H "Authorization: token ${GITHUB_TOKEN}" \
-                -H "Accept: application/vnd.github+json" \
-                "https://api.github.com/repos/${GH_REPO}/releases/tags/${TAG_NAME}" \
-                | jq -r '.id')
-
-              curl -fsSL \
-                -X POST \
-                -H "Authorization: token ${GITHUB_TOKEN}" \
-                -H "Content-Type: application/vnd.debian.binary-package" \
-                "https://uploads.github.com/repos/${GH_REPO}/releases/${RELEASE_ID}/assets?name=aeromail_${VERSION}_armhf.deb" \
-                --data-binary "@${DEB}"
-            else
-              echo "armv7 .deb not found at ${DEB}; skipping upload"
-            fi
 
   build-arch-pkg:
     if: startsWith(github.ref, 'refs/tags/v') && (github.event_name == 'push' || inputs.include-arch == 'true')

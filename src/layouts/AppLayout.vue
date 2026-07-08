@@ -1,9 +1,9 @@
 <script setup lang="ts">
-import { computed, onMounted, onUnmounted, ref } from 'vue';
+import { computed, onMounted, onUnmounted, ref, watch } from 'vue';
 import { getCurrentWindow } from '@tauri-apps/api/window';
 import { listen, type UnlistenFn } from '@tauri-apps/api/event';
 import { useTauriInvoke } from '@/composables/useTauriInvoke';
-import { Minus, Square, X } from '@lucide/vue';
+import { Minus, Square, X, Menu } from '@lucide/vue';
 import { useResponsive } from '@/composables/useResponsive';
 import { useWindowFrame } from '@/composables/useWindowFrame';
 import { useAiStore } from '@/stores/ai';
@@ -33,6 +33,20 @@ const showCustomTitleBar = computed(() => decorations.value === 'none');
 
 const showCloseConfirm = ref(false);
 const initializing = ref(true);
+const sidebarOpen = ref(false);
+
+watch(isCollapsed, (collapsed) => {
+  if (!collapsed) sidebarOpen.value = false;
+});
+
+function toggleSidebar() {
+  sidebarOpen.value = !sidebarOpen.value;
+}
+
+function closeSidebar() {
+  sidebarOpen.value = false;
+}
+
 let unlistenClose: UnlistenFn | undefined;
 let unlistenFocus: UnlistenFn | undefined;
 
@@ -44,9 +58,6 @@ onMounted(async () => {
     showCloseConfirm.value = true;
   });
 
-  // When the window is minimized through the system title bar, it loses focus
-  // while `isMinimized()` is true. Hide it so it lands in the tray instead of
-  // staying in the taskbar.
   unlistenFocus = await win.onFocusChanged(({ payload: focused }) => {
     if (!focused) {
       void win.isMinimized().then((minimized) => {
@@ -180,13 +191,38 @@ function cancelClose() {
           <a href="#reader" class="underline">{{ $t('mail.skipToReader') }}</a>
         </div>
 
+        <!-- Hamburger menu for collapsed sidebar -->
+        <button
+          v-if="isCollapsed && !mailStore.isReadingMode"
+          type="button"
+          class="flex h-12 w-10 shrink-0 items-center justify-center border-r border-border text-secondary transition-colors hover:bg-raised hover:text-primary"
+          :aria-label="$t('nav.settings')"
+          @click="toggleSidebar"
+        >
+          <Menu class="h-5 w-5" />
+        </button>
+
+        <!-- Sidebar overlay for collapsed mode -->
+        <Teleport to="body">
+          <div
+            v-if="isCollapsed && sidebarOpen"
+            class="fixed inset-0 z-40 bg-black/50"
+            @click="closeSidebar"
+          />
+        </Teleport>
+
         <AppSidebar
           v-show="!mailStore.isReadingMode"
           :class="[
             'shrink-0 overflow-hidden border-r border-border transition-all duration-200',
-            sidebarWidth,
-            isCollapsed ? 'w-0 opacity-0' : 'opacity-100',
+            isCollapsed
+              ? sidebarOpen
+                ? 'fixed left-0 top-0 z-50 h-full w-56 opacity-100'
+                : 'w-0 opacity-0'
+              : sidebarWidth,
+            !isCollapsed ? 'opacity-100' : '',
           ]"
+          @click="isCollapsed && closeSidebar()"
         />
 
         <div class="flex min-w-0 flex-1 flex-col">

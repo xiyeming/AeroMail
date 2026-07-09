@@ -85,6 +85,7 @@
     "allowOnce": "Allow once",
     "allowAllOnce": "Allow all once",
     "alwaysTrustDomain": "Always trust {domain}",
+    "trustAllDomains": "Always trust all",
     "quoteToAi": "Quote to AI assistant",
     "quotedToAi": "Quoted email to AI assistant",
     "expandQuote": "Expand email",

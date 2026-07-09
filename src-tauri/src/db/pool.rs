@@ -1922,6 +1922,45 @@ impl Database {
         Ok(count as u32)
     }
 
+    /// Gets all UIDs for a folder.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the database query fails.
+    pub fn get_uids_in_folder(&self, folder_id: &str) -> Result<Vec<u32>, AeroError> {
+        let conn = self.connection()?;
+        let mut stmt = conn.prepare("SELECT uid FROM mails WHERE folder_id = ?1")?;
+        let rows = stmt.query_map([folder_id], |row| {
+            let uid: i64 = row.get(0)?;
+            Ok(uid as u32)
+        })?;
+        let mut uids = Vec::new();
+        for row in rows {
+            uids.push(row?);
+        }
+        Ok(uids)
+    }
+
+    /// Updates mail flags (is_read, is_starred) by UID.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the database write fails.
+    pub fn update_mail_flags_by_uid(
+        &self,
+        folder_id: &str,
+        uid: u32,
+        is_read: bool,
+        is_starred: bool,
+    ) -> Result<(), AeroError> {
+        let conn = self.connection()?;
+        conn.execute(
+            "UPDATE mails SET is_read = ?1, is_starred = ?2 WHERE folder_id = ?3 AND uid = ?4",
+            (is_read as i64, is_starred as i64, folder_id, uid),
+        )?;
+        Ok(())
+    }
+
     /// Gets a mail ID by its folder and IMAP UID.
     ///
     /// # Errors

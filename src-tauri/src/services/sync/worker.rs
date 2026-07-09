@@ -721,6 +721,10 @@ impl SyncWorker {
             count
         };
 
+        // Sync flags for existing mails to ensure remote state is source of truth
+        self.sync_existing_mail_flags(session, &folder_id).await?;
+
+        // Update unread count after flag sync
         let unread = i64::from(self.db.count_unread_in_folder(&folder_id)?);
         self.db.update_folder_sync(
             &folder_id,
@@ -730,6 +734,47 @@ impl SyncWorker {
         )?;
 
         Ok(synced_count)
+    }
+
+    /// Syncs flags (`is_read`, `is_starred`) for existing mails from the IMAP server.
+    /// This ensures the remote state is the source of truth.
+    async fn sync_existing_mail_flags(
+        &self,
+        session: &mut imap_client::ImapSession,
+        folder_id: &str,
+    ) -> Result<(), AeroError> {
+        let local_uids = self.db.get_uids_in_folder(folder_id)?;
+        if local_uids.is_empty() {
+            return Ok(());
+        }
+
+        // Build UID set string
+        let uid_set = local_uids
+            .iter()
+            .map(ToString::to_string)
+            .collect::<Vec<_>>()
+            .join(",");
+
+        // Fetch only flags for existing UIDs
+        let mut fetch_stream = session
+            .uid_fetch(&uid_set, "(UID FLAGS)")
+            .await
+            .map_err(|e| AeroError::ImapConnectionFailed(e.to_string()))?;
+
+        while let Some(fetch_res) = fetch_stream.next().await {
+            let fetch = fetch_res.map_err(|e| AeroError::ImapConnectionFailed(e.to_string()))?;
+            let uid = fetch.uid.unwrap_or(0);
+            if uid == 0 {
+                continue;
+            }
+
+            let is_seen = imap_client::is_seen_flag(fetch.flags());
+            let is_flagged = imap_client::is_flagged_flag(fetch.flags());
+
+            self.db.update_mail_flags_by_uid(folder_id, uid, is_seen, is_flagged)?;
+        }
+
+        Ok(())
     }
 
     /// 发送新邮件系统通知，包含发件人和主题信息。

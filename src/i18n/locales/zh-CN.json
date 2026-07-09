@@ -85,6 +85,7 @@
     "allowOnce": "临时允许",
     "allowAllOnce": "临时允许全部",
     "alwaysTrustDomain": "始终信任 {domain}",
+    "trustAllDomains": "始终信任全部",
     "quoteToAi": "引用到 AI 助手",
     "quotedToAi": "已引用邮件到 AI 助手",
     "expandQuote": "展开邮件内容",

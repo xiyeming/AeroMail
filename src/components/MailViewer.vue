@@ -571,6 +571,16 @@ async function trustDomain(domain: string) {
   console.debug('[MailViewer] allowedDomains after trust:', allowedDomains.value);
 }
 
+async function trustAllDomains() {
+  const domains = untrustedDomains.value.filter((d) => !trustedDomains.value.includes(d));
+  if (domains.length === 0) return;
+
+  trustedDomains.value.push(...domains);
+  await settingsStore.set('trustedDomains', JSON.stringify(trustedDomains.value));
+  resetSecurityDomainTracking();
+  cspRevision.value++;
+}
+
 async function loadTrustedDomains() {
   try {
     const raw = await settingsStore.get('trustedDomains');
@@ -944,6 +954,14 @@ watch(currentMailId, (newMailId) => {
                 @click="allowAllRemoteOnce"
               >
                 {{ t('mail.allowAllOnce') }}
+              </button>
+              <button
+                v-if="untrustedDomains.length > 1"
+                type="button"
+                class="rounded px-2 py-1 text-xs font-medium text-secondary transition-colors hover:bg-raised"
+                @click="trustAllDomains"
+              >
+                {{ t('mail.trustAllDomains') }}
               </button>
               <button
                 v-for="domain in untrustedDomains"

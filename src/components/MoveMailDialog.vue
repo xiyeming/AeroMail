@@ -3,6 +3,7 @@ import { computed, nextTick, ref, watch } from 'vue';
 import { useI18n } from 'vue-i18n';
 import { FolderInput } from '@lucide/vue';
 import { useMailStore } from '@/stores/mail';
+import { decodeModifiedUtf7 } from '@/utils/imapFolderEncoding';
 
 const { t } = useI18n();
 const mailStore = useMailStore();
@@ -25,14 +26,16 @@ const FOLDER_NAME_MAP: Record<string, string> = {
 };
 
 function getFolderDisplayName(folder: { name: string; path: string }): string {
-  const lower = folder.name.toLowerCase();
-  const lowerPath = folder.path.toLowerCase();
+  const decodedName = decodeModifiedUtf7(folder.name);
+  const decodedPath = decodeModifiedUtf7(folder.path);
+  const lower = decodedName.toLowerCase();
+  const lowerPath = decodedPath.toLowerCase();
   for (const [key, i18nKey] of Object.entries(FOLDER_NAME_MAP)) {
     if (lower === key || lowerPath === key || lowerPath.includes(key)) {
       return t(i18nKey);
     }
   }
-  return folder.name;
+  return decodedName;
 }
 
 const folders = computed(() => {

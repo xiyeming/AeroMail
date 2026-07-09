@@ -18,6 +18,7 @@ import { useAccountStore } from '@/stores/account';
 import { useMailStore } from '@/stores/mail';
 import { useTodoStore } from '@/stores/todo';
 import BaseCheckbox from '@/components/BaseCheckbox.vue';
+import { decodeModifiedUtf7 } from '@/utils/imapFolderEncoding';
 import SkeletonBlock from '@/components/SkeletonBlock.vue';
 
 const route = useRoute();
@@ -42,7 +43,8 @@ function getUnreadCount(folderName: string): number | null {
   const matching = mailStore.folders.filter(
     (f) =>
       accountStore.selectedAccountIds.includes(f.accountId) &&
-      (f.name.toLowerCase() === lower || f.path.toLowerCase() === lower)
+      (decodeModifiedUtf7(f.name).toLowerCase() === lower ||
+        decodeModifiedUtf7(f.path).toLowerCase() === lower)
   );
   const total = matching.reduce((sum, f) => sum + f.unreadCount, 0);
   return total > 0 ? total : null;

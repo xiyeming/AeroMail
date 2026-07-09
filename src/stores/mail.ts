@@ -442,6 +442,19 @@ export const useMailStore = defineStore('mail', () => {
     selectMail(mails.value[prevIndex].id);
   }
 
+  function selectNextUnread() {
+    if (mails.value.length === 0) return;
+    const currentIndex = mails.value.findIndex((m) => m.id === selectedMailId.value);
+    const start = currentIndex >= 0 ? currentIndex + 1 : 0;
+    for (let i = 0; i < mails.value.length; i++) {
+      const idx = (start + i) % mails.value.length;
+      if (!mails.value[idx].isRead) {
+        selectMail(mails.value[idx].id);
+        return;
+      }
+    }
+  }
+
   function clearSelection() {
     selectedMailId.value = null;
     selectedMail.value = null;
@@ -594,6 +607,7 @@ export const useMailStore = defineStore('mail', () => {
     toggleReadingMode,
     selectNextMail,
     selectPreviousMail,
+    selectNextUnread,
     clearSelection,
     closeReader,
     toggleSelection,

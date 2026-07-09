@@ -65,6 +65,10 @@ export function useKeyboardShortcuts() {
           mailStore.toggleStar(mailStore.selectedMailId);
         }
         break;
+      case 'u':
+        e.preventDefault();
+        mailStore.selectNextUnread();
+        break;
       case 'e':
         if (mailStore.selectedMailId) {
           e.preventDefault();

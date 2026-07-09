@@ -362,16 +362,21 @@ export const useMailStore = defineStore('mail', () => {
     deletingMailIds.value.add(mailId);
     try {
       await call('delete_mail', { mailId });
-      // Remove from list
       const index = mails.value.findIndex((m) => m.id === mailId);
       if (index !== -1) {
+        const mail = mails.value[index];
+        // Update folder unread count if the deleted mail was unread
+        if (!mail.isRead) {
+          const folder = folders.value.find((f) => f.id === mail.folderId);
+          if (folder) {
+            folder.unreadCount = Math.max(0, folder.unreadCount - 1);
+          }
+        }
         mails.value.splice(index, 1);
       }
-      // Clear selection if deleted mail was selected
       if (selectedMailId.value === mailId) {
         clearSelection();
       }
-      // If currently viewing trash, refresh so the moved mail appears.
       if (currentFolderId.value === 'trash') {
         await refreshMails('trash');
       }
@@ -485,9 +490,20 @@ export const useMailStore = defineStore('mail', () => {
   async function moveMail(mailId: string, targetFolderId: string) {
     try {
       await call('move_mail', { mailId, targetFolderId });
-      // Remove from list
       const index = mails.value.findIndex((m) => m.id === mailId);
       if (index !== -1) {
+        const mail = mails.value[index];
+        // Update folder unread counts if the moved mail was unread
+        if (!mail.isRead) {
+          const sourceFolder = folders.value.find((f) => f.id === mail.folderId);
+          if (sourceFolder) {
+            sourceFolder.unreadCount = Math.max(0, sourceFolder.unreadCount - 1);
+          }
+          const targetFolder = folders.value.find((f) => f.id === targetFolderId);
+          if (targetFolder) {
+            targetFolder.unreadCount += 1;
+          }
+        }
         mails.value.splice(index, 1);
       }
       if (selectedMailId.value === mailId) {

@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed, ref, onMounted } from 'vue';
 import { useI18n } from 'vue-i18n';
-import { RefreshCw } from '@lucide/vue';
+import { RefreshCw, Upload } from '@lucide/vue';
 import { useStatusStore } from '@/stores/status';
 import { useAccountStore } from '@/stores/account';
 import { useToastStore } from '@/stores/toast';
@@ -57,6 +57,27 @@ async function handleRefresh() {
       type: 'error',
       message: e instanceof Error ? e.message : String(e),
     });
+  }
+}
+
+const isSyncingReadFlags = ref(false);
+
+async function handleSyncReadFlags() {
+  if (isSyncingReadFlags.value) return;
+  isSyncingReadFlags.value = true;
+  try {
+    const count = await invokeCommand<number>('sync_read_flags_to_server');
+    toastStore.add({
+      type: 'success',
+      message: t('statusBar.readFlagsSynced', { count }),
+    });
+  } catch (e) {
+    toastStore.add({
+      type: 'error',
+      message: e instanceof Error ? e.message : String(e),
+    });
+  } finally {
+    isSyncingReadFlags.value = false;
   }
 }
 
@@ -135,6 +156,15 @@ const formattedLastSync = computed(() => {
       {{ statusStore.isOnline ? t('statusBar.online') : t('statusBar.offline') }}
     </span>
     <div class="ml-auto flex items-center gap-2">
+      <button
+        type="button"
+        class="flex h-6 w-6 items-center justify-center rounded text-secondary transition-colors hover:bg-raised hover:text-primary disabled:opacity-50"
+        :disabled="isSyncingReadFlags"
+        :title="t('statusBar.syncReadFlags')"
+        @click="handleSyncReadFlags"
+      >
+        <Upload class="h-3.5 w-3.5" :class="{ 'animate-pulse': isSyncingReadFlags }" />
+      </button>
       <button
         type="button"
         class="flex h-6 w-6 items-center justify-center rounded text-secondary transition-colors hover:bg-raised hover:text-primary disabled:opacity-50"

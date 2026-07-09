@@ -31,7 +31,7 @@ use commands::search::{
     get_search_stats, index_pending_mails, search_mail_summaries, search_mails,
 };
 use commands::settings::{get_log_config, get_setting, set_log_config, set_setting};
-use commands::sync::{fetch_older_mails, start_sync, stop_sync};
+use commands::sync::{fetch_older_mails, start_sync, stop_sync, sync_read_flags_to_server};
 use commands::todo::{clear_completed_todos, delete_todo, list_todos, upsert_todo};
 use commands::translation::{
     delete_translation_provider, get_cached_translation, list_translation_providers,
@@ -350,6 +350,7 @@ pub fn run() {
             start_sync,
             stop_sync,
             fetch_older_mails,
+            sync_read_flags_to_server,
             list_todos,
             upsert_todo,
             delete_todo,

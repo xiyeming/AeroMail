@@ -414,7 +414,9 @@
     "yesterdayAt": "Yesterday {time}",
     "online": "Online",
     "offline": "Offline",
-    "version": "Version {version}"
+    "version": "Version {version}",
+    "syncReadFlags": "Push read status to server",
+    "readFlagsSynced": "Synced {count} emails as read"
   },
   "commandPalette": {
     "placeholder": "Search mail...",

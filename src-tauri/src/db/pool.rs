@@ -1961,6 +1961,27 @@ impl Database {
         Ok(())
     }
 
+    /// Gets locally-read mails grouped by folder for syncing to IMAP.
+    /// Returns `(folder_id, uid)` pairs where `is_read = 1` and `uid > 0`.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the database query fails.
+    pub fn get_locally_read_mails(&self) -> Result<Vec<(String, u32)>, AeroError> {
+        let conn = self.connection()?;
+        let mut stmt = conn.prepare(
+            "SELECT folder_id, uid FROM mails WHERE is_read = 1 AND uid > 0",
+        )?;
+        let rows = stmt.query_map([], |row| {
+            Ok((row.get::<_, String>(0)?, row.get::<_, i64>(1)? as u32))
+        })?;
+        let mut result = Vec::new();
+        for row in rows {
+            result.push(row?);
+        }
+        Ok(result)
+    }
+
     /// Gets a mail ID by its folder and IMAP UID.
     ///
     /// # Errors

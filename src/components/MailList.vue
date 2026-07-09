@@ -361,6 +361,11 @@ function handleContextArchive(mailId: string) {
   toastStore.add({ type: 'success', message: t('mail.archived') });
 }
 
+function handleContextUnarchive(mailId: string) {
+  mailStore.unarchiveMail(mailId);
+  toastStore.add({ type: 'success', message: t('mail.unarchived') });
+}
+
 function handleContextSpam(mailId: string) {
   mailStore.toggleSpam(mailId);
   toastStore.add({ type: 'success', message: t('mail.markedAsSpam') });
@@ -679,6 +684,7 @@ async function bulkMarkRead(isRead: boolean) {
       @delete="handleContextDelete"
       @move="handleContextMove"
       @archive="handleContextArchive"
+      @unarchive="handleContextUnarchive"
       @spam="handleContextSpam"
     />
 

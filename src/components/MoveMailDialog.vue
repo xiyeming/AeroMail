@@ -14,6 +14,27 @@ const emit = defineEmits<{
 
 const dialogRef = ref<HTMLDivElement | null>(null);
 
+const FOLDER_NAME_MAP: Record<string, string> = {
+  inbox: 'nav.inbox',
+  starred: 'nav.starred',
+  sent: 'nav.sent',
+  drafts: 'nav.drafts',
+  archived: 'nav.archived',
+  spam: 'nav.spam',
+  trash: 'nav.trash',
+};
+
+function getFolderDisplayName(folder: { name: string; path: string }): string {
+  const lower = folder.name.toLowerCase();
+  const lowerPath = folder.path.toLowerCase();
+  for (const [key, i18nKey] of Object.entries(FOLDER_NAME_MAP)) {
+    if (lower === key || lowerPath === key || lowerPath.includes(key)) {
+      return t(i18nKey);
+    }
+  }
+  return folder.name;
+}
+
 const folders = computed(() => {
   return mailStore.folders.filter((f) => f.id !== mailStore.currentFolderId);
 });
@@ -91,7 +112,7 @@ watch(
             @click="handleMove(folder.id)"
           >
             <FolderInput class="h-4 w-4" />
-            <span>{{ folder.name }}</span>
+            <span>{{ getFolderDisplayName(folder) }}</span>
             <span v-if="folder.unreadCount > 0" class="ml-auto text-xs text-tertiary">{{
               folder.unreadCount
             }}</span>

@@ -340,6 +340,32 @@ export const useMailStore = defineStore('mail', () => {
     }
   }
 
+  async function unarchiveMail(mailId: string) {
+    try {
+      await call('unarchive_mail', { mailId });
+      const mail = mails.value.find((m) => m.id === mailId);
+      if (mail) {
+        mail.isArchived = false;
+      }
+      if (selectedMail.value?.id === mailId) {
+        selectedMail.value.isArchived = false;
+      }
+      if (currentFolderId.value === 'archived') {
+        const index = mails.value.findIndex((m) => m.id === mailId);
+        if (index !== -1) {
+          mails.value.splice(index, 1);
+        }
+        if (selectedMailId.value === mailId) {
+          clearSelection();
+        }
+      }
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : String(e);
+      error.value = msg;
+      useToastStore().add({ type: 'error', message: msg });
+    }
+  }
+
   async function toggleSpam(mailId: string) {
     try {
       const newSpam = await call<boolean>('toggle_mail_spam', { mailId });
@@ -562,6 +588,7 @@ export const useMailStore = defineStore('mail', () => {
     markRead,
     toggleStar,
     archiveMail,
+    unarchiveMail,
     toggleSpam,
     deleteMail,
     toggleReadingMode,

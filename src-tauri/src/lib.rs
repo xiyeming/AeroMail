@@ -25,7 +25,7 @@ use commands::mail::{
     archive_mail, delete_mail, download_attachment, get_attachment_content, get_attachments,
     get_inbox_mail_list, get_mail_detail, get_mail_list, get_unread_count, get_virtual_mail_list,
     get_virtual_unread_count, list_folders, mark_mail_read, move_mail, toggle_mail_spam,
-    toggle_mail_star,
+    toggle_mail_star, unarchive_mail,
 };
 use commands::search::{
     get_search_stats, index_pending_mails, search_mail_summaries, search_mails,
@@ -361,6 +361,7 @@ pub fn run() {
             mark_mail_read,
             toggle_mail_star,
             archive_mail,
+            unarchive_mail,
             toggle_mail_spam,
             list_folders,
             get_unread_count,

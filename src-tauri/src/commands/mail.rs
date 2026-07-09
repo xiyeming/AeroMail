@@ -65,6 +65,17 @@ pub async fn archive_mail(
 
 #[tauri::command]
 #[instrument(skip(state), fields(mail_id = %mail_id), err(Debug))]
+pub async fn unarchive_mail(
+    mail_id: String,
+    state: State<'_, AppState>,
+) -> Result<bool, ErrorPayload> {
+    let db = &state.db;
+    db.set_mail_archived(&mail_id, false)
+        .map_err(|e| e.to_payload())
+}
+
+#[tauri::command]
+#[instrument(skip(state), fields(mail_id = %mail_id), err(Debug))]
 pub async fn toggle_mail_spam(
     mail_id: String,
     state: State<'_, AppState>,

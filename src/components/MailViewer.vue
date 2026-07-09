@@ -16,6 +16,7 @@ import {
   ReplyAll,
   Forward,
   Archive,
+  ArchiveRestore,
   AlertTriangle,
   ShieldCheck,
   Sparkles,
@@ -371,7 +372,11 @@ function handleToggleStar() {
 
 function handleArchive() {
   if (currentMailId.value) {
-    mailStore.archiveMail(currentMailId.value);
+    if (isArchived.value) {
+      mailStore.unarchiveMail(currentMailId.value);
+    } else {
+      mailStore.archiveMail(currentMailId.value);
+    }
   }
 }
 
@@ -730,10 +735,11 @@ watch(currentMailId, (newMailId) => {
             type="button"
             class="flex h-8 w-8 items-center justify-center rounded-md text-secondary transition-colors hover:bg-raised"
             :class="{ 'text-primary': isArchived }"
-            :title="t('mail.archive')"
+            :title="isArchived ? t('mail.unarchive') : t('mail.archive')"
             @click="handleArchive"
           >
-            <Archive class="h-4 w-4" />
+            <ArchiveRestore v-if="isArchived" class="h-4 w-4" />
+            <Archive v-else class="h-4 w-4" />
           </button>
           <button
             type="button"

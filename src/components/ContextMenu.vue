@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { ref, onMounted, onUnmounted, computed, nextTick, type ComponentPublicInstance } from 'vue';
 import { useI18n } from 'vue-i18n';
-import { Star, Trash2, FolderInput, Eye, EyeOff, Archive, AlertTriangle } from '@lucide/vue';
+import { Star, Trash2, FolderInput, Eye, EyeOff, Archive, AlertTriangle, ArchiveRestore } from '@lucide/vue';
 
 const { t } = useI18n();
 
@@ -23,6 +23,7 @@ const emit = defineEmits<{
   delete: [mailId: string];
   move: [mailId: string];
   archive: [mailId: string];
+  unarchive: [mailId: string];
   spam: [mailId: string];
 }>();
 
@@ -117,7 +118,9 @@ function handleToggleRead() {
 }
 
 function handleArchive() {
-  if (!props.isArchived) {
+  if (props.isArchived) {
+    emit('unarchive', props.mailId);
+  } else {
     emit('archive', props.mailId);
   }
   emit('close');
@@ -177,15 +180,15 @@ function _setItemRef(el: Element | ComponentPublicInstance | null, index: number
       </button>
 
       <button
-        v-if="!isArchived"
         ref="(el) => _setItemRef(el, 2)"
         type="button"
         role="menuitem"
         class="flex w-full items-center gap-3 px-3 py-2 text-sm text-secondary transition-colors hover:bg-raised"
         @click="handleArchive"
       >
-        <Archive class="h-4 w-4" />
-        {{ t('contextMenu.archive') }}
+        <ArchiveRestore v-if="isArchived" class="h-4 w-4" />
+        <Archive v-else class="h-4 w-4" />
+        {{ isArchived ? t('contextMenu.unarchive') : t('contextMenu.archive') }}
       </button>
 
       <button

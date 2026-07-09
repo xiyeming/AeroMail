@@ -968,7 +968,7 @@ watch(currentMailId, (newMailId) => {
               <button
                 v-if="untrustedDomains.length > 1"
                 type="button"
-                class="rounded px-2 py-1 text-xs font-medium text-secondary transition-colors hover:bg-raised"
+                class="rounded px-2 py-1 text-xs font-medium text-warning transition-colors hover:bg-warning/10"
                 @click="trustAllDomains"
               >
                 {{ t('mail.trustAllDomains') }}
@@ -977,7 +977,7 @@ watch(currentMailId, (newMailId) => {
                 v-for="domain in untrustedDomains"
                 :key="domain"
                 type="button"
-                class="rounded px-2 py-1 text-xs text-secondary transition-colors hover:bg-raised"
+                class="rounded px-2 py-1 text-xs text-warning transition-colors hover:bg-warning/10"
                 @click="trustDomain(domain)"
               >
                 {{ t('mail.alwaysTrustDomain', { domain }) }}

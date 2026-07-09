@@ -105,20 +105,21 @@ export const useMailStore = defineStore('mail', () => {
         }
       );
 
-      // 当本地页为空且期望有更多数据时，请求后端从 IMAP 服务器回填旧邮件
+      // 当本地页为空或不足一页时，请求后端从 IMAP 服务器回填旧邮件
       // 仅对真实文件夹执行；虚拟文件夹无远程旧邮件源
-      if (!reset && newMails.length === 0 && hasMore.value && !isVirtual) {
+      if (newMails.length < PAGE_SIZE && hasMore.value && !isVirtual) {
         const fetched = await call<number>('fetch_older_mails', {
           folderId,
-          limit: PAGE_SIZE,
+          limit: PAGE_SIZE - newMails.length,
         });
-        // 无论 fetch 返回多少，都重新查询本地数据库
-        // 如果返回 0（已拉到底部），重新查询会返回空数组，触发 hasMore = false
-        newMails = await call<MailHeader[]>('get_mail_list', {
-          folderId,
-          limit: PAGE_SIZE,
-          offset,
-        });
+        // 如果 fetch 了新邮件，重新查询本地数据库补齐
+        if (fetched > 0) {
+          newMails = await call<MailHeader[]>('get_mail_list', {
+            folderId,
+            limit: PAGE_SIZE,
+            offset,
+          });
+        }
       }
 
       // 先获取数据再替换，避免先清空导致列表闪烁

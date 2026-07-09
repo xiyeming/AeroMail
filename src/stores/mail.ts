@@ -9,6 +9,8 @@ const PAGE_SIZE = 50;
 
 const VIRTUAL_FOLDERS = ['starred', 'sent', 'archived', 'spam', 'trash'];
 
+export type MailFilter = 'all' | 'unread' | 'starred' | 'attachments';
+
 export const useMailStore = defineStore('mail', () => {
   const { call } = useTauriInvoke();
   const mails = ref<MailHeader[]>([]);
@@ -25,6 +27,7 @@ export const useMailStore = defineStore('mail', () => {
   const error = ref<string | null>(null);
   const isReadingMode = ref(false);
   const deletingMailIds = ref<Set<string>>(new Set());
+  const activeFilter = ref<MailFilter>('all');
 
   // 用于防止快速切换邮件时旧响应覆盖新响应
   let currentLoadId = 0;
@@ -455,6 +458,10 @@ export const useMailStore = defineStore('mail', () => {
     }
   }
 
+  function setFilter(filter: MailFilter) {
+    activeFilter.value = filter;
+  }
+
   function clearSelection() {
     selectedMailId.value = null;
     selectedMail.value = null;
@@ -620,5 +627,7 @@ export const useMailStore = defineStore('mail', () => {
     bulkDelete,
     moveMail,
     bulkMove,
+    activeFilter,
+    setFilter,
   };
 });

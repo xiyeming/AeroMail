@@ -163,14 +163,30 @@ watch(
 
 const displayedMails = computed(() => {
   const query = debouncedSearchQuery.value.trim();
-  if (!query) return mailStore.mails;
-  const q = query.toLowerCase();
-  return mailStore.mails.filter(
-    (m) =>
-      (m.subject ?? '').toLowerCase().includes(q) ||
-      (m.fromName ?? '').toLowerCase().includes(q) ||
-      (m.fromAddress ?? '').toLowerCase().includes(q)
-  );
+  const filter = mailStore.activeFilter;
+  let result = mailStore.mails;
+
+  // Apply text search
+  if (query) {
+    const q = query.toLowerCase();
+    result = result.filter(
+      (m) =>
+        (m.subject ?? '').toLowerCase().includes(q) ||
+        (m.fromName ?? '').toLowerCase().includes(q) ||
+        (m.fromAddress ?? '').toLowerCase().includes(q)
+    );
+  }
+
+  // Apply filter
+  if (filter === 'unread') {
+    result = result.filter((m) => !m.isRead);
+  } else if (filter === 'starred') {
+    result = result.filter((m) => m.isStarred);
+  } else if (filter === 'attachments') {
+    result = result.filter((m) => m.hasAttachments);
+  }
+
+  return result;
 });
 
 const hasSearchResults = computed(() => {
@@ -429,17 +445,55 @@ async function bulkMarkRead(isRead: boolean) {
     <!-- Header -->
     <div class="flex h-12 shrink-0 items-center justify-between border-b border-border px-4">
       <span class="font-medium text-primary">{{ currentFolderName }}</span>
-      <form role="search" class="relative" @submit.prevent>
-        <label for="mail-search" class="sr-only">{{ t('common.search') }}</label>
-        <input
-          id="mail-search"
-          :value="searchQuery"
-          type="search"
-          :placeholder="t('commandPalette.placeholder')"
-          class="h-8 w-44 rounded-md border border-border bg-base px-3 text-sm text-primary placeholder:text-tertiary outline-none focus:border-accent"
-          @input="updateDebouncedSearch(($event.target as HTMLInputElement).value); searchQuery = ($event.target as HTMLInputElement).value"
-        />
-      </form>
+      <div class="flex items-center gap-2">
+        <form role="search" class="relative" @submit.prevent>
+          <label for="mail-search" class="sr-only">{{ t('common.search') }}</label>
+          <input
+            id="mail-search"
+            :value="searchQuery"
+            type="search"
+            :placeholder="t('commandPalette.placeholder')"
+            class="h-8 w-44 rounded-md border border-border bg-base px-3 text-sm text-primary placeholder:text-tertiary outline-none focus:border-accent"
+            @input="updateDebouncedSearch(($event.target as HTMLInputElement).value); searchQuery = ($event.target as HTMLInputElement).value"
+          />
+        </form>
+      </div>
+    </div>
+
+    <!-- Filter bar -->
+    <div class="flex shrink-0 items-center gap-1 border-b border-border px-4 py-1.5">
+      <button
+        type="button"
+        class="rounded-md px-2 py-1 text-xs transition-colors"
+        :class="mailStore.activeFilter === 'all' ? 'bg-accent text-white' : 'text-secondary hover:bg-raised'"
+        @click="mailStore.setFilter('all')"
+      >
+        {{ t('mail.filterAll') }}
+      </button>
+      <button
+        type="button"
+        class="rounded-md px-2 py-1 text-xs transition-colors"
+        :class="mailStore.activeFilter === 'unread' ? 'bg-accent text-white' : 'text-secondary hover:bg-raised'"
+        @click="mailStore.setFilter('unread')"
+      >
+        {{ t('mail.filterUnread') }}
+      </button>
+      <button
+        type="button"
+        class="rounded-md px-2 py-1 text-xs transition-colors"
+        :class="mailStore.activeFilter === 'starred' ? 'bg-accent text-white' : 'text-secondary hover:bg-raised'"
+        @click="mailStore.setFilter('starred')"
+      >
+        {{ t('mail.filterStarred') }}
+      </button>
+      <button
+        type="button"
+        class="rounded-md px-2 py-1 text-xs transition-colors"
+        :class="mailStore.activeFilter === 'attachments' ? 'bg-accent text-white' : 'text-secondary hover:bg-raised'"
+        @click="mailStore.setFilter('attachments')"
+      >
+        {{ t('mail.filterAttachments') }}
+      </button>
     </div>
 
     <!-- Skeleton state -->

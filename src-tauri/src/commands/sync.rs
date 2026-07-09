@@ -64,8 +64,11 @@ pub async fn sync_read_flags_to_server(state: State<'_, AppState>) -> Result<u32
     let locally_read = db.get_locally_read_mails().map_err(|e| e.to_payload())?;
 
     if locally_read.is_empty() {
+        info!("no locally read mails to sync");
         return Ok(0);
     }
+
+    info!(count = locally_read.len(), "found locally read mails");
 
     // Group by folder_id
     let mut folder_uids: std::collections::HashMap<String, Vec<u32>> =
@@ -78,9 +81,14 @@ pub async fn sync_read_flags_to_server(state: State<'_, AppState>) -> Result<u32
     let mut synced_count = 0u32;
 
     for (folder_id, uids) in &folder_uids {
+        info!(folder_id = %folder_id, uid_count = uids.len(), "processing folder");
+
         let folder = match db.get_folder_by_id(folder_id) {
             Ok(Some(f)) => f,
-            _ => continue,
+            _ => {
+                tracing::warn!(folder_id = %folder_id, "folder not found in DB");
+                continue;
+            }
         };
         let config = match account_manager
             .get_account_config_with_refresh(&folder.account_id)
@@ -93,10 +101,19 @@ pub async fn sync_read_flags_to_server(state: State<'_, AppState>) -> Result<u32
             }
         };
 
-        let mut session = match imap_client::connect_imap(&config).await {
-            Ok(s) => s,
-            Err(e) => {
+        let mut session = match tokio::time::timeout(
+            std::time::Duration::from_secs(30),
+            imap_client::connect_imap(&config),
+        )
+        .await
+        {
+            Ok(Ok(s)) => s,
+            Ok(Err(e)) => {
                 tracing::warn!(folder_id = %folder_id, error = %e, "failed to connect");
+                continue;
+            }
+            Err(_) => {
+                tracing::warn!(folder_id = %folder_id, "IMAP connect timeout");
                 continue;
             }
         };
@@ -144,6 +161,7 @@ pub async fn sync_read_flags_to_server(state: State<'_, AppState>) -> Result<u32
             drop(fetch_stream);
 
             if needs_update.is_empty() {
+                info!("all mails in chunk already have \\Seen flag");
                 continue;
             }
 
@@ -153,13 +171,14 @@ pub async fn sync_read_flags_to_server(state: State<'_, AppState>) -> Result<u32
                 .collect::<Vec<_>>()
                 .join(",");
 
-            if let Err(e) = session
-                .uid_store(&update_set, "+FLAGS (\\Seen)")
-                .await
-            {
-                tracing::warn!(error = %e, "failed to set \\Seen flag");
-            } else {
-                synced_count += needs_update.len() as u32;
+            match session.uid_store(&update_set, "+FLAGS (\\Seen)").await {
+                Ok(_) => {
+                    info!(count = needs_update.len(), "set \\Seen flag on server");
+                    synced_count += needs_update.len() as u32;
+                }
+                Err(e) => {
+                    tracing::warn!(error = %e, "failed to set \\Seen flag");
+                }
             }
         }
 

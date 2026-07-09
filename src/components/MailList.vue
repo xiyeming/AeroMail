@@ -113,7 +113,8 @@ watch(
     } finally {
       initializing.value = false;
     }
-    await checkLoadMore();
+    await nextTick();
+    setupInfiniteScroll();
   },
   { immediate: true }
 );
@@ -217,20 +218,6 @@ function loadMoreMails() {
   void mailStore.loadMails(currentFolderId.value, false);
 }
 
-async function checkLoadMore() {
-  await nextTick();
-  const el = getScrollElement();
-  if (!el) return;
-  if (
-    el.scrollHeight <= el.clientHeight + 50 &&
-    mailStore.hasMore &&
-    !mailStore.loading &&
-    !mailStore.loadingMore
-  ) {
-    await loadMoreMails();
-  }
-}
-
 function disconnectObserver() {
   if (scrollObserver) {
     scrollObserver.disconnect();
@@ -276,15 +263,6 @@ onMounted(() => {
 onUnmounted(() => {
   disconnectObserver();
 });
-
-watch(
-  () => mailStore.mails.length,
-  async () => {
-    await nextTick();
-    setupInfiniteScroll();
-    await checkLoadMore();
-  }
-);
 
 function handleContextMenu(e: MouseEvent, mail: MailHeader) {
   e.preventDefault();
@@ -600,23 +578,27 @@ async function bulkMarkRead(isRead: boolean) {
         <div ref="sentinelRef" class="h-2 w-full" aria-hidden="true" />
 
         <!-- Load more indicator -->
-        <div
-          v-if="mailStore.loadingMore"
-          class="flex items-center justify-center gap-2 py-4 text-secondary"
-        >
-          <Loader2 class="h-4 w-4 animate-spin text-accent" />
-          <span class="text-xs">{{ t('common.loading') }}</span>
-        </div>
+        <Transition name="fade">
+          <div
+            v-if="mailStore.loadingMore"
+            class="flex items-center justify-center gap-2 py-5 text-secondary"
+          >
+            <Loader2 class="h-4 w-4 animate-spin text-accent" />
+            <span class="text-xs">{{ t('common.loading') }}</span>
+          </div>
+        </Transition>
 
         <!-- End of list -->
-        <div
-          v-else-if="!mailStore.hasMore && displayedMails.length > 0"
-          class="flex items-center gap-3 py-4"
-        >
-          <div class="h-px flex-1 bg-border" />
-          <span class="text-xs text-tertiary whitespace-nowrap">{{ t('mail.noMoreEmails') }}</span>
-          <div class="h-px flex-1 bg-border" />
-        </div>
+        <Transition name="fade">
+          <div
+            v-if="!mailStore.hasMore && !mailStore.loadingMore && displayedMails.length > 0"
+            class="flex items-center gap-3 py-5"
+          >
+            <div class="h-px flex-1 bg-border" />
+            <span class="text-xs text-tertiary whitespace-nowrap">{{ t('mail.noMoreEmails') }}</span>
+            <div class="h-px flex-1 bg-border" />
+          </div>
+        </Transition>
       </div>
     </CustomScrollbar>
 
@@ -713,5 +695,14 @@ async function bulkMarkRead(isRead: boolean) {
 .content-visibility-auto {
   content-visibility: auto;
   contain-intrinsic-size: 0 80px;
+}
+
+.fade-enter-active,
+.fade-leave-active {
+  transition: opacity 0.2s ease;
+}
+.fade-enter-from,
+.fade-leave-to {
+  opacity: 0;
 }
 </style>

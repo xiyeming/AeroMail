@@ -31,17 +31,33 @@ const thumbTop = computed(() => {
   return (contentScrollTop.value / maxScroll) * maxThumbTop;
 });
 
-function updateMetrics() {
-  const el = contentRef.value;
-  if (!el) return;
-  contentScrollTop.value = el.scrollTop;
-  scrollHeight.value = el.scrollHeight;
-  clientHeight.value = el.clientHeight;
+let rafId = 0;
+let lastEmittedScrollTop = 0;
+
+function scheduleUpdate() {
+  if (rafId) return;
+  rafId = requestAnimationFrame(() => {
+    rafId = 0;
+    const el = contentRef.value;
+    if (!el) return;
+    // Batch all layout reads in a single frame
+    const newScrollTop = el.scrollTop;
+    const newScrollHeight = el.scrollHeight;
+    const newClientHeight = el.clientHeight;
+    // Only update refs if values actually changed to avoid unnecessary reactivity triggers
+    if (newScrollTop !== contentScrollTop.value) contentScrollTop.value = newScrollTop;
+    if (newScrollHeight !== scrollHeight.value) scrollHeight.value = newScrollHeight;
+    if (newClientHeight !== clientHeight.value) clientHeight.value = newClientHeight;
+    // Throttle emit to avoid excessive parent updates
+    if (newScrollTop !== lastEmittedScrollTop) {
+      lastEmittedScrollTop = newScrollTop;
+      emit('update:scrollTop', newScrollTop);
+    }
+  });
 }
 
 function handleScroll() {
-  updateMetrics();
-  emit('update:scrollTop', contentScrollTop.value);
+  scheduleUpdate();
 }
 
 let isDragging = false;
@@ -91,15 +107,16 @@ function handleTrackClick(e: MouseEvent) {
 let resizeObserver: ResizeObserver | null = null;
 
 onMounted(() => {
-  updateMetrics();
-  void nextTick(() => updateMetrics());
-  resizeObserver = new ResizeObserver(() => updateMetrics());
+  scheduleUpdate();
+  void nextTick(() => scheduleUpdate());
+  resizeObserver = new ResizeObserver(() => scheduleUpdate());
   if (contentRef.value) {
     resizeObserver.observe(contentRef.value);
   }
 });
 
 onUnmounted(() => {
+  if (rafId) cancelAnimationFrame(rafId);
   resizeObserver?.disconnect();
   document.removeEventListener('mousemove', handleThumbMouseMove);
   document.removeEventListener('mouseup', handleThumbMouseUp);
@@ -125,7 +142,7 @@ defineExpose({
     <div
       ref="contentRef"
       class="custom-scrollbar-content absolute inset-0 overflow-y-auto"
-      @scroll="handleScroll"
+      @scroll.passive="handleScroll"
     >
       <slot />
     </div>

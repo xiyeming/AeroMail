@@ -60,7 +60,7 @@ export const useStatusStore = defineStore('status', () => {
 
   // Listen for sync progress events from the backend
   async function initEventListeners() {
-    await listen<SyncProgress>('sync:progress', (event) => {
+    const unlistenSync = await listen<SyncProgress>('sync:progress', (event) => {
       const progress = event.payload;
       updateSyncStatus(
         progress.accountId,
@@ -72,9 +72,16 @@ export const useStatusStore = defineStore('status', () => {
       }
     });
 
-    // Listen for online/offline events
-    window.addEventListener('online', () => setOnline(true));
-    window.addEventListener('offline', () => setOnline(false));
+    const onOnline = () => setOnline(true);
+    const onOffline = () => setOnline(false);
+    window.addEventListener('online', onOnline);
+    window.addEventListener('offline', onOffline);
+
+    return () => {
+      unlistenSync();
+      window.removeEventListener('online', onOnline);
+      window.removeEventListener('offline', onOffline);
+    };
   }
 
   return {

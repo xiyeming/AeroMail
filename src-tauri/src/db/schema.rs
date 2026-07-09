@@ -251,6 +251,22 @@ CREATE INDEX IF NOT EXISTS idx_translations_lookup
 ON translations(source_hash, target_lang, provider_id)
 ";
 
+pub const MAILS_FOLDER_INDEX: &str = r"
+CREATE INDEX IF NOT EXISTS idx_mails_folder_id ON mails(folder_id, date DESC)
+";
+
+pub const MAILS_ACCOUNT_INDEX: &str = r"
+CREATE INDEX IF NOT EXISTS idx_mails_account_id ON mails(account_id)
+";
+
+pub const ATTACHMENTS_MAIL_INDEX: &str = r"
+CREATE INDEX IF NOT EXISTS idx_attachments_mail_id ON attachments(mail_id)
+";
+
+pub const FOLDERS_ACCOUNT_PATH_INDEX: &str = r"
+CREATE UNIQUE INDEX IF NOT EXISTS idx_folders_account_path ON folders(account_id, path)
+";
+
 pub const TODOS_TABLE: &str = r"
 CREATE TABLE IF NOT EXISTS todos (
     id TEXT PRIMARY KEY,
@@ -295,6 +311,10 @@ pub const ALL_SCHEMAS: &[&str] = &[
     TRANSLATION_PROVIDERS_TABLE,
     TRANSLATIONS_TABLE,
     TRANSLATIONS_INDEX,
+    MAILS_FOLDER_INDEX,
+    MAILS_ACCOUNT_INDEX,
+    ATTACHMENTS_MAIL_INDEX,
+    FOLDERS_ACCOUNT_PATH_INDEX,
     TODOS_TABLE,
     TODOS_DONE_INDEX,
     TODOS_MAIL_ID_INDEX,

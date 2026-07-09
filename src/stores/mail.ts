@@ -231,12 +231,13 @@ export const useMailStore = defineStore('mail', () => {
   }
 
   async function initEventListeners() {
-    await listen<NewMailsEvent>('sync:new_mails', (event) => {
+    const unlisten = await listen<NewMailsEvent>('sync:new_mails', (event) => {
       const { folderId, mails: newMails } = event.payload;
       if (folderId === currentFolderId.value && !loading.value) {
         insertMails(newMails);
       }
     });
+    return unlisten;
   }
 
   async function loadMailDetail(mailId: string) {

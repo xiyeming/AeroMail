@@ -192,10 +192,6 @@ impl SyncService {
         );
 
         if remote_exists == 0 {
-            session
-                .logout()
-                .await
-                .map_err(|e| AeroError::ImapConnectionFailed(e.to_string()))?;
             return Ok(0);
         }
 
@@ -208,14 +204,21 @@ impl SyncService {
             Some(i64::from(mailbox.uid_next.unwrap_or(0))),
         )?;
 
+        // Verify UIDVALIDITY matches local stored value — if changed, local
+        // UIDs are stale and must not be used for range calculations.
+        let local_uid_validity = folder.uid_validity.unwrap_or(0);
+        if local_uid_validity != 0 && local_uid_validity != i64::from(remote_uid_validity) {
+            info!(
+                "UIDVALIDITY changed for folder {} (local={}, remote={}), skipping backfill",
+                folder_id, local_uid_validity, remote_uid_validity
+            );
+            return Ok(0);
+        }
+
         let local_count = self.db.count_mails_in_folder(folder_id)?;
         let min_uid = self.db.get_min_uid(folder_id)?.unwrap_or(0);
 
         if local_count >= remote_exists || min_uid <= 1 {
-            session
-                .logout()
-                .await
-                .map_err(|e| AeroError::ImapConnectionFailed(e.to_string()))?;
             return Ok(0);
         }
 
@@ -226,10 +229,7 @@ impl SyncService {
         let sync_days = load_sync_mail_days(&self.db)?;
         let uid_set = build_sync_uid_set(&mut session, sync_days, Some(&range), &range).await?;
         if uid_set.is_empty() {
-            session
-                .logout()
-                .await
-                .map_err(|e| AeroError::ImapConnectionFailed(e.to_string()))?;
+            let _ = session.logout().await;
             return Ok(0);
         }
 
@@ -318,10 +318,7 @@ impl SyncService {
             i64::from(remote_exists),
         )?;
 
-        session
-            .logout()
-            .await
-            .map_err(|e| AeroError::ImapConnectionFailed(e.to_string()))?;
+        let _ = session.logout().await;
 
         info!("Fetched {} older messages for folder {}", synced, folder_id);
         Ok(synced)

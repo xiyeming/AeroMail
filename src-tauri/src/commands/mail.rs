@@ -298,6 +298,14 @@ pub async fn download_attachment(
     target_path: std::path::PathBuf,
     state: State<'_, AppState>,
 ) -> Result<(), ErrorPayload> {
+    // Validate target path: must be absolute and not contain path traversal
+    if !target_path.is_absolute() {
+        return Err(AeroError::Internal("target path must be absolute".to_string()).to_payload());
+    }
+    if target_path.components().any(|c| matches!(c, std::path::Component::ParentDir)) {
+        return Err(AeroError::Internal("target path must not contain '..'".to_string()).to_payload());
+    }
+
     let db = &state.db;
     let local_path = db
         .get_attachment_path(&attachment_id)

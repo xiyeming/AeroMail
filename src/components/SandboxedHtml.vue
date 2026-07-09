@@ -71,7 +71,7 @@ function sanitizeHtml(html: string): string {
   const doc = parser.parseFromString(html, 'text/html');
 
   // 移除可能嵌套脚本或加载外部资源的标签
-  doc.querySelectorAll('script, noscript, iframe, object, embed').forEach((el) => el.remove());
+  doc.querySelectorAll('script, noscript, iframe, object, embed, base').forEach((el) => el.remove());
 
   // 移除危险 link rel
   doc.querySelectorAll('link').forEach((el) => {

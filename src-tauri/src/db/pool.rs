@@ -42,6 +42,10 @@ impl Database {
         let mut conn = Connection::open(&db_path)
             .map_err(|e| AeroError::Database(format!("failed to open database: {e}")))?;
 
+        conn.execute_batch("PRAGMA foreign_keys = ON;")?;
+        conn.execute_batch("PRAGMA journal_mode = WAL;")?;
+        conn.execute_batch("PRAGMA busy_timeout = 5000;")?;
+
         run_migrations(&mut conn)?;
 
         Ok(Self {
@@ -1618,25 +1622,23 @@ impl Database {
     ///
     /// Returns an error if the database write fails.
     pub fn mark_mail_read(&self, mail_id: &str, is_read: bool) -> Result<(), AeroError> {
-        let conn = self.connection()?;
-        // 先获取邮件所属的 folder_id
-        let folder_id: String = conn.query_row(
-            "SELECT folder_id FROM mails WHERE id = ?1",
-            [mail_id],
-            |row| row.get(0),
-        )?;
-        conn.execute(
-            "UPDATE mails SET is_read = ?1 WHERE id = ?2",
-            (is_read as i64, mail_id),
-        )?;
-        // 同步更新 folders 表的 unread_count
-        let unread_delta = if is_read { -1 } else { 1 };
-        conn.execute(
-            "UPDATE folders SET unread_count = MAX(0, unread_count + ?1) WHERE id = ?2",
-            (unread_delta, &folder_id),
-        )?;
-        drop(conn);
-        Ok(())
+        self.with_transaction(|conn| {
+            let folder_id: String = conn.query_row(
+                "SELECT folder_id FROM mails WHERE id = ?1",
+                [mail_id],
+                |row| row.get(0),
+            )?;
+            conn.execute(
+                "UPDATE mails SET is_read = ?1 WHERE id = ?2",
+                (is_read as i64, mail_id),
+            )?;
+            let unread_delta = if is_read { -1 } else { 1 };
+            conn.execute(
+                "UPDATE folders SET unread_count = MAX(0, unread_count + ?1) WHERE id = ?2",
+                (unread_delta, &folder_id),
+            )?;
+            Ok(())
+        })
     }
 
     /// Toggles the starred status of a mail and returns the new state.
@@ -2046,23 +2048,21 @@ impl Database {
     ///
     /// Returns an error if the database write fails.
     pub fn delete_mail(&self, mail_id: &str) -> Result<(), AeroError> {
-        let conn = self.connection()?;
-        // 获取邮件所属的 folder_id 和 is_read 状态
-        let (folder_id, is_read): (String, bool) = conn.query_row(
-            "SELECT folder_id, is_read FROM mails WHERE id = ?1",
-            [mail_id],
-            |row| Ok((row.get(0)?, row.get::<_, i64>(1)? != 0)),
-        )?;
-        conn.execute("DELETE FROM mails WHERE id = ?1", [mail_id])?;
-        // 如果邮件未读，减少文件夹的未读计数
-        if !is_read {
-            conn.execute(
-                "UPDATE folders SET unread_count = MAX(0, unread_count - 1) WHERE id = ?1",
-                [&folder_id],
+        self.with_transaction(|conn| {
+            let (folder_id, is_read): (String, bool) = conn.query_row(
+                "SELECT folder_id, is_read FROM mails WHERE id = ?1",
+                [mail_id],
+                |row| Ok((row.get(0)?, row.get::<_, i64>(1)? != 0)),
             )?;
-        }
-        drop(conn);
-        Ok(())
+            conn.execute("DELETE FROM mails WHERE id = ?1", [mail_id])?;
+            if !is_read {
+                conn.execute(
+                    "UPDATE folders SET unread_count = MAX(0, unread_count - 1) WHERE id = ?1",
+                    [&folder_id],
+                )?;
+            }
+            Ok(())
+        })
     }
 
     /// Moves a mail to a different folder.
@@ -2071,30 +2071,28 @@ impl Database {
     ///
     /// Returns an error if the database write fails.
     pub fn move_mail(&self, mail_id: &str, target_folder_id: &str) -> Result<(), AeroError> {
-        let conn = self.connection()?;
-        // 获取邮件所属的源 folder_id 和 is_read 状态
-        let (source_folder_id, is_read): (String, bool) = conn.query_row(
-            "SELECT folder_id, is_read FROM mails WHERE id = ?1",
-            [mail_id],
-            |row| Ok((row.get(0)?, row.get::<_, i64>(1)? != 0)),
-        )?;
-        conn.execute(
-            "UPDATE mails SET folder_id = ?1 WHERE id = ?2",
-            (target_folder_id, mail_id),
-        )?;
-        // 如果邮件未读，减少源文件夹的未读计数，增加目标文件夹的未读计数
-        if !is_read {
-            conn.execute(
-                "UPDATE folders SET unread_count = MAX(0, unread_count - 1) WHERE id = ?1",
-                [&source_folder_id],
+        self.with_transaction(|conn| {
+            let (source_folder_id, is_read): (String, bool) = conn.query_row(
+                "SELECT folder_id, is_read FROM mails WHERE id = ?1",
+                [mail_id],
+                |row| Ok((row.get(0)?, row.get::<_, i64>(1)? != 0)),
             )?;
             conn.execute(
-                "UPDATE folders SET unread_count = unread_count + 1 WHERE id = ?1",
-                [target_folder_id],
+                "UPDATE mails SET folder_id = ?1 WHERE id = ?2",
+                (target_folder_id, mail_id),
             )?;
-        }
-        drop(conn);
-        Ok(())
+            if !is_read {
+                conn.execute(
+                    "UPDATE folders SET unread_count = MAX(0, unread_count - 1) WHERE id = ?1",
+                    [&source_folder_id],
+                )?;
+                conn.execute(
+                    "UPDATE folders SET unread_count = unread_count + 1 WHERE id = ?1",
+                    [target_folder_id],
+                )?;
+            }
+            Ok(())
+        })
     }
 
     /// Deletes all attachment records for a mail.

@@ -99,8 +99,10 @@ fn build_credentials(config: &AccountConfig) -> Credentials {
     let username = config.email.as_deref().unwrap_or(&config.name).to_string();
     match &config.auth {
         AuthConfig::Password { password_encrypted } => {
-            let password = String::from_utf8_lossy(password_encrypted);
-            Credentials::new(username, password.to_string())
+            let password_bytes = crate::services::crypto::decrypt_password(password_encrypted)
+                .unwrap_or_default();
+            let password = String::from_utf8(password_bytes).unwrap_or_default();
+            Credentials::new(username, password)
         }
         AuthConfig::OAuth2 { access_token, .. } => {
             // XOAUTH2 SASL initial response: base64("user={user}\x01auth=Bearer {token}\x01\x01")

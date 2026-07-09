@@ -44,7 +44,7 @@ pub fn preset_for(kind: &AiProviderKind) -> AiProviderPreset {
         },
         AiProviderKind::Anthropic => AiProviderPreset {
             name: "Anthropic".to_string(),
-            base_url: "https://api.anthropic.com".to_string(),
+            base_url: "https://api.anthropic.com/v1".to_string(),
             default_model: "claude-3-5-sonnet-20241022".to_string(),
         },
         AiProviderKind::Gemini => AiProviderPreset {

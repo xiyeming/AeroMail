@@ -2,7 +2,7 @@ use reqwest::Client;
 use serde::{Deserialize, Serialize};
 
 use crate::error::AeroError;
-use crate::models::ai::AiProvider;
+use crate::models::ai::{AiProvider, AiProviderKind};
 use crate::services::ai::ChatMessage;
 
 #[derive(Serialize)]
@@ -92,9 +92,9 @@ pub async fn chat_completion(
     tools: Option<&[serde_json::Value]>,
 ) -> Result<CompletionResult, AeroError> {
     let api_key_bytes = crate::services::crypto::decrypt_password(&provider.api_key_encrypted)
-        .map_err(|e| AeroError::AiApiError(format!("failed to decrypt api key: {e}")))?;
+        .map_err(|_| AeroError::AiApiError("API key decryption failed".to_string()))?;
     let api_key = String::from_utf8(api_key_bytes)
-        .map_err(|e| AeroError::AiApiError(format!("invalid api key: {e}")))?;
+        .map_err(|_| AeroError::AiApiError("API key is not valid UTF-8".to_string()))?;
     let base_url = provider
         .base_url
         .as_deref()
@@ -102,7 +102,10 @@ pub async fn chat_completion(
         .ok_or_else(|| {
             AeroError::AiApiError("AI provider base_url is not configured".to_string())
         })?;
-    let url = format!("{}/chat/completions", base_url.trim_end_matches('/'));
+    let url = match provider.kind {
+        AiProviderKind::Anthropic => format!("{}/messages", base_url.trim_end_matches('/')),
+        _ => format!("{}/chat/completions", base_url.trim_end_matches('/')),
+    };
 
     let payload_messages: Vec<ChatMessagePayload> = messages
         .iter()
@@ -125,9 +128,17 @@ pub async fn chat_completion(
         tools: tools.map(<[serde_json::Value]>::to_vec),
     };
 
-    let res = client
-        .post(&url)
-        .header("Authorization", format!("Bearer {api_key}"))
+    let request_builder = match provider.kind {
+        AiProviderKind::Anthropic => client
+            .post(&url)
+            .header("x-api-key", &api_key)
+            .header("anthropic-version", "2023-06-01"),
+        _ => client
+            .post(&url)
+            .header("Authorization", format!("Bearer {api_key}")),
+    };
+
+    let res = request_builder
         .json(&body)
         .send()
         .await

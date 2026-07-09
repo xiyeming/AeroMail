@@ -462,7 +462,7 @@ async function bulkMarkRead(isRead: boolean) {
       v-else-if="displayedMails.length === 0"
       class="flex flex-1 items-center justify-center text-secondary"
     >
-      {{ hasSearchResults.value ? t('mail.noEmails') : t('mail.noSearchResults') }}
+      {{ hasSearchResults ? t('mail.noEmails') : t('mail.noSearchResults') }}
     </div>
 
     <!-- Mail list -->

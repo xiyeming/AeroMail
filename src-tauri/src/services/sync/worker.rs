@@ -290,10 +290,7 @@ impl SyncWorker {
             }
         }
 
-        session
-            .logout()
-            .await
-            .map_err(|e| AeroError::ImapConnectionFailed(e.to_string()))?;
+        let _ = session.logout().await;
 
         if !folder_errors.is_empty() {
             let message = folder_errors

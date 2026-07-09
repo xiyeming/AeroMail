@@ -67,6 +67,7 @@ export const useMailStore = defineStore('mail', () => {
         accountIds,
         limit: PAGE_SIZE,
         offset,
+        filter: activeFilter.value === 'all' ? null : activeFilter.value,
       });
 
       // 先获取数据再替换，避免先清空导致列表闪烁
@@ -100,19 +101,27 @@ export const useMailStore = defineStore('mail', () => {
       currentFolderId.value = folderId;
       const isVirtual = VIRTUAL_FOLDERS.includes(folderId);
       const offset = reset ? 0 : mails.value.length;
+      const filter = activeFilter.value === 'all' ? null : activeFilter.value;
       let newMails = await call<MailHeader[]>(
         isVirtual ? 'get_virtual_mail_list' : 'get_mail_list',
         {
           folderId,
           limit: PAGE_SIZE,
           offset,
+          filter,
         }
       );
 
-      // 滚动加载时，若本地无更多数据则从 IMAP 服务器拉取旧邮件
-      // 仅对真实文件夹执行；虚拟文件夹无远程旧邮件源
-      // 初始加载(reset=true)不触发 IMAP，避免启动时阻塞
-      if (!reset && newMails.length === 0 && hasMore.value && !isVirtual) {
+      // 滚动加载时，若本地无更多数据则从 IMAP 服务器拉取旧邮件。
+      // 仅对"全部"过滤器和真实文件夹执行；过滤视图不触发 IMAP 拉取，
+      // 避免为少量未读/星标邮件拉取大量邮件。
+      if (
+        !reset &&
+        newMails.length === 0 &&
+        hasMore.value &&
+        !isVirtual &&
+        activeFilter.value === 'all'
+      ) {
         await call<number>('fetch_older_mails', {
           folderId,
           limit: PAGE_SIZE,
@@ -122,6 +131,7 @@ export const useMailStore = defineStore('mail', () => {
           folderId,
           limit: PAGE_SIZE,
           offset,
+          filter,
         });
       }
 
@@ -153,12 +163,14 @@ export const useMailStore = defineStore('mail', () => {
       // already-visible items lets Vue's keyed list keep the DOM nodes in
       // place, which removes the post-sync flicker.
       const limit = Math.max(PAGE_SIZE, mails.value.length);
+      const filter = activeFilter.value === 'all' ? null : activeFilter.value;
       const fetched = await call<MailHeader[]>(
         isVirtual ? 'get_virtual_mail_list' : 'get_mail_list',
         {
           folderId,
           limit,
           offset: 0,
+          filter,
         }
       );
 
@@ -189,10 +201,12 @@ export const useMailStore = defineStore('mail', () => {
 
     try {
       const limit = Math.max(PAGE_SIZE, mails.value.length);
+      const filter = activeFilter.value === 'all' ? null : activeFilter.value;
       const fetched = await call<MailHeader[]>('get_inbox_mail_list', {
         accountIds,
         limit,
         offset: 0,
+        filter,
       });
 
       if (fetched.length > 0 || mails.value.length > 0) {
@@ -219,6 +233,11 @@ export const useMailStore = defineStore('mail', () => {
 
   function insertMails(newMails: MailHeader[]) {
     if (newMails.length === 0) return;
+
+    // 仅在"全部"过滤器下直接插入新邮件；其他过滤视图由用户手动刷新或
+    // 切换过滤器时重新查询，避免新邮件不符合当前过滤条件却出现在列表中。
+    if (activeFilter.value !== 'all') return;
+
     const existingIds = new Set(mails.value.map((m) => m.id));
     const unique = newMails.filter((m) => !existingIds.has(m.id));
     if (unique.length === 0) return;
@@ -292,6 +311,10 @@ export const useMailStore = defineStore('mail', () => {
         if (folder) {
           folder.unreadCount = Math.max(0, folder.unreadCount + (isRead ? -1 : 1));
         }
+        // 在"未读"过滤器中标记为已读时，从列表中移除该邮件
+        if (isRead && activeFilter.value === 'unread') {
+          mails.value = mails.value.filter((m) => m.id !== mailId);
+        }
       }
     } catch (e) {
       const msg = e instanceof Error ? e.message : String(e);
@@ -309,6 +332,10 @@ export const useMailStore = defineStore('mail', () => {
       }
       if (selectedMail.value?.id === mailId) {
         selectedMail.value.isStarred = newStarred;
+      }
+      // 在"星标"过滤器中取消星标时，从列表中移除该邮件
+      if (!newStarred && activeFilter.value === 'starred') {
+        mails.value = mails.value.filter((m) => m.id !== mailId);
       }
     } catch (e) {
       const msg = e instanceof Error ? e.message : String(e);

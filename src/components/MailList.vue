@@ -120,6 +120,22 @@ watch(
 );
 
 watch(
+  () => mailStore.activeFilter,
+  async () => {
+    scrollToTop();
+    try {
+      if (route.path === '/') {
+        await mailStore.loadInboxMails(accountStore.selectedAccountIds, true);
+      } else if (currentFolderId.value) {
+        await mailStore.loadMails(currentFolderId.value, true);
+      }
+    } finally {
+      // infinite scroll observer 保持
+    }
+  }
+);
+
+watch(
   () => statusStore.syncingAccounts,
   async (syncing, previous) => {
     if (previous && previous > 0 && syncing === 0) {
@@ -163,7 +179,6 @@ watch(
 
 const displayedMails = computed(() => {
   const query = debouncedSearchQuery.value.trim();
-  const filter = mailStore.activeFilter;
   let result = mailStore.mails;
 
   // Apply text search
@@ -175,15 +190,6 @@ const displayedMails = computed(() => {
         (m.fromName ?? '').toLowerCase().includes(q) ||
         (m.fromAddress ?? '').toLowerCase().includes(q)
     );
-  }
-
-  // Apply filter
-  if (filter === 'unread') {
-    result = result.filter((m) => !m.isRead);
-  } else if (filter === 'starred') {
-    result = result.filter((m) => m.isStarred);
-  } else if (filter === 'attachments') {
-    result = result.filter((m) => m.hasAttachments);
   }
 
   return result;

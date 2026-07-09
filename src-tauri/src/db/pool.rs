@@ -65,6 +65,22 @@ impl Database {
             .map_err(|e| AeroError::Database(e.to_string()))
     }
 
+    /// Builds a SQL filter clause for mail list queries.
+    ///
+    /// `table_prefix` is used to qualify column names when the query joins
+    /// multiple tables (e.g. `"m."` for `mails m`).
+    fn mail_filter_clause(filter: Option<&str>, table_prefix: Option<&str>) -> String {
+        let prefix = table_prefix.unwrap_or("");
+        match filter {
+            Some("unread") => format!(" AND {prefix}is_read = 0"),
+            Some("starred") => format!(" AND {prefix}is_starred = 1"),
+            Some("attachments") => {
+                format!(" AND EXISTS(SELECT 1 FROM attachments WHERE mail_id = {prefix}id)")
+            }
+            _ => String::new(),
+        }
+    }
+
     /// Runs the provided closure inside a database transaction.
     ///
     /// The closure receives a `&Connection` and returns a `Result<T, AeroError>`.
@@ -1360,16 +1376,20 @@ impl Database {
         folder_id: &str,
         limit: u32,
         offset: u32,
+        filter: Option<&str>,
     ) -> Result<Vec<crate::models::mail::MailHeader>, AeroError> {
+        let filter_clause = Self::mail_filter_clause(filter, None);
         let conn = self.connection()?;
-        let mut stmt = conn.prepare(
+        let sql = format!(
             "SELECT id, account_id, folder_id, uid, subject, from_name, from_address,
              date, is_read, is_starred, is_archived, is_spam,
              EXISTS(SELECT 1 FROM attachments WHERE mail_id = mails.id) as has_attachments
-             FROM mails WHERE folder_id = ?1
+             FROM mails WHERE folder_id = ?1{}
              ORDER BY date DESC, uid DESC
              LIMIT ?2 OFFSET ?3",
-        )?;
+            filter_clause
+        );
+        let mut stmt = conn.prepare(&sql)?;
         let rows = stmt.query_map((folder_id, limit, offset), |row| {
             Ok(crate::models::mail::MailHeader {
                 id: row.get(0)?,
@@ -1489,10 +1509,12 @@ impl Database {
         account_ids: &[String],
         limit: u32,
         offset: u32,
+        filter: Option<&str>,
     ) -> Result<Vec<crate::models::mail::MailHeader>, AeroError> {
         if account_ids.is_empty() {
             return Ok(Vec::new());
         }
+        let filter_clause = Self::mail_filter_clause(filter, Some("m."));
         let placeholders = account_ids
             .iter()
             .map(|_| "?")
@@ -1504,9 +1526,10 @@ impl Database {
              EXISTS(SELECT 1 FROM attachments WHERE mail_id = m.id) as has_attachments
              FROM mails m
              JOIN folders f ON m.folder_id = f.id
-             WHERE m.account_id IN ({placeholders}) AND f.path = 'INBOX'
+             WHERE m.account_id IN ({placeholders}) AND LOWER(f.path) = 'inbox'{}
              ORDER BY m.date DESC, m.uid DESC
              LIMIT ?{} OFFSET ?{}",
+            filter_clause,
             account_ids.len() + 1,
             account_ids.len() + 2,
         );

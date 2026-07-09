@@ -15,11 +15,12 @@ pub async fn get_mail_list(
     folder_id: String,
     limit: u32,
     offset: u32,
+    filter: Option<String>,
     state: State<'_, AppState>,
 ) -> Result<Vec<MailHeader>, ErrorPayload> {
     debug!("listing mails");
     let db = &state.db;
-    db.list_mails(&folder_id, limit, offset)
+    db.list_mails(&folder_id, limit, offset, filter.as_deref())
         .map_err(|e| e.to_payload())
 }
 
@@ -43,12 +44,13 @@ pub async fn get_inbox_mail_list(
     account_ids: Vec<String>,
     limit: u32,
     offset: u32,
+    filter: Option<String>,
     state: State<'_, AppState>,
 ) -> Result<Vec<MailHeader>, ErrorPayload> {
     debug!("listing inbox mails for accounts");
     state
         .db
-        .list_inbox_mails(&account_ids, limit, offset)
+        .list_inbox_mails(&account_ids, limit, offset, filter.as_deref())
         .map_err(|e| e.to_payload())
 }
 

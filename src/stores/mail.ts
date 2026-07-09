@@ -2,6 +2,7 @@ import { ref, computed } from 'vue';
 import { defineStore } from 'pinia';
 import { listen } from '@tauri-apps/api/event';
 import { useTauriInvoke } from '@/composables/useTauriInvoke';
+import { useToastStore } from './toast';
 import type { MailHeader, MailDetail, FolderInfo, NewMailsEvent } from '@/types/mail';
 
 const PAGE_SIZE = 50;
@@ -290,7 +291,9 @@ export const useMailStore = defineStore('mail', () => {
         }
       }
     } catch (e) {
-      error.value = e instanceof Error ? e.message : String(e);
+      const msg = e instanceof Error ? e.message : String(e);
+      error.value = msg;
+      useToastStore().add({ type: 'error', message: msg });
     }
   }
 
@@ -305,7 +308,9 @@ export const useMailStore = defineStore('mail', () => {
         selectedMail.value.isStarred = newStarred;
       }
     } catch (e) {
-      error.value = e instanceof Error ? e.message : String(e);
+      const msg = e instanceof Error ? e.message : String(e);
+      error.value = msg;
+      useToastStore().add({ type: 'error', message: msg });
     }
   }
 
@@ -329,7 +334,9 @@ export const useMailStore = defineStore('mail', () => {
         }
       }
     } catch (e) {
-      error.value = e instanceof Error ? e.message : String(e);
+      const msg = e instanceof Error ? e.message : String(e);
+      error.value = msg;
+      useToastStore().add({ type: 'error', message: msg });
     }
   }
 
@@ -354,7 +361,9 @@ export const useMailStore = defineStore('mail', () => {
         }
       }
     } catch (e) {
-      error.value = e instanceof Error ? e.message : String(e);
+      const msg = e instanceof Error ? e.message : String(e);
+      error.value = msg;
+      useToastStore().add({ type: 'error', message: msg });
     }
   }
 
@@ -381,7 +390,9 @@ export const useMailStore = defineStore('mail', () => {
         await refreshMails('trash');
       }
     } catch (e) {
-      error.value = e instanceof Error ? e.message : String(e);
+      const msg = e instanceof Error ? e.message : String(e);
+      error.value = msg;
+      useToastStore().add({ type: 'error', message: msg });
     } finally {
       deletingMailIds.value.delete(mailId);
     }
@@ -510,7 +521,9 @@ export const useMailStore = defineStore('mail', () => {
         clearSelection();
       }
     } catch (e) {
-      error.value = e instanceof Error ? e.message : String(e);
+      const msg = e instanceof Error ? e.message : String(e);
+      error.value = msg;
+      useToastStore().add({ type: 'error', message: msg });
     }
   }
 

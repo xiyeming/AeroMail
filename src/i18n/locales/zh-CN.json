@@ -326,7 +326,21 @@
     "checking": "检查中...",
     "installUpdate": "安装更新",
     "installing": "安装中...",
-    "restartRequired": "安装后需要重启应用"
+    "restartRequired": "安装后需要重启",
+    "shortcuts": "快捷键",
+    "shortcutsNavigation": "导航",
+    "shortcutsActions": "操作",
+    "shortcutsSelection": "选择",
+    "shortcutsJ": "下一封邮件",
+    "shortcutsK": "上一封邮件",
+    "shortcutsU": "下一封未读邮件",
+    "shortcutsEnter": "打开邮件",
+    "shortcutsEscape": "取消选择 / 关闭",
+    "shortcutsS": "切换星标",
+    "shortcutsE": "切换已读 / 未读",
+    "shortcutsDelete": "删除邮件",
+    "shortcutsCtrlA": "全选",
+    "shortcutsCtrlShiftR": "阅读模式"
   },
   "aiAssistant": {
     "title": "智能助手",

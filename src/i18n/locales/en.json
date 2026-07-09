@@ -326,7 +326,21 @@
     "checking": "Checking...",
     "installUpdate": "Install update",
     "installing": "Installing...",
-    "restartRequired": "Restart required after installation"
+    "restartRequired": "Restart required after installation",
+    "shortcuts": "Keyboard Shortcuts",
+    "shortcutsNavigation": "Navigation",
+    "shortcutsActions": "Actions",
+    "shortcutsSelection": "Selection",
+    "shortcutsJ": "Next email",
+    "shortcutsK": "Previous email",
+    "shortcutsU": "Next unread email",
+    "shortcutsEnter": "Open email",
+    "shortcutsEscape": "Clear selection / Close",
+    "shortcutsS": "Toggle star",
+    "shortcutsE": "Toggle read / unread",
+    "shortcutsDelete": "Delete email",
+    "shortcutsCtrlA": "Select all",
+    "shortcutsCtrlShiftR": "Reading mode"
   },
   "aiAssistant": {
     "title": "Smart Assistant",

@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { computed, ref, onMounted, watch } from 'vue';
+import { useI18n } from 'vue-i18n';
 import { useTauriInvoke } from '@/composables/useTauriInvoke';
 import { useUpdater } from '@/composables/useUpdater';
 import { Star, Trash2, Pencil } from '@lucide/vue';
@@ -63,6 +64,27 @@ const localeLabels: Record<Locale, string> = {
   en: 'English',
   'zh-CN': '简体中文',
 };
+
+const { t } = useI18n();
+
+const shortcutsNavigation = computed(() => [
+  { key: 'J / ↓', label: t('settings.shortcutsJ') },
+  { key: 'K / ↑', label: t('settings.shortcutsK') },
+  { key: 'U', label: t('settings.shortcutsU') },
+  { key: 'Enter', label: t('settings.shortcutsEnter') },
+  { key: 'Esc', label: t('settings.shortcutsEscape') },
+]);
+
+const shortcutsActions = computed(() => [
+  { key: 'S', label: t('settings.shortcutsS') },
+  { key: 'E', label: t('settings.shortcutsE') },
+  { key: 'Delete', label: t('settings.shortcutsDelete') },
+]);
+
+const shortcutsSelection = computed(() => [
+  { key: 'Ctrl+A', label: t('settings.shortcutsCtrlA') },
+  { key: 'Ctrl+Shift+R', label: t('settings.shortcutsCtrlShiftR') },
+]);
 
 // --- AI Providers ---
 const aiStore = useAiStore();
@@ -1268,6 +1290,40 @@ async function removeSkill(id: string) {
         >
           {{ $t('settings.saveAiSkill') }}
         </button>
+      </div>
+    </section>
+
+    <!-- Keyboard Shortcuts Section -->
+    <section class="mt-6 rounded-lg border border-border bg-elevated p-5">
+      <h2 class="mb-4 text-lg font-medium">{{ $t('settings.shortcuts') }}</h2>
+      <div class="grid gap-6 sm:grid-cols-3">
+        <div>
+          <h3 class="mb-2 text-sm font-medium text-secondary">{{ $t('settings.shortcutsNavigation') }}</h3>
+          <div class="space-y-2">
+            <div v-for="item in shortcutsNavigation" :key="item.key" class="flex items-center justify-between">
+              <span class="text-sm text-primary">{{ item.label }}</span>
+              <kbd class="rounded border border-border bg-raised px-1.5 py-0.5 text-xs font-mono text-secondary">{{ item.key }}</kbd>
+            </div>
+          </div>
+        </div>
+        <div>
+          <h3 class="mb-2 text-sm font-medium text-secondary">{{ $t('settings.shortcutsActions') }}</h3>
+          <div class="space-y-2">
+            <div v-for="item in shortcutsActions" :key="item.key" class="flex items-center justify-between">
+              <span class="text-sm text-primary">{{ item.label }}</span>
+              <kbd class="rounded border border-border bg-raised px-1.5 py-0.5 text-xs font-mono text-secondary">{{ item.key }}</kbd>
+            </div>
+          </div>
+        </div>
+        <div>
+          <h3 class="mb-2 text-sm font-medium text-secondary">{{ $t('settings.shortcutsSelection') }}</h3>
+          <div class="space-y-2">
+            <div v-for="item in shortcutsSelection" :key="item.key" class="flex items-center justify-between">
+              <span class="text-sm text-primary">{{ item.label }}</span>
+              <kbd class="rounded border border-border bg-raised px-1.5 py-0.5 text-xs font-mono text-secondary">{{ item.key }}</kbd>
+            </div>
+          </div>
+        </div>
       </div>
     </section>
 

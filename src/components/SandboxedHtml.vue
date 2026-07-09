@@ -48,7 +48,9 @@ function buildCsp(scriptNonce: string): string {
     }
     return entries;
   });
-  const hostWithScheme = hosts.flatMap((h) => [`http:${h}`, `https:${h}`]);
+  // CSP source expressions need full URL format: https://example.com
+  // "https:example.com" is NOT valid CSP syntax.
+  const hostWithScheme = hosts.flatMap((h) => [`http://${h}`, `https://${h}`]);
 
   const imgSrc = ["'self'", 'data:', 'cid:', ...hostWithScheme].join(' ');
   const styleSrc = ["'unsafe-inline'", "'self'", ...hostWithScheme].join(' ');

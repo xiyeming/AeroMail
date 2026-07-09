@@ -604,18 +604,18 @@ async function bulkMarkRead(isRead: boolean) {
           v-if="mailStore.loadingMore"
           class="flex items-center justify-center gap-2 py-4 text-secondary"
         >
-          <div
-            class="h-4 w-4 animate-spin rounded-full border-2 border-accent border-t-transparent"
-          />
+          <Loader2 class="h-4 w-4 animate-spin text-accent" />
           <span class="text-xs">{{ t('common.loading') }}</span>
         </div>
 
         <!-- End of list -->
         <div
           v-else-if="!mailStore.hasMore && displayedMails.length > 0"
-          class="py-4 text-center text-xs text-tertiary"
+          class="flex items-center gap-3 py-4"
         >
-          {{ t('mail.noMoreEmails') }}
+          <div class="h-px flex-1 bg-border" />
+          <span class="text-xs text-tertiary whitespace-nowrap">{{ t('mail.noMoreEmails') }}</span>
+          <div class="h-px flex-1 bg-border" />
         </div>
       </div>
     </CustomScrollbar>

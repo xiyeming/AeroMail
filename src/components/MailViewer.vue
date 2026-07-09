@@ -698,7 +698,7 @@ watch(currentMailId, (newMailId) => {
         <span class="flex-1">{{ mailStore.error }}</span>
         <button
           type="button"
-          class="rounded p-1 text-danger hover:bg-danger/10"
+          class="rounded p-1 text-danger hover:bg-danger-subtle"
           :title="t('mail.dismissError')"
           @click="mailStore.error = null"
         >

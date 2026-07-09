@@ -178,3 +178,9 @@ Tauri Command 通过 `tauri::State<'_, AppState>` 访问这些服务。初始化
 - 前端使用 Tailwind CSS v4（`@tailwindcss/vite`），颜色通过 CSS 变量定义在 `src/styles/theme.css`。
 - Vite 开发服务器固定端口 `1420`，并忽略 `src-tauri/**` 的改动以避免循环热重载。
 - 当前仓库没有单元测试或集成测试；`cargo test` 会正常通过但无实际用例覆盖。
+
+
+## 注意事项
+
+- 前端优化和设计修改必须调用 frontend-design skill。
+- 修复问题不要靠猜，要全面分析找出真正的问题再修复。

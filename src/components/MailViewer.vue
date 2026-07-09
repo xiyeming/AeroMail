@@ -8,8 +8,6 @@ import {
   Trash2,
   Expand,
   Minimize2,
-  ChevronDown,
-  ChevronUp,
   Mail,
   Paperclip,
   Reply,
@@ -60,7 +58,6 @@ const todoStore = useTodoStore();
 
 const translatedText = ref<string | null>(null);
 const translatedLang = ref<string | null>(null);
-const translationCollapsed = ref(false);
 const showTranslatePanel = ref(false);
 const showDeleteConfirm = ref(false);
 const attachments = ref<AttachmentInfo[]>([]);
@@ -350,19 +347,28 @@ function closeSummary() {
 function handleTranslated(payload: { text: string; lang: string }) {
   translatedText.value = payload.text;
   translatedLang.value = payload.lang;
-  translationCollapsed.value = false;
   showTranslatePanel.value = false;
 }
 
 function clearTranslation() {
   translatedText.value = null;
   translatedLang.value = null;
-  translationCollapsed.value = false;
 }
 
-function toggleTranslationCollapsed() {
-  translationCollapsed.value = !translationCollapsed.value;
-}
+const translationPopupStyle = computed(() => {
+  // Position near the selected text, or center of viewport as fallback
+  if (selectionMenuX.value && selectionMenuY.value) {
+    const x = Math.min(selectionMenuX.value, window.innerWidth - 400);
+    const y = Math.min(selectionMenuY.value + 10, window.innerHeight - 300);
+    return { left: `${x}px`, top: `${y}px` };
+  }
+  // Center of viewport
+  return {
+    left: '50%',
+    top: '50%',
+    transform: 'translate(-50%, -50%)',
+  };
+});
 
 function handleToggleStar() {
   if (currentMailId.value) {
@@ -664,7 +670,6 @@ watch(showDeleteConfirm, async (show) => {
 watch(currentMailId, (newMailId) => {
   translatedText.value = null;
   translatedLang.value = null;
-  translationCollapsed.value = false;
   showTranslatePanel.value = false;
   showDeleteConfirm.value = false;
   temporarilyAllowedDomains.value = [];
@@ -826,46 +831,51 @@ watch(currentMailId, (newMailId) => {
         <TranslatePanel :mail-id="currentMailId" @translated="handleTranslated" />
       </div>
 
-      <!-- Translation result card -->
-      <div v-if="translatedText || isTranslating" class="border-b border-border bg-accent-subtle/30 px-6 py-3">
-        <div class="flex items-center justify-between gap-3">
-          <div class="flex items-center gap-2">
-            <Languages class="h-4 w-4 text-accent" aria-hidden="true" />
-            <span class="text-xs font-medium text-accent">
-              {{ t('translation.translatedTo', { lang: translatedLang ?? 'target' }) }}
-            </span>
-          </div>
-          <div class="flex items-center gap-1">
-            <button
-              type="button"
-              class="rounded p-1 text-tertiary transition-colors hover:bg-raised hover:text-primary"
-              :title="translationCollapsed ? t('translation.expand') : t('translation.collapse')"
-              @click="toggleTranslationCollapsed"
-            >
-              <ChevronDown v-if="translationCollapsed" class="h-3.5 w-3.5" />
-              <ChevronUp v-else class="h-3.5 w-3.5" />
-            </button>
-            <button
-              type="button"
-              class="rounded p-1 text-tertiary transition-colors hover:bg-raised hover:text-primary"
-              :title="t('mail.close')"
-              @click="clearTranslation"
-            >
-              <X class="h-3.5 w-3.5" />
-            </button>
-          </div>
-        </div>
-        <div
-          v-show="!translationCollapsed"
-          class="mt-2 max-h-96 overflow-y-auto text-sm text-secondary"
+      <!-- Translation result floating popup -->
+      <Teleport to="body">
+        <Transition
+          enter-active-class="transition duration-200 ease-out"
+          enter-from-class="translate-y-2 opacity-0"
+          enter-to-class="translate-y-0 opacity-100"
+          leave-active-class="transition duration-150 ease-in"
+          leave-from-class="translate-y-0 opacity-100"
+          leave-to-class="translate-y-2 opacity-0"
         >
-          <div v-if="isTranslating" class="flex items-center gap-2 text-xs text-tertiary">
-            <Loader2 class="h-3.5 w-3.5 animate-spin" />
-            {{ t('translation.translating') }}
+          <div
+            v-if="translatedText || isTranslating"
+            class="fixed z-50 w-96 max-w-[calc(100vw-2rem)] rounded-xl border border-border bg-elevated shadow-xl"
+            :style="translationPopupStyle"
+          >
+            <!-- Header -->
+            <div class="flex items-center justify-between border-b border-border px-4 py-2.5">
+              <div class="flex items-center gap-2">
+                <div class="flex h-6 w-6 items-center justify-center rounded-full bg-accent/10">
+                  <Languages class="h-3.5 w-3.5 text-accent" />
+                </div>
+                <span class="text-sm font-medium text-primary">
+                  {{ t('translation.translatedTo', { lang: translatedLang ?? '...' }) }}
+                </span>
+              </div>
+              <button
+                type="button"
+                class="flex h-6 w-6 items-center justify-center rounded-md text-tertiary transition-colors hover:bg-raised hover:text-primary"
+                :title="t('mail.close')"
+                @click="clearTranslation"
+              >
+                <X class="h-4 w-4" />
+              </button>
+            </div>
+            <!-- Body -->
+            <div class="max-h-80 overflow-y-auto px-4 py-3">
+              <div v-if="isTranslating" class="flex items-center gap-2 text-sm text-tertiary">
+                <Loader2 class="h-4 w-4 animate-spin text-accent" />
+                {{ t('translation.translating') }}
+              </div>
+              <p v-else class="text-sm leading-relaxed text-primary whitespace-pre-wrap">{{ translatedText }}</p>
+            </div>
           </div>
-          <p v-else>{{ translatedText }}</p>
-        </div>
-      </div>
+        </Transition>
+      </Teleport>
 
       <!-- Mail header -->
       <div class="border-b border-border px-6 py-4">

@@ -4,12 +4,14 @@ import { useI18n } from 'vue-i18n';
 import { RefreshCw, Upload } from '@lucide/vue';
 import { useStatusStore } from '@/stores/status';
 import { useAccountStore } from '@/stores/account';
+import { useMailStore } from '@/stores/mail';
 import { useToastStore } from '@/stores/toast';
 import { useTauriInvoke } from '@/composables/useTauriInvoke';
 
 const { t, locale } = useI18n();
 const statusStore = useStatusStore();
 const accountStore = useAccountStore();
+const mailStore = useMailStore();
 const toastStore = useToastStore();
 const { call: invokeCommand } = useTauriInvoke();
 
@@ -74,6 +76,16 @@ async function handleSyncReadFlags() {
       type: 'success',
       message: t('statusBar.readFlagsSynced', { count }),
     });
+
+    // Refresh folders and mail list to reflect updated flags
+    console.log('[StatusBar] sync_read_flags: refreshing UI');
+    for (const account of accountStore.accounts) {
+      await mailStore.loadFolders(account.id);
+    }
+    if (mailStore.currentFolderId) {
+      await mailStore.refreshMails(mailStore.currentFolderId);
+    }
+    console.log('[StatusBar] sync_read_flags: UI refreshed');
   } catch (e) {
     console.error('[StatusBar] sync_read_flags: error', e);
     toastStore.add({

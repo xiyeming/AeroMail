@@ -9,7 +9,7 @@ use futures::StreamExt;
 use tauri::Emitter;
 use tokio::sync::{Notify, RwLock, mpsc};
 use tokio::task::JoinHandle;
-use tracing::{debug, info, instrument};
+use tracing::{debug, info, instrument, trace};
 
 use crate::db::pool::Database;
 use crate::error::AeroError;
@@ -219,10 +219,7 @@ impl SyncService {
             return Ok(0);
         }
 
-        let missing = remote_exists - local_count;
-        let fetch_count = std::cmp::min(limit, missing);
-        let start_uid = std::cmp::max(1, min_uid.saturating_sub(fetch_count));
-        let range = format!("{}:{}", start_uid, min_uid - 1);
+        let range = format!("1:{}", min_uid - 1);
 
         debug!(range = %range, local_count, remote_exists, "fetching older messages from server");
 
@@ -245,21 +242,25 @@ impl SyncService {
         let mut synced = 0u32;
 
         while let Some(fetch_res) = fetch_stream.next().await {
+            if synced >= limit {
+                break;
+            }
+
             let fetch = fetch_res.map_err(|e| AeroError::ImapConnectionFailed(e.to_string()))?;
 
             let uid = fetch.uid.unwrap_or(0);
             if uid == 0 {
-                debug!("skipping fetched item without UID");
+                trace!("skipping fetched item without UID");
                 continue;
             }
 
             let raw_message = fetch.body().unwrap_or(&[]);
             if raw_message.is_empty() {
-                debug!(uid, "skipping fetched item with empty body");
+                trace!(uid, "skipping fetched item with empty body");
                 continue;
             }
 
-            debug!(
+            trace!(
                 uid,
                 bytes = raw_message.len(),
                 "fetched older mail from server"

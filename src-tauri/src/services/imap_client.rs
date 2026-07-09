@@ -3,7 +3,7 @@ use std::time::Duration;
 use tokio::net::TcpStream;
 use tokio::time::timeout;
 use tokio_native_tls::TlsStream;
-use tracing::{debug, instrument, warn};
+use tracing::{instrument, trace, warn};
 
 use crate::error::AeroError;
 use crate::models::account::{AccountConfig, AuthConfig, TlsMode};
@@ -38,7 +38,7 @@ pub async fn connect_imap(config: &AccountConfig) -> Result<ImapSession, AeroErr
     let tls = build_tls_connector(config)?;
     let connect_timeout = Duration::from_secs(config.advanced.connect_timeout_secs);
 
-    debug!("building TLS connector");
+    trace!("building TLS connector");
     let mut client = match config.imap.tls_mode {
         TlsMode::Required => connect_tls(&domain, config.imap.port, &tls, connect_timeout).await?,
         TlsMode::StartTls => {
@@ -53,7 +53,7 @@ pub async fn connect_imap(config: &AccountConfig) -> Result<ImapSession, AeroErr
 
     identify_client_raw(&mut client).await?;
 
-    debug!("authenticating IMAP session");
+    trace!("authenticating IMAP session");
     let mut session = authenticate(client, config).await?;
     identify_session(&mut session).await?;
     Ok(session)
@@ -87,7 +87,7 @@ async fn connect_tls(
     tls: &tokio_native_tls::TlsConnector,
     connect_timeout: Duration,
 ) -> Result<async_imap::Client<TlsStream<TcpStream>>, AeroError> {
-    debug!("opening TCP connection");
+    trace!("opening TCP connection");
     let tcp_stream = timeout(connect_timeout, TcpStream::connect((domain, port)))
         .await
         .map_err(|_| {
@@ -116,7 +116,7 @@ async fn connect_starttls(
     tls: &tokio_native_tls::TlsConnector,
     connect_timeout: Duration,
 ) -> Result<async_imap::Client<TlsStream<TcpStream>>, AeroError> {
-    debug!("opening TCP connection for STARTTLS");
+    trace!("opening TCP connection for STARTTLS");
     let tcp_stream = timeout(connect_timeout, TcpStream::connect((domain, port)))
         .await
         .map_err(|_| {
@@ -153,7 +153,7 @@ where
         .await
         .map_err(|e| AeroError::ImapConnectionFailed(e.to_string()))?
         .ok_or_else(|| AeroError::ImapConnectionFailed("no greeting from server".into()))?;
-    debug!("received IMAP greeting");
+    trace!("received IMAP greeting");
     Ok(())
 }
 
@@ -166,7 +166,7 @@ where
     let id_cmd = format!(r#"ID ("name" "AeroMail" "version" "{version}")"#);
     match client.run_command_and_check_ok(&id_cmd, None).await {
         Ok(()) => {
-            debug!("sent IMAP ID before login");
+            trace!("sent IMAP ID before login");
         }
         Err(e) => {
             warn!("IMAP ID before login failed (server may not support ID): {e}");
@@ -189,7 +189,7 @@ async fn identify_session(session: &mut ImapSession) -> Result<(), AeroError> {
                     .map_err(|e| {
                         AeroError::ImapConnectionFailed(format!("IMAP ID command failed: {e}"))
                     })?;
-                debug!("sent IMAP ID to server");
+                trace!("sent IMAP ID to server");
             }
         }
         Err(e) => {
@@ -218,14 +218,14 @@ async fn authenticate(
     match &config.auth {
         AuthConfig::Password { password_encrypted } => {
             let password = String::from_utf8_lossy(password_encrypted);
-            debug!("authenticating with password");
+            trace!("authenticating with password");
             client
                 .login(&login_user, &password)
                 .await
                 .map_err(|(e, _)| AeroError::ImapAuthFailed(e.to_string()))
         }
         AuthConfig::OAuth2 { access_token, .. } => {
-            debug!("authenticating with XOAUTH2");
+            trace!("authenticating with XOAUTH2");
             let auth = Xoauth2Auth {
                 user: login_user,
                 access_token: access_token.clone(),
@@ -251,7 +251,7 @@ pub async fn delete_mail_on_server(
 ) -> Result<(), AeroError> {
     use futures::TryStreamExt;
 
-    debug!("selecting folder for delete");
+    trace!("selecting folder for delete");
     session
         .select(folder_path)
         .await
@@ -270,7 +270,7 @@ pub async fn delete_mail_on_server(
         .try_collect::<Vec<_>>()
         .await
         .map_err(|e| AeroError::ImapConnectionFailed(e.to_string()))?;
-    debug!("mail deleted and expunged");
+    trace!("mail deleted and expunged");
     Ok(())
 }
 
@@ -289,7 +289,7 @@ pub async fn move_mail_on_server(
 ) -> Result<(), AeroError> {
     use futures::TryStreamExt;
 
-    debug!("selecting folder for move");
+    trace!("selecting folder for move");
     session
         .select(folder_path)
         .await
@@ -312,7 +312,7 @@ pub async fn move_mail_on_server(
         .try_collect::<Vec<_>>()
         .await
         .map_err(|e| AeroError::ImapConnectionFailed(e.to_string()))?;
-    debug!("mail moved and original expunged");
+    trace!("mail moved and original expunged");
     Ok(())
 }
 
@@ -330,7 +330,7 @@ pub async fn set_seen_on_server(
 ) -> Result<(), AeroError> {
     use futures::TryStreamExt;
 
-    debug!("selecting folder for seen update");
+    trace!("selecting folder for seen update");
     session
         .select(folder_path)
         .await
@@ -349,7 +349,7 @@ pub async fn set_seen_on_server(
         .await
         .map_err(|e| AeroError::ImapConnectionFailed(e.to_string()))?;
 
-    debug!(seen, "updated seen flag on server");
+    trace!(seen, "updated seen flag on server");
     Ok(())
 }
 
@@ -367,7 +367,7 @@ pub async fn set_flagged_on_server(
 ) -> Result<(), AeroError> {
     use futures::TryStreamExt;
 
-    debug!("selecting folder for flagged update");
+    trace!("selecting folder for flagged update");
     session
         .select(folder_path)
         .await
@@ -386,7 +386,7 @@ pub async fn set_flagged_on_server(
         .await
         .map_err(|e| AeroError::ImapConnectionFailed(e.to_string()))?;
 
-    debug!(flagged, "updated flagged flag on server");
+    trace!(flagged, "updated flagged flag on server");
     Ok(())
 }
 
@@ -438,7 +438,7 @@ pub async fn find_drafts_folder(session: &mut ImapSession) -> Result<String, Aer
         mailboxes.push(name.name().to_string());
     }
 
-    debug!(candidates = ?mailboxes, "searching for drafts folder");
+    trace!(candidates = ?mailboxes, "searching for drafts folder");
 
     let candidates = ["Drafts", "Draft", "[Gmail]/Drafts", "草稿箱", "草稿"];
     for candidate in &candidates {
@@ -446,13 +446,13 @@ pub async fn find_drafts_folder(session: &mut ImapSession) -> Result<String, Aer
             .iter()
             .find(|name| name.eq_ignore_ascii_case(candidate))
         {
-            debug!(folder = %folder, "found drafts folder");
+            trace!(folder = %folder, "found drafts folder");
             return Ok(folder.clone());
         }
     }
     for folder in &mailboxes {
         if folder.to_lowercase().contains("draft") {
-            debug!(folder = %folder, "found drafts folder by substring");
+            trace!(folder = %folder, "found drafts folder by substring");
             return Ok(folder.clone());
         }
     }
@@ -482,7 +482,7 @@ pub async fn find_sent_folder(session: &mut ImapSession) -> Result<String, AeroE
         mailboxes.push(name.name().to_string());
     }
 
-    debug!(candidates = ?mailboxes, "searching for sent folder");
+    trace!(candidates = ?mailboxes, "searching for sent folder");
 
     let candidates = [
         "Sent",
@@ -497,13 +497,13 @@ pub async fn find_sent_folder(session: &mut ImapSession) -> Result<String, AeroE
             .iter()
             .find(|name| name.eq_ignore_ascii_case(candidate))
         {
-            debug!(folder = %folder, "found sent folder");
+            trace!(folder = %folder, "found sent folder");
             return Ok(folder.clone());
         }
     }
     for folder in &mailboxes {
         if folder.to_lowercase().contains("sent") {
-            debug!(folder = %folder, "found sent folder by substring");
+            trace!(folder = %folder, "found sent folder by substring");
             return Ok(folder.clone());
         }
     }
@@ -525,7 +525,7 @@ pub async fn append_message(
     flags: Option<&str>,
     message_bytes: &[u8],
 ) -> Result<(), AeroError> {
-    debug!("appending message to folder");
+    trace!("appending message to folder");
     session
         .append(folder, flags, None, message_bytes)
         .await

@@ -38,10 +38,11 @@ const popoverOpen = ref(false);
 const initializing = ref(true);
 
 function getUnreadCount(folderName: string): number | null {
+  const lower = folderName.toLowerCase();
   const matching = mailStore.folders.filter(
     (f) =>
       accountStore.selectedAccountIds.includes(f.accountId) &&
-      (f.name === folderName || f.path === folderName)
+      (f.name.toLowerCase() === lower || f.path.toLowerCase() === lower)
   );
   const total = matching.reduce((sum, f) => sum + f.unreadCount, 0);
   return total > 0 ? total : null;

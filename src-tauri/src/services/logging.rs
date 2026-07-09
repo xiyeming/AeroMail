@@ -8,6 +8,7 @@ use tracing_subscriber::fmt;
 use tracing_subscriber::layer::{Layer, SubscriberExt};
 use tracing_subscriber::reload::{self, Handle};
 use tracing_subscriber::util::SubscriberInitExt;
+use tracing_subscriber::EnvFilter;
 
 use crate::db::pool::Database;
 use crate::error::AeroError;
@@ -131,13 +132,18 @@ fn build_layer(
         tracing_appender::non_blocking(std::io::sink())
     };
 
+    let filter = EnvFilter::try_from_default_env().unwrap_or_else(|_| {
+        EnvFilter::new("aeromail=info,aeromail::services=info,aeromail::services::sync=info,aeromail::services::imap_client=info")
+    });
+
     let layer = fmt::layer()
         .with_writer(writer)
         .with_ansi(false)
         .with_file(true)
         .with_line_number(true)
         .with_target(true)
-        .with_timer(tracing_subscriber::fmt::time::LocalTime::rfc_3339());
+        .with_timer(tracing_subscriber::fmt::time::LocalTime::rfc_3339())
+        .with_filter(filter);
 
     Ok((Box::new(layer), guard))
 }

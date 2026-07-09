@@ -7,7 +7,7 @@ use tauri::Emitter;
 use tauri_plugin_notification::NotificationExt;
 use tokio::sync::{Notify, RwLock, mpsc};
 use tokio::time::{sleep, timeout};
-use tracing::{debug, error, info, instrument, warn};
+use tracing::{debug, error, info, instrument, trace, warn};
 
 use crate::db::pool::Database;
 use crate::error::AeroError;
@@ -441,17 +441,17 @@ impl SyncWorker {
 
             let uid = fetch.uid.unwrap_or(0);
             if uid == 0 {
-                debug!("skipping fetched item without UID");
+                trace!("skipping fetched item without UID");
                 continue;
             }
 
             let raw_message = fetch.body().unwrap_or(&[]);
             if raw_message.is_empty() {
-                debug!(uid, "skipping fetched item with empty body");
+                trace!(uid, "skipping fetched item with empty body");
                 continue;
             }
 
-            debug!(uid, bytes = raw_message.len(), "fetched mail from server");
+            trace!(uid, bytes = raw_message.len(), "fetched mail from server");
             let parsed = mail_parser::parse_mail(raw_message)?;
 
             let mail_id =

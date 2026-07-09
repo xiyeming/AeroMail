@@ -60,15 +60,24 @@ pub async fn fetch_older_mails(
 #[tauri::command]
 #[instrument(skip(state), err(Debug))]
 pub async fn sync_read_flags_to_server(state: State<'_, AppState>) -> Result<u32, ErrorPayload> {
+    info!("sync_read_flags_to_server: START");
     let db = &state.db;
-    let locally_read = db.get_locally_read_mails().map_err(|e| e.to_payload())?;
+
+    let locally_read = match db.get_locally_read_mails() {
+        Ok(mails) => {
+            info!(count = mails.len(), "found locally read mails");
+            mails
+        }
+        Err(e) => {
+            tracing::error!(error = %e, "failed to query locally read mails");
+            return Err(e.to_payload());
+        }
+    };
 
     if locally_read.is_empty() {
-        info!("no locally read mails to sync");
+        info!("sync_read_flags_to_server: DONE (nothing to sync)");
         return Ok(0);
     }
-
-    info!(count = locally_read.len(), "found locally read mails");
 
     // Group by folder_id
     let mut folder_uids: std::collections::HashMap<String, Vec<u32>> =
@@ -76,8 +85,11 @@ pub async fn sync_read_flags_to_server(state: State<'_, AppState>) -> Result<u32
     for (folder_id, uid) in locally_read {
         folder_uids.entry(folder_id).or_default().push(uid);
     }
+    info!(folders = folder_uids.len(), "grouped by folder");
 
+    info!("acquiring account_manager lock...");
     let account_manager = state.account_manager.read().await;
+    info!("account_manager lock acquired");
     let mut synced_count = 0u32;
 
     for (folder_id, uids) in &folder_uids {
@@ -86,20 +98,23 @@ pub async fn sync_read_flags_to_server(state: State<'_, AppState>) -> Result<u32
         let folder = match db.get_folder_by_id(folder_id) {
             Ok(Some(f)) => f,
             _ => {
-                tracing::warn!(folder_id = %folder_id, "folder not found in DB");
+                tracing::warn!(folder_id = %folder_id, "folder not found in DB, skipping");
                 continue;
             }
         };
+        info!(account_id = %folder.account_id, path = %folder.path, "loading account config");
+
         let config = match account_manager
             .get_account_config_with_refresh(&folder.account_id)
             .await
         {
             Ok(c) => c,
             Err(e) => {
-                tracing::warn!(folder_id = %folder_id, error = %e, "skipping folder");
+                tracing::warn!(error = %e, "failed to get account config, skipping folder");
                 continue;
             }
         };
+        info!(host = %config.imap.host, "connecting to IMAP...");
 
         let mut session = match tokio::time::timeout(
             std::time::Duration::from_secs(30),
@@ -107,32 +122,39 @@ pub async fn sync_read_flags_to_server(state: State<'_, AppState>) -> Result<u32
         )
         .await
         {
-            Ok(Ok(s)) => s,
+            Ok(Ok(s)) => {
+                info!("IMAP connected");
+                s
+            }
             Ok(Err(e)) => {
-                tracing::warn!(folder_id = %folder_id, error = %e, "failed to connect");
+                tracing::warn!(error = %e, "failed to connect to IMAP");
                 continue;
             }
             Err(_) => {
-                tracing::warn!(folder_id = %folder_id, "IMAP connect timeout");
+                tracing::warn!("IMAP connect timed out after 30s");
                 continue;
             }
         };
 
+        info!(path = %folder.path, "selecting folder...");
         if let Err(e) = session.select(&folder.path).await {
             tracing::warn!(error = %e, "failed to select folder");
             let _ = session.logout().await;
             continue;
         }
+        info!("folder selected");
 
         // Batch UIDs into chunks to avoid overly long FETCH commands
-        for chunk in uids.chunks(100) {
+        for (i, chunk) in uids.chunks(100).enumerate() {
+            info!(chunk = i, uid_count = chunk.len(), "processing chunk");
+
             let uid_set = chunk
                 .iter()
                 .map(ToString::to_string)
                 .collect::<Vec<_>>()
                 .join(",");
 
-            // First fetch current flags to only update those not already \Seen
+            info!("fetching flags from server...");
             let mut fetch_stream = match session
                 .uid_fetch(&uid_set, "(UID FLAGS)")
                 .await
@@ -143,6 +165,7 @@ pub async fn sync_read_flags_to_server(state: State<'_, AppState>) -> Result<u32
                     continue;
                 }
             };
+            info!("fetch stream opened, reading...");
 
             let mut needs_update = Vec::new();
             while let Some(fetch_res) = fetch_stream.next().await {
@@ -159,6 +182,7 @@ pub async fn sync_read_flags_to_server(state: State<'_, AppState>) -> Result<u32
                 }
             }
             drop(fetch_stream);
+            info!(total = chunk.len(), needs_update = needs_update.len(), "flags fetched");
 
             if needs_update.is_empty() {
                 info!("all mails in chunk already have \\Seen flag");
@@ -171,9 +195,10 @@ pub async fn sync_read_flags_to_server(state: State<'_, AppState>) -> Result<u32
                 .collect::<Vec<_>>()
                 .join(",");
 
+            info!(count = needs_update.len(), "setting \\Seen flag on server...");
             match session.uid_store(&update_set, "+FLAGS (\\Seen)").await {
                 Ok(_) => {
-                    info!(count = needs_update.len(), "set \\Seen flag on server");
+                    info!(count = needs_update.len(), "\\Seen flag set successfully");
                     synced_count += needs_update.len() as u32;
                 }
                 Err(e) => {
@@ -182,9 +207,11 @@ pub async fn sync_read_flags_to_server(state: State<'_, AppState>) -> Result<u32
             }
         }
 
+        info!("logging out from IMAP...");
         let _ = session.logout().await;
+        info!("logged out");
     }
 
-    info!(count = synced_count, "synced read flags to IMAP server");
+    info!(count = synced_count, "sync_read_flags_to_server: DONE");
     Ok(synced_count)
 }

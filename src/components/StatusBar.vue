@@ -64,14 +64,18 @@ const isSyncingReadFlags = ref(false);
 
 async function handleSyncReadFlags() {
   if (isSyncingReadFlags.value) return;
+  console.log('[StatusBar] sync_read_flags: starting');
   isSyncingReadFlags.value = true;
   try {
+    console.log('[StatusBar] sync_read_flags: calling backend');
     const count = await invokeCommand<number>('sync_read_flags_to_server');
+    console.log('[StatusBar] sync_read_flags: done, count =', count);
     toastStore.add({
       type: 'success',
       message: t('statusBar.readFlagsSynced', { count }),
     });
   } catch (e) {
+    console.error('[StatusBar] sync_read_flags: error', e);
     toastStore.add({
       type: 'error',
       message: e instanceof Error ? e.message : String(e),

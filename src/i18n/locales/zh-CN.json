@@ -415,8 +415,8 @@
     "online": "在线",
     "offline": "离线",
     "version": "版本 {version}",
-    "syncReadFlags": "推送已读状态到服务器",
-    "readFlagsSynced": "已同步 {count} 封邮件为已读"
+    "syncReadFlags": "从服务器同步已读状态",
+    "readFlagsSynced": "已从服务器同步 {count} 封邮件状态"
   },
   "commandPalette": {
     "placeholder": "搜索邮件...",

@@ -54,164 +54,143 @@ pub async fn fetch_older_mails(
     Ok(fetched)
 }
 
-/// Pushes local read state to the IMAP server.
-/// Fixes inconsistency where local DB has mails marked as read
-/// but the IMAP server doesn't have the `\Seen` flag set.
+/// Syncs mail flags from IMAP server to local database.
+/// Pulls server state (read/starred) and updates local, ensuring
+/// the remote is the source of truth.
 #[tauri::command]
 #[instrument(skip(state), err(Debug))]
 pub async fn sync_read_flags_to_server(state: State<'_, AppState>) -> Result<u32, ErrorPayload> {
-    info!("sync_read_flags_to_server: START");
+    info!("sync_mail_flags_from_server: START");
+
     let db = &state.db;
+    let account_manager = state.account_manager.read().await;
+    let accounts = account_manager.list_accounts().map_err(|e| e.to_payload())?;
 
-    let locally_read = match db.get_locally_read_mails() {
-        Ok(mails) => {
-            info!(count = mails.len(), "found locally read mails");
-            mails
-        }
-        Err(e) => {
-            tracing::error!(error = %e, "failed to query locally read mails");
-            return Err(e.to_payload());
-        }
-    };
-
-    if locally_read.is_empty() {
-        info!("sync_read_flags_to_server: DONE (nothing to sync)");
+    if accounts.is_empty() {
+        info!("no accounts configured");
         return Ok(0);
     }
 
-    // Group by folder_id
-    let mut folder_uids: std::collections::HashMap<String, Vec<u32>> =
-        std::collections::HashMap::new();
-    for (folder_id, uid) in locally_read {
-        folder_uids.entry(folder_id).or_default().push(uid);
-    }
-    info!(folders = folder_uids.len(), "grouped by folder");
+    let mut total_updated = 0u32;
 
-    info!("acquiring account_manager lock...");
-    let account_manager = state.account_manager.read().await;
-    info!("account_manager lock acquired");
-    let mut synced_count = 0u32;
-
-    for (folder_id, uids) in &folder_uids {
-        info!(folder_id = %folder_id, uid_count = uids.len(), "processing folder");
-
-        let folder = match db.get_folder_by_id(folder_id) {
-            Ok(Some(f)) => f,
-            _ => {
-                tracing::warn!(folder_id = %folder_id, "folder not found in DB, skipping");
-                continue;
-            }
-        };
-        info!(account_id = %folder.account_id, path = %folder.path, "loading account config");
+    for account in &accounts {
+        info!(account_id = %account.id, name = %account.name, "processing account");
 
         let config = match account_manager
-            .get_account_config_with_refresh(&folder.account_id)
+            .get_account_config_with_refresh(&account.id)
             .await
         {
             Ok(c) => c,
             Err(e) => {
-                tracing::warn!(error = %e, "failed to get account config, skipping folder");
-                continue;
-            }
-        };
-        info!(host = %config.imap.host, "connecting to IMAP...");
-
-        let mut session = match tokio::time::timeout(
-            std::time::Duration::from_secs(30),
-            imap_client::connect_imap(&config),
-        )
-        .await
-        {
-            Ok(Ok(s)) => {
-                info!("IMAP connected");
-                s
-            }
-            Ok(Err(e)) => {
-                tracing::warn!(error = %e, "failed to connect to IMAP");
-                continue;
-            }
-            Err(_) => {
-                tracing::warn!("IMAP connect timed out after 30s");
+                tracing::warn!(error = %e, "failed to get config, skipping account");
                 continue;
             }
         };
 
-        info!(path = %folder.path, "selecting folder...");
-        if let Err(e) = session.select(&folder.path).await {
-            tracing::warn!(error = %e, "failed to select folder");
-            let _ = session.logout().await;
-            continue;
-        }
-        info!("folder selected");
+        let folders = match db.list_folders(&account.id) {
+            Ok(f) => f,
+            Err(e) => {
+                tracing::warn!(error = %e, "failed to list folders");
+                continue;
+            }
+        };
 
-        // Batch UIDs into chunks to avoid overly long FETCH commands
-        for (i, chunk) in uids.chunks(100).enumerate() {
-            info!(chunk = i, uid_count = chunk.len(), "processing chunk");
+        info!(count = folders.len(), "found folders");
 
-            let uid_set = chunk
-                .iter()
-                .map(ToString::to_string)
-                .collect::<Vec<_>>()
-                .join(",");
+        for folder in &folders {
+            let local_uids = match db.get_uids_in_folder(&folder.id) {
+                Ok(uids) => uids,
+                Err(_) => continue,
+            };
 
-            info!("fetching flags from server...");
-            let mut fetch_stream = match session
-                .uid_fetch(&uid_set, "(UID FLAGS)")
-                .await
+            if local_uids.is_empty() {
+                continue;
+            }
+
+            info!(folder = %folder.path, uid_count = local_uids.len(), "syncing flags");
+
+            let mut session = match tokio::time::timeout(
+                std::time::Duration::from_secs(30),
+                imap_client::connect_imap(&config),
+            )
+            .await
             {
-                Ok(s) => s,
-                Err(e) => {
-                    tracing::warn!(error = %e, "failed to fetch flags");
+                Ok(Ok(s)) => s,
+                Ok(Err(e)) => {
+                    tracing::warn!(error = %e, "IMAP connect failed");
+                    continue;
+                }
+                Err(_) => {
+                    tracing::warn!("IMAP connect timeout");
                     continue;
                 }
             };
-            info!("fetch stream opened, reading...");
 
-            let mut needs_update = Vec::new();
-            while let Some(fetch_res) = fetch_stream.next().await {
-                let fetch = match fetch_res {
-                    Ok(f) => f,
-                    Err(_) => continue,
-                };
-                let uid = fetch.uid.unwrap_or(0);
-                if uid == 0 {
-                    continue;
-                }
-                if !imap_client::is_seen_flag(fetch.flags()) {
-                    needs_update.push(uid);
-                }
-            }
-            drop(fetch_stream);
-            info!(total = chunk.len(), needs_update = needs_update.len(), "flags fetched");
-
-            if needs_update.is_empty() {
-                info!("all mails in chunk already have \\Seen flag");
+            if let Err(e) = session.select(&folder.path).await {
+                tracing::warn!(error = %e, "failed to select folder");
+                let _ = session.logout().await;
                 continue;
             }
 
-            let update_set = needs_update
-                .iter()
-                .map(ToString::to_string)
-                .collect::<Vec<_>>()
-                .join(",");
+            // Batch UIDs into chunks
+            for chunk in local_uids.chunks(500) {
+                let uid_set = chunk
+                    .iter()
+                    .map(ToString::to_string)
+                    .collect::<Vec<_>>()
+                    .join(",");
 
-            info!(count = needs_update.len(), "setting \\Seen flag on server...");
-            match session.uid_store(&update_set, "+FLAGS (\\Seen)").await {
-                Ok(_) => {
-                    info!(count = needs_update.len(), "\\Seen flag set successfully");
-                    synced_count += needs_update.len() as u32;
+                let mut fetch_stream = match session
+                    .uid_fetch(&uid_set, "(UID FLAGS)")
+                    .await
+                {
+                    Ok(s) => s,
+                    Err(e) => {
+                        tracing::warn!(error = %e, "failed to fetch flags");
+                        continue;
+                    }
+                };
+
+                let mut batch_updated = 0u32;
+                while let Some(fetch_res) = fetch_stream.next().await {
+                    let fetch = match fetch_res {
+                        Ok(f) => f,
+                        Err(_) => continue,
+                    };
+                    let uid = fetch.uid.unwrap_or(0);
+                    if uid == 0 {
+                        continue;
+                    }
+
+                    let is_seen = imap_client::is_seen_flag(fetch.flags());
+                    let is_flagged = imap_client::is_flagged_flag(fetch.flags());
+
+                    if db.update_mail_flags_by_uid(&folder.id, uid, is_seen, is_flagged).is_ok() {
+                        batch_updated += 1;
+                    }
                 }
-                Err(e) => {
-                    tracing::warn!(error = %e, "failed to set \\Seen flag");
+                drop(fetch_stream);
+
+                if batch_updated > 0 {
+                    info!(folder = %folder.path, updated = batch_updated, "flags updated");
                 }
+                total_updated += batch_updated;
             }
-        }
 
-        info!("logging out from IMAP...");
-        let _ = session.logout().await;
-        info!("logged out");
+            // Update folder unread count after flag sync
+            if let Ok(unread) = db.count_unread_in_folder(&folder.id) {
+                let _ = db.update_folder_sync(
+                    &folder.id,
+                    folder.uid_validity.unwrap_or(0),
+                    i64::from(unread),
+                    folder.total_count,
+                );
+            }
+
+            let _ = session.logout().await;
+        }
     }
 
-    info!(count = synced_count, "sync_read_flags_to_server: DONE");
-    Ok(synced_count)
+    info!(total = total_updated, "sync_mail_flags_from_server: DONE");
+    Ok(total_updated)
 }

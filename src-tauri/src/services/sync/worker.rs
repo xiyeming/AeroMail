@@ -433,6 +433,8 @@ impl SyncWorker {
         let mut new_mail_ids: Vec<String> = Vec::new();
         const BATCH_SIZE: usize = 50;
         let mut mail_batch: Vec<crate::models::mail::MailDetail> = Vec::with_capacity(BATCH_SIZE);
+        let mut attachment_batch: Vec<(String, Vec<ParsedAttachment>)> =
+            Vec::with_capacity(BATCH_SIZE);
 
         while let Some(fetch_res) = fetch_stream.next().await {
             let fetch = fetch_res.map_err(|e| AeroError::ImapConnectionFailed(e.to_string()))?;
@@ -491,13 +493,17 @@ impl SyncWorker {
             };
 
             mail_batch.push(mail);
-            Self::save_attachments(&mail_id, attachments_dir, &self.db, &parsed.attachments)?;
+            attachment_batch.push((mail_id.clone(), parsed.attachments));
             new_mail_ids.push(mail_id);
             synced_count += 1;
 
             if mail_batch.len() >= BATCH_SIZE {
                 self.db.upsert_mails_batch(&mail_batch)?;
+                for (mid, atts) in &attachment_batch {
+                    Self::save_attachments(mid, attachments_dir, &self.db, atts)?;
+                }
                 mail_batch.clear();
+                attachment_batch.clear();
             }
 
             if synced_count % 10 == 0 {
@@ -514,6 +520,9 @@ impl SyncWorker {
 
         if !mail_batch.is_empty() {
             self.db.upsert_mails_batch(&mail_batch)?;
+            for (mid, atts) in &attachment_batch {
+                Self::save_attachments(mid, attachments_dir, &self.db, atts)?;
+            }
         }
 
         Ok((synced_count, new_mail_ids))

@@ -167,7 +167,7 @@ jobs:
           cat /tmp/changelog.md
 
       - name: Build and upload Tauri bundles
-        uses: tauri-apps/tauri-action@v0.5
+        uses: tauri-apps/tauri-action@v0
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}

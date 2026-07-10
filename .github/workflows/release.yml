@@ -27,23 +27,23 @@ jobs:
           - platform: ubuntu-22.04
             target: x86_64-unknown-linux-gnu
             rust-targets: x86_64-unknown-linux-gnu
-            args: '--target x86_64-unknown-linux-gnu --no-test'
+            args: '--target x86_64-unknown-linux-gnu'
           - platform: ubuntu-24.04-arm
             target: aarch64-unknown-linux-gnu
             rust-targets: aarch64-unknown-linux-gnu
-            args: '--target aarch64-unknown-linux-gnu --no-test'
+            args: '--target aarch64-unknown-linux-gnu'
           - platform: macos-latest
             target: universal-apple-darwin
             rust-targets: 'aarch64-apple-darwin,x86_64-apple-darwin'
-            args: '--target universal-apple-darwin --no-test'
+            args: '--target universal-apple-darwin'
           - platform: windows-latest
             target: x86_64-pc-windows-msvc
             rust-targets: x86_64-pc-windows-msvc
-            args: '--target x86_64-pc-windows-msvc --no-test'
+            args: '--target x86_64-pc-windows-msvc'
           - platform: windows-latest
             target: i686-pc-windows-msvc
             rust-targets: i686-pc-windows-msvc
-            args: '--target i686-pc-windows-msvc --no-test'
+            args: '--target i686-pc-windows-msvc'
 
     runs-on: ${{ matrix.platform }}
     steps:

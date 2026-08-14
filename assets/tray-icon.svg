@@ -1,19 +1,300 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512">
+<svg width="1024" height="1024" viewBox="0 0 1024 1024"
+     xmlns="http://www.w3.org/2000/svg">
+
   <defs>
-    <linearGradient id="accentGradient" x1="0%" y1="0%" x2="100%" y2="100%">
-      <stop offset="0%" stop-color="#38BDF8" />
-      <stop offset="100%" stop-color="#818CF8" />
+    <!-- 主背景渐变 -->
+    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#24B8F2"/>
+      <stop offset="48%" stop-color="#168FF1"/>
+      <stop offset="100%" stop-color="#1264E8"/>
+    </linearGradient>
+
+    <!-- 信封渐变 -->
+    <linearGradient id="mail" x1="0" y1="0" x2="0.8" y2="1">
+      <stop offset="0%" stop-color="#FFFFFF"/>
+      <stop offset="100%" stop-color="#E8F2FF"/>
+    </linearGradient>
+
+    <!-- 信封内部阴影 -->
+    <linearGradient id="mailShadow" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#D7E9FF"/>
+      <stop offset="100%" stop-color="#F5F9FF"/>
+    </linearGradient>
+
+    <!-- 纸飞机 -->
+    <linearGradient id="plane" x1="0" y1="1" x2="1" y2="0">
+      <stop offset="0%" stop-color="#DCEBFF"/>
+      <stop offset="55%" stop-color="#FFFFFF"/>
+      <stop offset="100%" stop-color="#FFFFFF"/>
+    </linearGradient>
+
+    <!-- 柔和阴影 -->
+    <filter id="shadow"
+            x="-30%" y="-30%"
+            width="160%" height="170%">
+      <feDropShadow
+        dx="0"
+        dy="18"
+        stdDeviation="20"
+        flood-color="#0758C8"
+        flood-opacity="0.22"/>
+    </filter>
+
+    <filter id="planeShadow"
+            x="-30%" y="-30%"
+            width="170%" height="170%">
+      <feDropShadow
+        dx="0"
+        dy="10"
+        stdDeviation="12"
+        flood-color="#0758C8"
+        flood-opacity="0.25"/>
+    </filter>
+
+    <!-- 高光 -->
+    <linearGradient id="highlight"
+                    x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#FFFFFF" stop-opacity="0.22"/>
+      <stop offset="55%" stop-color="#FFFFFF" stop-opacity="0"/>
     </linearGradient>
   </defs>
-  <g transform="translate(256 256)">
-    <path d="M-120 20 L-120 80 Q-120 100 -100 100 L100 100 Q120 100 120 80 L120 20 L0 90 Z"
-          fill="none" stroke="url(#accentGradient)" stroke-width="16" stroke-linejoin="round" />
-    <path d="M-130 -100 L0 60 L130 -100"
-          fill="none" stroke="url(#accentGradient)" stroke-width="22" stroke-linejoin="round" stroke-linecap="round" />
-    <path d="M-130 -100 L0 -20 L130 -100" fill="#E0F2FE" opacity="0.92" />
-    <path d="M-55 -55 L0 -20 L55 -55"
-          fill="none" stroke="#0F172A" stroke-width="12" stroke-linejoin="round" stroke-linecap="round" opacity="0.15" />
-    <path d="M-145 35 L-95 70" stroke="#38BDF8" stroke-width="12" stroke-linecap="round" opacity="0.8" />
-    <path d="M-150 65 L-115 90" stroke="#818CF8" stroke-width="10" stroke-linecap="round" opacity="0.6" />
+
+
+  <!-- ========================= -->
+  <!-- App Icon Background -->
+  <!-- ========================= -->
+
+  <rect
+    x="32"
+    y="32"
+    width="960"
+    height="960"
+    rx="190"
+    fill="url(#bg)"/>
+
+  <!-- 背景高光 -->
+  <path
+    d="
+      M222 42
+      H802
+      C906 42 982 118 982 222
+      V410
+      C790 285 590 215 360 210
+      C235 207 120 228 42 270
+      V222
+      C42 118 118 42 222 42Z"
+    fill="url(#highlight)"/>
+
+
+  <!-- ========================= -->
+  <!-- Envelope Shadow -->
+  <!-- ========================= -->
+
+  <rect
+    x="126"
+    y="280"
+    width="772"
+    height="620"
+    rx="92"
+    fill="#0758C8"
+    opacity="0.18"
+    filter="url(#shadow)"/>
+
+
+  <!-- ========================= -->
+  <!-- Envelope Body -->
+  <!-- ========================= -->
+
+  <rect
+    x="128"
+    y="270"
+    width="768"
+    height="628"
+    rx="88"
+    fill="url(#mail)"/>
+
+
+  <!-- 信封内部浅蓝区域 -->
+
+  <path
+    d="
+      M128 430
+      L470 700
+      C495 720 529 720 554 700
+      L896 430
+      V810
+      C896 859 857 898 808 898
+      H216
+      C167 898 128 859 128 810Z"
+    fill="url(#mailShadow)"/>
+
+
+  <!-- ========================= -->
+  <!-- Left Envelope Fold -->
+  <!-- ========================= -->
+
+  <path
+    d="
+      M128 430
+      L470 700
+      C495 720 529 720 554 700
+      L896 430
+      V360
+      L532 655
+      C520 665 504 665 492 655
+      L128 360Z"
+    fill="#FFFFFF"
+    opacity="0.96"/>
+
+
+  <!-- ========================= -->
+  <!-- Bottom Envelope Folds -->
+  <!-- ========================= -->
+
+  <path
+    d="
+      M128 810
+      L405 555
+      L493 625
+      C505 635 519 635 531 625
+      L619 555
+      L896 810
+      V830
+      C896 868 866 898 828 898
+      H196
+      C158 898 128 868 128 830Z"
+    fill="#E7F1FF"
+    opacity="0.85"/>
+
+
+  <!-- 左下折线 -->
+
+  <path
+    d="
+      M128 810
+      L405 555
+      L493 625"
+    fill="none"
+    stroke="#D1E3FA"
+    stroke-width="5"
+    opacity="0.7"/>
+
+
+  <!-- 右下折线 -->
+
+  <path
+    d="
+      M531 625
+      L619 555
+      L896 810"
+    fill="none"
+    stroke="#D1E3FA"
+    stroke-width="5"
+    opacity="0.7"/>
+
+
+  <!-- ========================= -->
+  <!-- Envelope Top Flap -->
+  <!-- ========================= -->
+
+  <path
+    d="
+      M128 360
+      L472 635
+      C495 654 529 654 552 635
+      L896 360
+      V352
+      C896 307 859 270 814 270
+      H210
+      C165 270 128 307 128 352Z"
+    fill="url(#mail)"
+    filter="url(#shadow)"/>
+
+
+  <!-- Top flap subtle highlight -->
+
+  <path
+    d="
+      M157 350
+      L480 606
+      C499 621 525 621 544 606
+      L867 350
+      C851 316 822 300 785 300
+      H239
+      C202 300 173 316 157 350Z"
+    fill="#FFFFFF"
+    opacity="0.35"/>
+
+
+  <!-- ========================= -->
+  <!-- Paper Plane -->
+  <!-- ========================= -->
+
+  <g filter="url(#planeShadow)">
+
+    <!-- 主翼 -->
+    <path
+      d="
+        M520 330
+        L850 184
+        L752 570
+        L654 475
+        L520 330Z"
+      fill="url(#plane)"/>
+
+    <!-- 左翼 -->
+    <path
+      d="
+        M520 330
+        L850 184
+        L654 475
+        L520 330Z"
+      fill="#FFFFFF"/>
+
+    <!-- 下翼 -->
+    <path
+      d="
+        M654 475
+        L752 570
+        L850 184
+        L654 475Z"
+      fill="#E8F2FF"/>
+
+    <!-- 中间折痕 -->
+    <path
+      d="
+        M520 330
+        L654 475
+        L850 184"
+      fill="none"
+      stroke="#C7DFFF"
+      stroke-width="8"
+      stroke-linejoin="round"/>
+
+    <!-- 纸飞机高光 -->
+    <path
+      d="
+        M540 325
+        L827 204
+        L650 444
+        Z"
+      fill="#FFFFFF"
+      opacity="0.42"/>
   </g>
+
+
+  <!-- ========================= -->
+  <!-- Tiny Gloss -->
+  <!-- ========================= -->
+
+  <path
+    d="
+      M220 120
+      C300 75 405 70 510 86
+      C380 112 280 168 210 235
+      C185 259 160 273 134 277
+      C148 209 174 151 220 120Z"
+    fill="#FFFFFF"
+    opacity="0.08"/>
+
 </svg>

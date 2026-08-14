@@ -1,7 +1,7 @@
 {
   "name": "aeromail",
   "private": true,
-  "version": "0.0.30",
+  "version": "0.0.31",
   "type": "module",
   "scripts": {
     "dev": "vite",
@@ -13,6 +13,8 @@
     "i18n:check": "tsx scripts/check-i18n.ts"
   },
   "dependencies": {
+    "@lucide/vue": "^1.22.0",
+    "@tanstack/vue-virtual": "^3.13.35",
     "@tauri-apps/api": "^2.5.0",
     "@tauri-apps/plugin-dialog": "^2.2.0",
     "@tauri-apps/plugin-notification": "^2.2.0",
@@ -40,7 +42,6 @@
     "@vueuse/core": "^13.9.0",
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
-    "@lucide/vue": "^1.22.0",
     "pinia": "^3.0.1",
     "radix-vue": "^1.9.17",
     "tailwind-merge": "^3.0.0",

@@ -28,8 +28,8 @@ function buildCsp(scriptNonce: string): string {
     return [
       "default-src 'none'",
       "img-src 'self' data: cid: http: https:",
-      "style-src 'unsafe-inline' 'self' http: https:",
-      "font-src 'self' http: https:",
+      "style-src 'unsafe-inline' 'self' http: https: https://*",
+      "font-src 'self' data: http: https: https://*",
       "media-src 'self' http: https:",
       `script-src ${scriptSrc}`,
     ].join('; ');
@@ -53,8 +53,8 @@ function buildCsp(scriptNonce: string): string {
   const hostWithScheme = hosts.flatMap((h) => [`http://${h}`, `https://${h}`]);
 
   const imgSrc = ["'self'", 'data:', 'cid:', ...hostWithScheme].join(' ');
-  const styleSrc = ["'unsafe-inline'", "'self'", ...hostWithScheme].join(' ');
-  const fontSrc = ["'self'", ...hostWithScheme].join(' ');
+  const styleSrc = ["'unsafe-inline'", "'self'", ...hostWithScheme, 'https://*'].join(' ');
+  const fontSrc = ["'self'", 'data:', ...hostWithScheme, 'https://*'].join(' ');
   const mediaSrc = ["'self'", ...hostWithScheme].join(' ');
   return [
     "default-src 'none'",
@@ -66,16 +66,25 @@ function buildCsp(scriptNonce: string): string {
   ].join('; ');
 }
 
+const MAX_HTML_SIZE = 2 * 1024 * 1024; // 2MB
+
 function sanitizeHtml(html: string): string {
+  // 对于过大的 HTML 内容进行截断，避免性能问题
+  const truncated = html.length > MAX_HTML_SIZE ? html.slice(0, MAX_HTML_SIZE) : html;
+
   const parser = new DOMParser();
-  const doc = parser.parseFromString(html, 'text/html');
+  const doc = parser.parseFromString(truncated, 'text/html');
 
   // 移除可能嵌套脚本或加载外部资源的标签
   doc.querySelectorAll('script, noscript, iframe, object, embed, base').forEach((el) => el.remove());
 
-  // 移除危险 link rel
+  // 移除危险 link rel（保留 stylesheet 和 icon 等安全的 link）
   doc.querySelectorAll('link').forEach((el) => {
     const rel = el.getAttribute('rel')?.toLowerCase() ?? '';
+    // 保留 stylesheet、icon、shortcut icon、apple-touch-icon 等安全的 link
+    if (rel === 'stylesheet' || rel === 'icon' || rel === 'shortcut icon' || rel === 'apple-touch-icon') {
+      return;
+    }
     if (rel.includes('import') || rel.includes('modulepreload') || rel.includes('prefetch')) {
       el.remove();
       return;
@@ -240,6 +249,8 @@ ${closeHtml}`;
 let observer: MutationObserver | null = null;
 let detectBlockedTimer: ReturnType<typeof setTimeout> | null = null;
 let attachInterval: ReturnType<typeof setInterval> | null = null;
+let heightRafId: number | null = null;
+let lastHeight = 0;
 
 function clearAttachInterval() {
   if (attachInterval) {
@@ -257,12 +268,25 @@ function disconnectObserver() {
     clearTimeout(detectBlockedTimer);
     detectBlockedTimer = null;
   }
+  if (heightRafId !== null) {
+    cancelAnimationFrame(heightRafId);
+    heightRafId = null;
+  }
 }
 
 /** Debounced detectBlockedImages — called from MutationObserver & image load/error handlers. */
 function scheduleDetectBlocked() {
   if (detectBlockedTimer) clearTimeout(detectBlockedTimer);
-  detectBlockedTimer = setTimeout(detectBlockedImages, 300);
+  detectBlockedTimer = setTimeout(detectBlockedImages, 500);
+}
+
+/** Throttled height update using requestAnimationFrame. */
+function scheduleHeightUpdate() {
+  if (heightRafId !== null) return;
+  heightRafId = requestAnimationFrame(() => {
+    heightRafId = null;
+    applyHeight();
+  });
 }
 
 function detachViolationListener() {
@@ -499,7 +523,11 @@ function emitRemoteDomains() {
 function applyHeight() {
   if (!iframeRef.value?.contentDocument?.body) return;
   const height = iframeRef.value.contentDocument.body.scrollHeight;
-  iframeRef.value.style.height = `${Math.min(height + 20, 2000)}px`;
+  // 只在高度变化明显时更新，避免不必要的重排
+  if (Math.abs(height - lastHeight) > 5) {
+    lastHeight = height;
+    iframeRef.value.style.height = `${Math.min(height + 20, 2000)}px`;
+  }
   scheduleDetectBlocked();
 }
 
@@ -543,11 +571,12 @@ function adjustHeight() {
 
   const body = iframeRef.value.contentDocument.body;
 
-  observer = new MutationObserver(applyHeight);
+  // 使用节流的高度更新，避免频繁的 MutationObserver 回调
+  observer = new MutationObserver(scheduleHeightUpdate);
   observer.observe(body, {
     childList: true,
     subtree: true,
-    attributes: true,
+    attributes: false, // 不监听属性变化，减少回调频率
   });
 
   applyHeight();
